@@ -401,8 +401,8 @@ console.log(\`3 + 5 = \${result}\`);`);
     setProjects(prev => prev.filter(p => p.id !== projectId));
     
     if (activeProjectId === projectId) {
-      setActiveProjectId(projects[0]?.id || null);
-      setActiveFileId(null);
+      setActiveFileId(projects[0]?.files[0]?.id ?? null);
+      setActiveFileId(projects[0]?.files[0]?.id || null);
     }
     
     addConsoleMessage('Project deleted');

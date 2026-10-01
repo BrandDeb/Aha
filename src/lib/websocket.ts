@@ -86,7 +86,7 @@ class WebSocketManager {
         this.emit('connected');
       };
       
-      this.ws.onmessage = (event) => {
+      this.ws.onmessage = (event: MessageEvent) => {
         try {
           const message: WebSocketMessage = JSON.parse(event.data);
           this.handleMessage(message);
@@ -101,9 +101,9 @@ class WebSocketManager {
         this.attemptReconnect();
       };
       
-      this.ws.onerror = (error) => {
+      this.ws.onerror = (error: Event) => {
         console.error('WebSocket error:', error);
-        this.emit('error', { type: 'error', content: (error as Error).message } as WebSocketMessage);
+        this.emit('error', { type: 'error', content: (error as unknown as Error).message } as WebSocketMessage);
       };
     } catch (error) {
       console.error('Failed to create WebSocket:', error);

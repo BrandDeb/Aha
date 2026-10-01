@@ -13,9 +13,7 @@ export async function GET(request: NextRequest) {
     }
     
     const client = getGitHubClient(token);
-    const response = await client.request('GET /user/repos', {
-      per_page: 100,
-    });
+    const response = await client.request('GET', '/user/repos?per_page=100', undefined);
     
     const repos = response.data.map((repo: any) => ({
       id: repo.id,

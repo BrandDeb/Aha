@@ -100,7 +100,7 @@ export function getGitHubClient(token: string) {
  */
 export async function getGitHubUser(token: string): Promise<GitHubUser> {
   const client = getGitHubClient(token);
-  const response = await client.request('GET /user');
+  const response = await client.request('GET', '/user', undefined);
   return response.data;
 }
 
@@ -115,7 +115,7 @@ export async function getRepoContents(
 ): Promise<any[]> {
   const client = getGitHubClient(token);
   const endpoint = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodeURIComponent(filePath)}`;
-  const response = await client.request('GET', endpoint);
+  const response = await client.request('GET', endpoint, undefined);
   return response.data;
 }
 
@@ -130,7 +130,7 @@ export async function getRepoFile(
 ): Promise<string> {
   const client = getGitHubClient(token);
   const endpoint = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodeURIComponent(filePath)}`;
-  const response = await client.request('GET', endpoint);
+  const response = await client.request('GET', endpoint, undefined);
   
   if (response.data.type === 'file') {
     if (response.data.encoding === 'base64') {
@@ -162,7 +162,7 @@ export async function updateRepoFile(
   const response = await client.request('PUT', endpoint, {
     message,
     content: base64Content,
-    ...(sha && { sha }),
+    sha: sha || '',
   });
   
   return response.data;
