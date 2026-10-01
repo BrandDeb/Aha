@@ -48,7 +48,7 @@
     "@types/websocket": "^1.0.5",
     "eslint": "^9",
     "eslint-config-next": "^16.3.8",
-    "scriptc": "^0.0.32",
+    "scriptc": "^0.1.7",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
