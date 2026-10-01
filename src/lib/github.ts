@@ -111,14 +111,11 @@ export async function getRepoContents(
   token: string,
   owner: string,
   repo: string,
-  path: string = ''
+  filePath: string = ''
 ): Promise<any[]> {
   const client = getGitHubClient(token);
-  const response = await client.request('GET /repos/{owner}/{repo}/contents/{path}', {
-    owner,
-    repo,
-    path,
-  });
+  const endpoint = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodeURIComponent(filePath)}`;
+  const response = await client.request('GET', endpoint);
   return response.data;
 }
 
@@ -129,14 +126,11 @@ export async function getRepoFile(
   token: string,
   owner: string,
   repo: string,
-  path: string
+  filePath: string
 ): Promise<string> {
   const client = getGitHubClient(token);
-  const response = await client.request('GET /repos/{owner}/{repo}/contents/{path}', {
-    owner,
-    repo,
-    path,
-  });
+  const endpoint = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodeURIComponent(filePath)}`;
+  const response = await client.request('GET', endpoint);
   
   if (response.data.type === 'file') {
     if (response.data.encoding === 'base64') {
@@ -155,19 +149,17 @@ export async function updateRepoFile(
   token: string,
   owner: string,
   repo: string,
-  path: string,
+  filePath: string,
   content: string,
   message: string,
   sha?: string
 ): Promise<any> {
   const client = getGitHubClient(token);
+  const endpoint = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${encodeURIComponent(filePath)}`;
   
   const base64Content = Buffer.from(content).toString('base64');
   
-  const response = await client.request('PUT /repos/{owner}/{repo}/contents/{path}', {
-    owner,
-    repo,
-    path,
+  const response = await client.request('PUT', endpoint, {
     message,
     content: base64Content,
     ...(sha && { sha }),

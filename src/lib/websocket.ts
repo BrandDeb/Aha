@@ -2,15 +2,20 @@
  * WebSocket client utilities for real-time collaboration
  */
 
-interface WebSocketMessage {
-  type: 'cursor' | 'selection' | 'edit' | 'client_connected' | 'client_disconnected' | 'sync' | 'chat';
+interface WebSocketMessageBase {
+  type: 'cursor' | 'selection' | 'edit' | 'client_connected' | 'client_disconnected' | 'sync' | 'chat' | 'error';
   clientId?: string;
   projectId?: string;
   content?: string;
   position?: { line: number; column: number };
   selection?: { start: { line: number; column: number }; end: { line: number; column: number } };
   timestamp?: number;
+  fileId?: string;
 }
+
+type WebSocketMessage = WebSocketMessageBase & {
+  [key: string]: unknown;
+};
 
 interface Collaborator {
   id: string;
@@ -98,11 +103,11 @@ class WebSocketManager {
       
       this.ws.onerror = (error) => {
         console.error('WebSocket error:', error);
-        this.emit('error', { type: 'error', content: error.message });
+        this.emit('error', { type: 'error', content: (error as Error).message } as WebSocketMessage);
       };
     } catch (error) {
       console.error('Failed to create WebSocket:', error);
-      this.emit('error', { type: 'error', content: 'Failed to connect' });
+      this.emit('error', { type: 'error', content: 'Failed to connect' } as WebSocketMessage);
     }
   }
   
@@ -112,7 +117,7 @@ class WebSocketManager {
         (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host :
         'ws://localhost:3000');
     
-    return `${baseUrl}/api/ws?projectId=${this.projectId}&clientId=${this.clientId}`;
+    return `${baseUrl}/api/ws?projectId=${this.projectId}&clientId=${this.clientId}&name=${encodeURIComponent(this.clientName)}`;
   }
   
   private attemptReconnect(): void {
@@ -129,7 +134,7 @@ class WebSocketManager {
       this.emit('error', { 
         type: 'error', 
         content: 'Failed to reconnect after multiple attempts' 
-      });
+      } as WebSocketMessage);
     }
   }
   
@@ -178,7 +183,7 @@ class WebSocketManager {
               collaborator.selection = message.selection;
             }
             collaborator.lastActive = Date.now();
-            this.emit('collaborator_update', { collaborator, message });
+            this.emit('collaborator_update', { ...message, collaborator } as unknown as WebSocketMessage);
           }
         }
         break;
@@ -190,6 +195,10 @@ class WebSocketManager {
         
       case 'chat':
         this.emit('chat_message', message);
+        break;
+        
+      case 'error':
+        this.emit('error', message);
         break;
         
       default:
@@ -229,7 +238,7 @@ class WebSocketManager {
   private emit(event: string, message?: WebSocketMessage): void {
     const listeners = this.eventListeners.get(event);
     if (listeners) {
-      listeners.forEach(callback => callback(message || { type: event }));
+      listeners.forEach(callback => callback(message || { type: 'sync' } as WebSocketMessage));
     }
   }
   

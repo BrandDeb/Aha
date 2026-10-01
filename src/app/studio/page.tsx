@@ -3,12 +3,14 @@
 /**
  * Nano CLI Studio - Enhanced Studio Page
  * 
- * A production-ready studio with 5 integrated features:
+ * A production-ready studio with 7 integrated features:
  * 1. Zero-Latency AI Gateway
  * 2. Instant Auth Middleware
  * 3. No-BS URL Shortener
  * 4. Notion-like Markdown Editor
  * 5. Real-time Analytics Dashboard
+ * 6. Live Terminal Emulator
+ * 7. Multi-File Project Explorer
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -16,7 +18,19 @@ import { generateSecureId, formatMs, debounce, formatBytes } from '@/lib/utils';
 import type { AIRequest, AIResponse, AuthRequest, ShortenRequest } from '@/types';
 
 // Feature types
-type ActiveFeature = 'ai' | 'auth' | 'shorten' | 'editor' | 'analytics';
+type ActiveFeature = 'ai' | 'auth' | 'shorten' | 'editor' | 'analytics' | 'terminal' | 'projects';
+
+// Project file type
+interface ProjectFile {
+  id: string;
+  name: string;
+  path: string;
+  content: string;
+  language: string;
+  createdAt: Date;
+  updatedAt: Date;
+  isDirty: boolean;
+}
 
 // Mock data types for demo
 interface MockAIProvider {
@@ -89,6 +103,40 @@ export default function StudioPage() {
   const [noteContent, setNoteContent] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
   
+  // Terminal Emulator state
+  const [terminalInput, setTerminalInput] = useState('');
+  const [terminalHistory, setTerminalHistory] = useState<{ input: string; output: string; timestamp: Date }[]>([]);
+  const [terminalOutput, setTerminalOutput] = useState('');
+  const terminalRef = useRef<HTMLDivElement>(null);
+  
+  // Multi-File Project state
+  const [projects, setProjects] = useState<{ id: string; name: string; files: ProjectFile[]; createdAt: Date }[]>([
+    {
+      id: generateSecureId(),
+      name: 'My Project',
+      files: [
+        {
+          id: generateSecureId(),
+          name: 'main.ts',
+          path: '/main.ts',
+          content: '// Main entry point\nexport function main() {\n  console.log("Hello, World!");\n}\n',
+          language: 'typescript',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          isDirty: false,
+        },
+      ],
+      createdAt: new Date(),
+    },
+  ]);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeFileId, setActiveFileId] = useState<string | null>(null);
+  const [showNewFileModal, setShowNewFileModal] = useState(false);
+  const [newFileName, setNewFileName] = useState('');
+  const [newFileLanguage, setNewFileLanguage] = useState('typescript');
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  
   // Analytics state
   const [analytics, setAnalytics] = useState<AnalyticsData>({
     totalRequests: 1542,
@@ -114,6 +162,20 @@ export default function StudioPage() {
     }
   }, [activeNoteId, notes]);
   
+  // Initialize project and file
+  useEffect(() => {
+    if (projects.length > 0 && !activeProjectId) {
+      setActiveProjectId(projects[0].id);
+    }
+    
+    if (activeProjectId) {
+      const project = projects.find(p => p.id === activeProjectId);
+      if (project && project.files.length > 0 && !activeFileId) {
+        setActiveFileId(project.files[0].id);
+      }
+    }
+  }, [projects, activeProjectId, activeFileId]);
+  
   // Auto-save note with debounce
   const saveNote = useCallback(
     debounce((id: string, title: string, content: string) => {
@@ -129,6 +191,40 @@ export default function StudioPage() {
       saveNote(activeNoteId, noteTitle, noteContent);
     }
   }, [noteTitle, noteContent, activeNoteId, saveNote]);
+  
+  // Auto-save file content
+  useEffect(() => {
+    if (activeProjectId && activeFileId) {
+      const updatedAt = new Date();
+      setProjects(prev => prev.map(project => {
+        if (project.id !== activeProjectId) return project;
+        return {
+          ...project,
+          files: project.files.map(file => {
+            if (file.id !== activeFileId) return file;
+            return { ...file, updatedAt, isDirty: true };
+          }),
+        };
+      }));
+    }
+  }, [activeProjectId, activeFileId]);
+  
+  // Get active file content
+  const getActiveFileContent = (): string => {
+    if (!activeProjectId || !activeFileId) return '';
+    const project = projects.find(p => p.id === activeProjectId);
+    if (!project) return '';
+    const file = project.files.find(f => f.id === activeFileId);
+    return file?.content || '';
+  };
+  
+  // Get active file info
+  const getActiveFileInfo = (): ProjectFile | null => {
+    if (!activeProjectId || !activeFileId) return null;
+    const project = projects.find(p => p.id === activeProjectId);
+    if (!project) return null;
+    return project.files.find(f => f.id === activeFileId) || null;
+  };
   
   // Simulate real-time stats updates
   useEffect(() => {

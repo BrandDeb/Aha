@@ -1,5 +1,6 @@
 /**
- * Compiler utilities for scriptc
+ * Compiler utilities for scriptc - Server-side only
+ * This file uses Node.js-specific modules and should only be imported on the server
  */
 
 import { exec } from 'child_process';

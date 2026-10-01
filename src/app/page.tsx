@@ -11,7 +11,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { compileTypeScript, cleanupTempFiles } from '@/lib/compiler';
+import { compileTypeScriptBrowser } from '@/lib/compiler-browser';
 import { WebSocketManager } from '@/lib/websocket';
 
 export default function HomePage() {
@@ -117,7 +117,7 @@ module.exports = { add };`);
     addConsoleMessage('Starting compilation...');
     
     try {
-      const result = await compileTypeScript({
+      const result = await compileTypeScriptBrowser({
         code,
         filename,
         target,
