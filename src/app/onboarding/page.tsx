@@ -19,6 +19,7 @@ export default function OnboardingPage() {
     email: '',
     experience: '',
     useCase: '',
+    template: '',
   });
   
   // Auto-advance timer
@@ -191,7 +192,7 @@ export default function OnboardingPage() {
               <button
                 key={index}
                 onClick={() => {
-                  setFormData({ ...formData, template: template.name });
+                  setFormData({ ...formData, template: template.name as any });
                   setCurrentStep(4);
                 }}
                 className="bg-gray-800/50 rounded-xl p-6 border border-gray-700 hover:bg-gray-800 hover:border-gray-600 transition-all text-left"

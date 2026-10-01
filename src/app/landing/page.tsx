@@ -177,10 +177,10 @@ export default function LandingPage() {
 <span className="text-purple-400">const</span> <span className="text-blue-400">args</span> = <span className="text-yellow-400">process.argv.slice</span>(<span className="text-green-400">2</span>);
 <span className="text-purple-400">const</span> <span className="text-blue-400">name</span> = <span className="text-blue-400">args</span>[<span className="text-green-400">0</span>] || <span className="text-green-400">'World'</span>;
 
-<span className="text-yellow-400">console.log</span>(<span className="text-green-400">`Hello, </span><span className="text-orange-400">\${name}</span><span className="text-green-400">!`</span>);
+					<span className="text-yellow-400">console.log</span>(<span className="text-green-400">"Hello, "</span><span className="text-orange-400">+ name +</span><span className="text-green-400">"!"</span>);
                 </pre>
               </div>
-              <button className="mt-6 w-full py-3 bg-purple-600/20 hover:bg-purple-600/30 rounded-xl font-medium transition-colors border border-purple-600/30">
+              <button className="mt-6 w-full py-3 bg-purple-600/20 hover:bg-purple-600/30 rounded-xl font-medium transition-colors border border-purple-600/30" onClick={() => {}}>
                 Copy Code
               </button>
             </div>
