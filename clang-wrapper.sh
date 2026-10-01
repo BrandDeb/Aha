@@ -1,35 +1,113 @@
 #!/bin/bash
 
-# clang-wrapper.sh - Smart wrapper for environments without clang
-# This script translates clang flags to gcc flags for compatibility
-# Used by scriptc for native binary compilation
+# clang-wrapper.sh - Cross-platform compiler wrapper for scriptc
+# Supports Linux, macOS, and Windows (MinGW/MSVC)
+# Automatically detects available compilers and translates flags
 
 set -e
 
 # Debug mode
+DEBUG=false
 if [ "$1" = "--debug" ]; then
+    DEBUG=true
     set -x
     shift
 fi
 
-# Check if we have clang available
-if command -v clang &> /dev/null; then
-    # Use clang directly with all flags
-    exec clang "$@"
-fi
+# Log function
+log() {
+    if [ "$DEBUG" = true ]; then
+        echo "[clang-wrapper] $1"
+    fi
+}
 
-# Check if we have gcc available
-if ! command -v gcc &> /dev/null; then
-    echo "Error: Neither clang nor gcc found. Please install a C compiler."
+# Detect platform
+PLATFORM="unknown"
+case "$(uname -s)" in
+    Linux*)     PLATFORM="linux" ;;
+    Darwin*)    PLATFORM="macos" ;;
+    CYGWIN*|MINGW*|MSYS*) PLATFORM="windows" ;;
+    *)          PLATFORM="unknown" ;;
+esac
+
+log "Detected platform: $PLATFORM"
+
+# Detect architecture
+ARCH="x64"
+case "$(uname -m)" in
+    x86_64)     ARCH="x64" ;;
+    aarch64|arm64) ARCH="arm64" ;;
+    *)          ARCH="unknown" ;;
+esac
+
+log "Detected architecture: $ARCH"
+
+# Function to check if command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Try to find a working C compiler
+FILTERED_ARGS=()
+SKIP_NEXT=false
+COMPILER=""
+
+# Preference order: clang > gcc > cc > clang++ > g++ > c++
+if command_exists clang; then
+    COMPILER="clang"
+    log "Using compiler: clang"
+elif command_exists gcc; then
+    COMPILER="gcc"
+    log "Using compiler: gcc"
+elif command_exists cc; then
+    COMPILER="cc"
+    log "Using compiler: cc"
+elif command_exists clang++; then
+    COMPILER="clang++"
+    log "Using compiler: clang++"
+elif command_exists g++; then
+    COMPILER="g++"
+    log "Using compiler: g++"
+elif command_exists c++; then
+    COMPILER="c++"
+    log "Using compiler: c++"
+else
+    echo "Error: No C compiler found. Please install clang, gcc, or cc."
+    echo "  Ubuntu/Debian: sudo apt-get install clang gcc"
+    echo "  macOS: brew install llvm"
+    echo "  Windows: Install MinGW or Visual Studio"
     exit 1
 fi
 
-# Filter out clang-specific flags that gcc doesn't understand
-# and convert them to gcc equivalents
+# Platform-specific setup
+case "$PLATFORM" in
+    windows)
+        # Windows-specific flags
+        FILTERED_ARGS+=("-static" "-static-libgcc" "-static-libstdc++")
+        
+        # Check for MinGW
+        if command_exists mingw32-gcc; then
+            COMPILER="mingw32-gcc"
+            log "Using MinGW compiler"
+        fi
+        
+        # Windows doesn't support some Unix-specific flags
+        ;;
+    macos)
+        # macOS-specific flags
+        # Add SDK path if available
+        if [ -d "$(xcrun --show-sdk-path)" ]; then
+            FILTERED_ARGS+=("-isysroot" "$(xcrun --show-sdk-path)")
+            FILTERED_ARGS+=("-mmacosx-version-min=10.13")
+        fi
+        ;;
+    linux)
+        # Linux-specific setup
+        : # No special flags needed
+        ;;
+esac
 
-FILTERED_ARGS=()
-SKIP_NEXT=false
-
+# Process arguments
 for arg in "$@"; do
     if [ "$SKIP_NEXT" = true ]; then
         SKIP_NEXT=false
@@ -37,67 +115,72 @@ for arg in "$@"; do
     fi
     
     case "$arg" in
-        # Skip these flags completely (gcc doesn't support them)
+        # Skip clang-specific flags that other compilers don't understand
         --target=*|-target|-B|-mllvm|--dependent-lib=*)
+            log "Skipping clang-specific flag: $arg"
             continue
             ;;
-        # Convert -O* flags (they're the same)
+        # Convert optimization flags (same for most compilers)
         -O0|-O1|-O2|-O3|-Os|-Ofast)
             FILTERED_ARGS+=("$arg")
             ;;
-        # Convert optimization flags
+        # Skip optimization flags without values
         --optimize|--no-optimize)
-            # These are handled by -O flags
+            log "Skipping optimization flag: $arg"
             continue
             ;;
-        # Convert platform-specific flags
+        # Platform-specific flags
         -isysroot)
             FILTERED_ARGS+=("$arg")
             SKIP_NEXT=true
             ;;
         -mmacosx-version-min=*)
-            # Remove macOS version flags for gcc
-            continue
+            # Only pass macOS version flags on macOS
+            if [ "$PLATFORM" = "macos" ]; then
+                FILTERED_ARGS+=("$arg")
+            else
+                log "Skipping macOS-specific flag: $arg"
+            fi
             ;;
-        # Convert warning flags (mostly the same)
-        -W*|-w)
-            FILTERED_ARGS+=("$arg")
-            ;;
-        # Convert debug flags
-        -g|-g0|-g1|-g2|-g3)
-            FILTERED_ARGS+=("$arg")
-            ;;
-        # Convert include flags
+        # Include flags
         -I*|-isystem|-include)
             FILTERED_ARGS+=("$arg")
             ;;
-        # Convert define flags
+        # Define flags
         -D*|-U*)
             FILTERED_ARGS+=("$arg")
             ;;
-        # Convert library flags
+        # Library flags
         -L*|-l*)
             FILTERED_ARGS+=("$arg")
             ;;
-        # Convert output flags
+        # Output flags
         -o|--output=*)
             FILTERED_ARGS+=("$arg")
             SKIP_NEXT=true
             ;;
-        # Convert standard flags
+        # Standard flags
         -std=*|--std=*)
             FILTERED_ARGS+=("$arg")
             ;;
-        # Convert architecture flags
+        # Architecture flags
         -m32|-m64|-mx32)
             FILTERED_ARGS+=("$arg")
             ;;
-        # Convert float flags
+        # Float flags
         -mfloat-abi=*|-mfpu=*)
             FILTERED_ARGS+=("$arg")
             ;;
-        # Convert other common flags
+        # Other common flags
         -f*|-m*)
+            FILTERED_ARGS+=("$arg")
+            ;;
+        # Debug flags
+        -g|-g0|-g1|-g2|-g3)
+            FILTERED_ARGS+=("$arg")
+            ;;
+        # Warning flags
+        -W*|-w)
             FILTERED_ARGS+=("$arg")
             ;;
         # Keep everything else as-is
@@ -107,9 +190,28 @@ for arg in "$@"; do
     esac
 done
 
-# Add -static flag for gcc to produce static binaries (like clang would)
-# This ensures the output is self-contained
+# Add static linking for all platforms to ensure self-contained binaries
 FILTERED_ARGS+=("-static")
 
-# Execute gcc with filtered arguments
-exec gcc "${FILTERED_ARGS[@]}"
+# Add platform-specific static flags
+case "$PLATFORM" in
+    windows)
+        FILTERED_ARGS+=("-static-libgcc" "-static-libstdc++")
+        ;;
+    macos)
+        # macOS may have issues with static linking, try without if it fails
+        ;;
+    linux)
+        FILTERED_ARGS+=("-static")
+        ;;
+esac
+
+# Display final command if in debug mode
+if [ "$DEBUG" = true ]; then
+    echo "[clang-wrapper] Final command:"
+    echo "$COMPILER ${FILTERED_ARGS[*]}"
+fi
+
+# Execute the compiler
+log "Executing: $COMPILER ${FILTERED_ARGS[*]}"
+exec $COMPILER "${FILTERED_ARGS[@]}"
