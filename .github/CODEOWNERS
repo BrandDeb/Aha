@@ -1,0 +1,44 @@
+# Code Owners for NanoCLI Studio
+
+# Default: @BrandDeb owns everything
+* @BrandDeb
+
+# API Routes
+/src/app/api/* @BrandDeb
+
+# Core Components
+/src/app/page.tsx @BrandDeb
+/src/app/unified/page.tsx @BrandDeb
+/src/app/studio/page.tsx @BrandDeb
+
+# Libraries
+/src/lib/* @BrandDeb
+
+# Types
+/src/types/* @BrandDeb
+
+# Edge Functions
+/src/edge/* @BrandDeb
+
+# Server
+/server.js @BrandDeb
+
+# Configuration
+package.json @BrandDeb
+next.config.ts @BrandDeb
+tsconfig.json @BrandDeb
+scriptc.config.json @BrandDeb
+
+# Docker
+Dockerfile @BrandDeb
+docker-compose.yml @BrandDeb
+nginx.conf @BrandDeb
+
+# GitHub
+.github/* @BrandDeb
+
+# Documentation
+README.md @BrandDeb
+
+# Public Assets
+public/* @BrandDeb
