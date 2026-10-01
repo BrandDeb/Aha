@@ -115,11 +115,14 @@ export default function StudioPage() {
   }, [activeNoteId, notes]);
   
   // Auto-save note with debounce
-  const saveNote = useCallback(debounce((id: string, title: string, content: string) => {
-    setNotes(prev => prev.map(n => 
-      n.id === id ? { ...n, title, content, updatedAt: new Date() } : n
-    ));
-  }, 500), []);
+  const saveNote = useCallback(
+    debounce((id: string, title: string, content: string) => {
+      setNotes(prev => prev.map(n => 
+        n.id === id ? { ...n, title, content, updatedAt: new Date() } : n
+      ));
+    }, 500),
+    []
+  );
   
   useEffect(() => {
     if (activeNoteId) {

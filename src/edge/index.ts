@@ -5,7 +5,11 @@
  * Compiles to WASM for deployment to Cloudflare Workers, Vercel Edge, etc.
  */
 
-import { RequestContext } from '@scriptc/runtime';
+// import { RequestContext } from '@scriptc/runtime';
+// Temporarily using native types for compatibility
+interface RequestContext {
+  waitUntil?: (promise: Promise<unknown>) => void;
+}
 
 // Type definitions for edge runtime
 export interface Env {

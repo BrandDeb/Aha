@@ -53,7 +53,7 @@ export function formatMs(ms: number): string {
 /**
  * Debounce function for performance optimization
  */
-export function debounce<T extends (...args: unknown[]) => unknown>(
+export function debounce<T extends (...args: any[]) => any>(
   fn: T,
   delay: number
 ): (...args: Parameters<T>) => void {
@@ -98,7 +98,7 @@ export function simpleHash(str: string): number {
  * Check if running in edge environment
  */
 export function isEdgeEnvironment(): boolean {
-  return typeof EdgeRuntime !== 'undefined' || 
+  return (typeof globalThis !== 'undefined' && 'EdgeRuntime' in globalThis) || 
     (typeof process !== 'undefined' && process.env?.NEXT_RUNTIME === 'edge');
 }
 
