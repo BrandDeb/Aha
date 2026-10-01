@@ -77,8 +77,13 @@ module.exports = { add };`);
   const [showTemplates, setShowTemplates] = useState<boolean>(false);
   const [showGitHubModal, setShowGitHubModal] = useState<boolean>(false);
   const [githubUser, setGithubUser] = useState<any>(null);
+  const [githubRepos, setGithubRepos] = useState<any[]>([]);
+  const [showRepoBrowser, setShowRepoBrowser] = useState<boolean>(false);
+  const [selectedRepo, setSelectedRepo] = useState<any>(null);
+  const [repoFiles, setRepoFiles] = useState<any[]>([]);
   const [showCollaboration, setShowCollaboration] = useState<boolean>(false);
   const [collaborators, setCollaborators] = useState<any[]>([]);
+  const [gitStatus, setGitStatus] = useState<{modified: string[], untracked: string[]}>({ modified: [], untracked: [] });
 
   // Live Terminal Emulator State
   const [terminalHistory, setTerminalHistory] = useState<TerminalEntry[]>([]);
@@ -142,10 +147,73 @@ module.exports = { add };`);
       .then(data => {
         if (data.authenticated) {
           setGithubUser(data.user);
+          // Load user repos
+          fetch('/api/github/repos')
+            .then(res => res.json())
+            .then(repos => setGithubRepos(repos || []))
+            .catch(console.error);
         }
       })
       .catch(console.error);
   }, []);
+
+  // Load repo files
+  const addConsoleMessage = useCallback((message: string) => {
+    setConsoleMessages(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
+  }, []);
+  const loadRepoFiles = useCallback(async (repo: any) => {
+    setSelectedRepo(repo);
+    try {
+      const response = await fetch(`/api/github/repos/${repo.full_name}/contents`);
+      const files = await response.json();
+      setRepoFiles(files || []);
+      setShowRepoBrowser(true);
+    } catch (err) {
+      console.error('Error loading repo files:', err);
+    }
+  }, []);
+
+  // Load file from repo
+  const loadFromRepo = useCallback(async (file: any) => {
+    try {
+      const response = await fetch(file.download_url);
+      const content = await response.text();
+      setCode(content);
+      setFilename(file.name);
+      setShowRepoBrowser(false);
+      addConsoleMessage(`Loaded from GitHub: ${file.name}`);
+    } catch (err) {
+      console.error('Error loading file:', err);
+    }
+  }, [addConsoleMessage]);
+
+  // Save to GitHub (simplified - would need proper API integration)
+  const saveToGitHub = useCallback(async () => {
+    if (!githubUser || !selectedRepo) {
+      addConsoleMessage('Please select a repository first');
+      return;
+    }
+    addConsoleMessage('GitHub integration: Save functionality would require proper GitHub API setup');
+  }, [githubUser, selectedRepo, addConsoleMessage]);
+
+  // Check git status (simulated)
+  const checkGitStatus = useCallback(() => {
+    // In a real implementation, this would check actual git status
+    setGitStatus({
+      modified: files.filter(f => f.type === 'file' && f.content !== '').map(f => f.name),
+      untracked: [],
+    });
+  }, [files]);
+
+  // Commit to git (simulated)
+  const commitToGit = useCallback(async () => {
+    if (gitStatus.modified.length === 0) {
+      addConsoleMessage('No changes to commit');
+      return;
+    }
+    addConsoleMessage(`Committed ${gitStatus.modified.length} files to git`);
+    setGitStatus({ modified: [], untracked: [] });
+  }, [gitStatus, addConsoleMessage]);
 
   // Terminal cursor blink effect
   useEffect(() => {
@@ -212,9 +280,6 @@ module.exports = { add };`);
   }, [code, filename, target, platform]);
 
   // Add message to console
-  const addConsoleMessage = useCallback((message: string) => {
-    setConsoleMessages(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
-  }, []);
 
   // Download compiled file
   const handleDownload = useCallback(async () => {
@@ -793,6 +858,35 @@ setTimeout(() => {
               )}
             </div>
 
+            {githubUser && (
+              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+                <h3 className="text-sm font-semibold text-gray-400 mb-3">GitHub</h3>
+                <button
+                  onClick={() => setShowRepoBrowser(true)}
+                  className="w-full flex items-center justify-between p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors mb-2"
+                >
+                  <span>Browse Repos</span>
+                  <span>\u25bc</span>
+                </button>
+                <button
+                  onClick={checkGitStatus}
+                  className="w-full flex items-center justify-between p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors mb-2"
+                >
+                  <span>Git Status</span>
+                  {gitStatus.modified.length > 0 && (
+                    <span className="text-xs text-yellow-400">{gitStatus.modified.length} modified</span>
+                  )}
+                </button>
+                <button
+                  onClick={commitToGit}
+                  disabled={gitStatus.modified.length === 0}
+                  className="w-full p-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Commit
+                </button>
+              </div>
+            )}
+
             <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
               <h3 className="text-sm font-semibold text-gray-400 mb-3">Actions</h3>
               <div className="space-y-2">
@@ -1146,6 +1240,79 @@ setTimeout(() => {
             >
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Repository Browser Modal */}
+      {showRepoBrowser && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 max-w-2xl w-full mx-4 border border-gray-700 max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">GitHub Repositories</h3>
+              <button
+                onClick={() => setShowRepoBrowser(false)}
+                className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+              >
+                \u2715
+              </button>
+            </div>
+            
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {githubRepos.map((repo) => (
+                <div key={repo.id} className="p-3 bg-gray-700/50 rounded-lg hover:bg-gray-700 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <span className="text-yellow-400">\u25cf</span>
+                    <button
+                      onClick={() => loadRepoFiles(repo)}
+                      className="flex-1 text-left font-medium"
+                    >
+                      {repo.name}
+                    </button>
+                    <span className="text-xs text-gray-500">{repo.language}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 pl-6">{repo.description || 'No description'}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Repository Files Modal */}
+      {selectedRepo && showRepoBrowser && repoFiles.length > 0 && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 max-w-2xl w-full mx-4 border border-gray-700 max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Files in {selectedRepo.name}</h3>
+              <button
+                onClick={() => {
+                  setSelectedRepo(null);
+                  setRepoFiles([]);
+                  setShowRepoBrowser(false);
+                }}
+                className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+              >
+                \u2715
+              </button>
+            </div>
+            
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {repoFiles.map((file) => (
+                <div key={file.name} className="p-3 bg-gray-700/50 rounded-lg hover:bg-gray-700 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <span className="text-blue-400">\u25cf</span>
+                    <button
+                      onClick={() => loadFromRepo(file)}
+                      className="flex-1 text-left"
+                    >
+                      {file.name}
+                    </button>
+                    <span className="text-xs text-gray-500">{file.type === 'file' ? 'File' : 'Dir'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
