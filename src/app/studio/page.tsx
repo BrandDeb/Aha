@@ -1,1098 +1,1163 @@
 'use client';
 
 /**
- * Nano CLI Studio - Enhanced Studio Page
+ * NanoCLI Studio - Studio Page
+ * Zero-Runtime TypeScript CLI Generator with Live Terminal & Multi-File Support
  * 
- * A production-ready studio with 7 integrated features:
- * 1. Zero-Latency AI Gateway
- * 2. Instant Auth Middleware
- * 3. No-BS URL Shortener
- * 4. Notion-like Markdown Editor
- * 5. Real-time Analytics Dashboard
- * 6. Live Terminal Emulator
- * 7. Multi-File Project Explorer
+ * Features:
+ * - Monaco Editor with TypeScript support
+ * - Live Terminal Emulator
+ * - Multi-File Project Explorer
+ * - Real-time Collaboration via WebSocket
+ * - GitHub Integration
+ * - Compilation to Native/C/WASM/LLVM
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { generateSecureId, formatMs, debounce, formatBytes } from '@/lib/utils';
-import type { AIRequest, AIResponse, AuthRequest, ShortenRequest } from '@/types';
+import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
+import { compileTypeScriptBrowser } from '@/lib/compiler-browser';
+import { WebSocketManager } from '@/lib/websocket';
 
-// Feature types
-type ActiveFeature = 'ai' | 'auth' | 'shorten' | 'editor' | 'analytics' | 'terminal' | 'projects';
-
-// Project file type
-interface ProjectFile {
-  id: string;
+// File type for project explorer
+interface FileNode {
   name: string;
-  path: string;
   content: string;
-  language: string;
-  createdAt: Date;
-  updatedAt: Date;
-  isDirty: boolean;
+  type: 'file' | 'folder';
+  children?: FileNode[];
 }
 
-// Mock data types for demo
-interface MockAIProvider {
+// Terminal history type
+interface TerminalEntry {
+  input: string;
+  output: string;
+}
+
+// Template type
+interface Template {
   name: string;
-  latency: number;
-  cost: number;
-  status: 'online' | 'offline' | 'degraded';
-}
-
-interface MockUrl {
-  id: string;
-  original: string;
-  short: string;
-  clicks: number;
-  createdAt: Date;
-}
-
-interface MockNote {
-  id: string;
-  title: string;
-  content: string;
-  updatedAt: Date;
-  tags: string[];
-}
-
-interface AnalyticsData {
-  totalRequests: number;
-  avgLatency: number;
-  requestsByType: Record<string, number>;
-  requestsByProvider: Record<string, number>;
+  code: string;
 }
 
 export default function StudioPage() {
-  const [activeFeature, setActiveFeature] = useState<ActiveFeature>('ai');
-  const [isDarkMode, setIsDarkMode] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
-  
-  // AI Gateway state
-  const [aiRequest, setAiRequest] = useState<AIRequest>({
-    prompt: '',
-    provider: 'openrouter',
-    stream: false,
-    maxTokens: 100,
-    temperature: 0.7
-  });
-  const [aiResponse, setAiResponse] = useState<AIResponse | null>(null);
-  const [providers, setProviders] = useState<MockAIProvider[]>([
-    { name: 'openrouter', latency: 2, cost: 0.000002, status: 'online' },
-    { name: 'groq', latency: 1, cost: 0.000001, status: 'online' },
-    { name: 'firebase', latency: 3, cost: 0.000003, status: 'online' },
-    { name: 'anthropic', latency: 5, cost: 0.000005, status: 'online' },
-    { name: 'mistral', latency: 4, cost: 0.000002, status: 'online' }
+  const router = useRouter();
+  const [code, setCode] = useState<string>(`// NanoCLI Studio - Studio Edition
+// Write TypeScript, Get Native Binaries
+
+const args = process.argv.slice(2);
+const name = args[0] || 'World';
+
+console.log(\`Hello, \${name}!\`);
+
+// Add more code to see the power of scriptc
+function add(a: number, b: number): number {
+  return a + b;
+}
+
+const result = add(3, 5);
+console.log(\`3 + 5 = \${result}\`);
+
+// Export for use in other modules
+module.exports = { add };`);
+
+  const [filename, setFilename] = useState<string>('app.ts');
+  const [target, setTarget] = useState<'exe' | 'c' | 'llvm' | 'wasm'>('exe');
+  const [platform, setPlatform] = useState<'linux' | 'macos' | 'windows'>('linux');
+  const [isCompiling, setIsCompiling] = useState<boolean>(false);
+  const [compileResult, setCompileResult] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [output, setOutput] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'editor' | 'output' | 'console' | 'terminal'>('editor');
+  const [consoleMessages, setConsoleMessages] = useState<string[]>([]);
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [projectName, setProjectName] = useState<string>('my-cli');
+  const [showShareModal, setShowShareModal] = useState<boolean>(false);
+  const [shareUrl, setShareUrl] = useState<string>('');
+  const [showTemplates, setShowTemplates] = useState<boolean>(false);
+  const [showGitHubModal, setShowGitHubModal] = useState<boolean>(false);
+  const [githubUser, setGithubUser] = useState<any>(null);
+  const [showCollaboration, setShowCollaboration] = useState<boolean>(false);
+  const [collaborators, setCollaborators] = useState<any[]>([]);
+
+  // Live Terminal Emulator State
+  const [terminalHistory, setTerminalHistory] = useState<TerminalEntry[]>([]);
+  const [terminalCommand, setTerminalCommand] = useState<string>('');
+  const [terminalCursor, setTerminalCursor] = useState<boolean>(true);
+
+  // Multi-File Project Explorer State
+  const [files, setFiles] = useState<FileNode[]>([
+    { name: 'app.ts', content: code, type: 'file' },
   ]);
-  
-  // Auth state
-  const [authToken, setAuthToken] = useState('');
-  const [authResult, setAuthResult] = useState<{ valid: boolean; latency: string } | null>(null);
-  
-  // URL Shortener state
-  const [urlToShorten, setUrlToShorten] = useState('');
-  const [customId, setCustomId] = useState('');
-  const [shortenedUrl, setShortenedUrl] = useState<MockUrl | null>(null);
-  const [urls, setUrls] = useState<MockUrl[]>([]);
-  
-  // Markdown Editor state
-  const [notes, setNotes] = useState<MockNote[]>([
-    { id: '1', title: 'Welcome', content: '# Welcome to Nano CLI Studio\n\nThis is your offline-first markdown editor.\n\n- Type in markdown\n- See instant preview\n- Everything syncs when online', updatedAt: new Date(), tags: ['welcome', 'studio'] }
-  ]);
-  const [activeNoteId, setActiveNoteId] = useState('1');
-  const [noteContent, setNoteContent] = useState('');
-  const [noteTitle, setNoteTitle] = useState('');
-  
-  // Terminal Emulator state
-  const [terminalInput, setTerminalInput] = useState('');
-  const [terminalHistory, setTerminalHistory] = useState<{ input: string; output: string; timestamp: Date }[]>([]);
-  const [terminalOutput, setTerminalOutput] = useState('');
-  const terminalRef = useRef<HTMLDivElement>(null);
-  
-  // Multi-File Project state
-  const [projects, setProjects] = useState<{ id: string; name: string; files: ProjectFile[]; createdAt: Date }[]>([
-    {
-      id: generateSecureId(),
-      name: 'My Project',
-      files: [
-        {
-          id: generateSecureId(),
-          name: 'main.ts',
-          path: '/main.ts',
-          content: '// Main entry point\nexport function main() {\n  console.log("Hello, World!");\n}\n',
-          language: 'typescript',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          isDirty: false,
-        },
-      ],
-      createdAt: new Date(),
-    },
-  ]);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [activeFileId, setActiveFileId] = useState<string | null>(null);
-  const [showNewFileModal, setShowNewFileModal] = useState(false);
-  const [newFileName, setNewFileName] = useState('');
-  const [newFileLanguage, setNewFileLanguage] = useState('typescript');
-  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
-  
-  // Analytics state
-  const [analytics, setAnalytics] = useState<AnalyticsData>({
-    totalRequests: 1542,
-    avgLatency: 2.3,
-    requestsByType: { ai: 892, auth: 340, shorten: 210, editor: 98, analytics: 2 },
-    requestsByProvider: { openrouter: 450, groq: 320, firebase: 122 }
-  });
-  
-  // Real-time stats
-  const [stats, setStats] = useState({
-    coldStart: '~2ms',
-    memoryUsage: '~1.2MB',
-    requestsPerSecond: 45,
-    wasmSize: '178KB'
-  });
-  
-  // Initialize note content
-  useEffect(() => {
-    const note = notes.find(n => n.id === activeNoteId);
-    if (note) {
-      setNoteTitle(note.title);
-      setNoteContent(note.content);
-    }
-  }, [activeNoteId, notes]);
-  
-  // Initialize project and file
-  useEffect(() => {
-    if (projects.length > 0 && !activeProjectId) {
-      setActiveProjectId(projects[0].id);
-    }
-    
-    if (activeProjectId) {
-      const project = projects.find(p => p.id === activeProjectId);
-      if (project && project.files.length > 0 && !activeFileId) {
-        setActiveFileId(project.files[0].id);
-      }
-    }
-  }, [projects, activeProjectId, activeFileId]);
-  
-  // Auto-save note with debounce
-  const saveNote = useCallback(
-    debounce((id: string, title: string, content: string) => {
-      setNotes(prev => prev.map(n => 
-        n.id === id ? { ...n, title, content, updatedAt: new Date() } : n
-      ));
-    }, 500),
-    []
+  const [selectedFile, setSelectedFile] = useState<string>('app.ts');
+  const [showFileModal, setShowFileModal] = useState<boolean>(false);
+  const [newFileName, setNewFileName] = useState<string>('');
+  const [newFileType, setNewFileType] = useState<'file' | 'folder'>('file');
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+
+  const clientId = useRef<string>(crypto.randomUUID()).current;
+  const projectId = useRef<string>(crypto.randomUUID()).current;
+  const wsManager = useRef<WebSocketManager | null>(null);
+
+  // Load Monaco Editor dynamically
+  const Editor = dynamic(
+    () => import('@monaco-editor/react').then((mod) => mod.default),
+    { ssr: false, loading: () => <div className="loading">Loading editor...</div> }
   );
-  
+
+  // Initialize WebSocket connection for collaboration
   useEffect(() => {
-    if (activeNoteId) {
-      saveNote(activeNoteId, noteTitle, noteContent);
+    if (showCollaboration) {
+      wsManager.current = new WebSocketManager(projectId, clientId, 'User');
+      wsManager.current.connect();
+
+      wsManager.current.on('collaborator_joined', (message) => {
+        setCollaborators(prev => [...prev, {
+          id: message.clientId,
+          name: message.content || 'Anonymous',
+          color: '#' + Math.floor(Math.random() * 16777215).toString(16),
+        }]);
+      });
+
+      wsManager.current.on('collaborator_left', (message) => {
+        setCollaborators(prev => prev.filter(c => c.id !== message.clientId));
+      });
+
+      wsManager.current.on('content_update', (message) => {
+        if (message.content !== undefined) {
+          setCode(message.content);
+        }
+      });
+
+      return () => {
+        wsManager.current?.disconnect();
+      };
     }
-  }, [noteTitle, noteContent, activeNoteId, saveNote]);
-  
-  // Auto-save file content
+  }, [showCollaboration]);
+
+  // Check GitHub authentication status
   useEffect(() => {
-    if (activeProjectId && activeFileId) {
-      const updatedAt = new Date();
-      setProjects(prev => prev.map(project => {
-        if (project.id !== activeProjectId) return project;
-        return {
-          ...project,
-          files: project.files.map(file => {
-            if (file.id !== activeFileId) return file;
-            return { ...file, updatedAt, isDirty: true };
-          }),
-        };
-      }));
-    }
-  }, [activeProjectId, activeFileId]);
-  
-  // Get active file content
-  const getActiveFileContent = (): string => {
-    if (!activeProjectId || !activeFileId) return '';
-    const project = projects.find(p => p.id === activeProjectId);
-    if (!project) return '';
-    const file = project.files.find(f => f.id === activeFileId);
-    return file?.content || '';
-  };
-  
-  // Get active file info
-  const getActiveFileInfo = (): ProjectFile | null => {
-    if (!activeProjectId || !activeFileId) return null;
-    const project = projects.find(p => p.id === activeProjectId);
-    if (!project) return null;
-    return project.files.find(f => f.id === activeFileId) || null;
-  };
-  
-  // Simulate real-time stats updates
+    fetch('/api/github/user')
+      .then(res => res.json())
+      .then(data => {
+        if (data.authenticated) {
+          setGithubUser(data.user);
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  // Terminal cursor blink effect
   useEffect(() => {
     const interval = setInterval(() => {
-      setStats(prev => ({
-        ...prev,
-        requestsPerSecond: Math.floor(Math.random() * 100) + 10,
-        memoryUsage: `${(Math.random() * 2 + 0.8).toFixed(1)}MB`
-      }));
-    }, 2000);
-    
+      setTerminalCursor(prev => !prev);
+    }, 500);
     return () => clearInterval(interval);
   }, []);
-  
-  // Handle AI Gateway request
-  const handleAiRequest = async () => {
-    if (!aiRequest.prompt.trim()) return;
-    
-    setIsLoading(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const response: AIResponse = {
-      provider: aiRequest.provider || 'openrouter',
-      prompt: aiRequest.prompt,
-      completion: `This is a simulated response from ${aiRequest.provider || 'openrouter'}. Your prompt was: "${aiRequest.prompt}".\n\nWith scriptc, this would have ~2ms cold start latency instead of 35-100ms with Node.js.`,
-      stream: aiRequest.stream || false,
-      timestamp: Date.now(),
-      latency: formatMs(Math.random() * 5 + 1),
-      model: 'mistral-large',
-      tokensUsed: Math.floor(aiRequest.prompt.length / 4)
-    };
-    
-    setAiResponse(response);
-    setIsLoading(false);
-    
-    // Update analytics
-    setAnalytics(prev => ({
-      ...prev,
-      totalRequests: prev.totalRequests + 1,
-      requestsByType: { ...prev.requestsByType, ai: prev.requestsByType.ai + 1 },
-      requestsByProvider: { ...prev.requestsByProvider, [aiRequest.provider || 'openrouter']: (prev.requestsByProvider[aiRequest.provider || 'openrouter'] || 0) + 1 }
-    }));
-  };
-  
-  // Handle Auth validation
-  const handleAuthValidation = async () => {
-    if (!authToken.trim()) return;
-    
-    setIsLoading(true);
-    
-    // Simulate auth check
-    await new Promise(resolve => setTimeout(resolve, 50));
-    
-    const isValid = authToken.startsWith('valid_') || authToken === 'demo-token';
-    
-    setAuthResult({
-      valid: isValid,
-      latency: formatMs(Math.random() * 2 + 0.5)
-    });
-    setIsLoading(false);
-    
-    // Update analytics
-    setAnalytics(prev => ({
-      ...prev,
-      totalRequests: prev.totalRequests + 1,
-      requestsByType: { ...prev.requestsByType, auth: prev.requestsByType.auth + 1 }
-    }));
-  };
-  
-  // Handle URL shortening
-  const handleShortenUrl = async () => {
-    if (!urlToShorten.trim()) return;
-    
-    setIsLoading(true);
-    
-    // Simulate URL shortening
-    await new Promise(resolve => setTimeout(resolve, 30));
-    
-    const id = customId || generateSecureId(8);
-    const shortUrl: MockUrl = {
-      id,
-      original: urlToShorten,
-      short: `${window.location.origin}/s/${id}`,
-      clicks: 0,
-      createdAt: new Date()
-    };
-    
-    setShortenedUrl(shortUrl);
-    setUrls(prev => [shortUrl, ...prev.slice(0, 4)]);
-    setUrlToShorten('');
-    setCustomId('');
-    setIsLoading(false);
-    
-    // Update analytics
-    setAnalytics(prev => ({
-      ...prev,
-      totalRequests: prev.totalRequests + 1,
-      requestsByType: { ...prev.requestsByType, shorten: prev.requestsByType.shorten + 1 }
-    }));
-  };
-  
-  // Create new note
-  const createNewNote = () => {
-    const newNote: MockNote = {
-      id: generateSecureId(8),
-      title: 'Untitled Note',
-      content: '# New Note\n\nStart typing...',
-      updatedAt: new Date(),
-      tags: []
-    };
-    setNotes(prev => [newNote, ...prev]);
-    setActiveNoteId(newNote.id);
-  };
-  
-  // Delete note
-  const deleteNote = (id: string) => {
-    if (notes.length <= 1) return;
-    setNotes(prev => prev.filter(n => n.id !== id));
-    if (activeNoteId === id) {
-      setActiveNoteId(notes[0]?.id || '');
+
+  // Update file content when code changes
+  useEffect(() => {
+    if (selectedFile) {
+      setFiles(prev => prev.map(f => 
+        f.name === selectedFile ? { ...f, content: code } : f
+      ));
     }
-  };
-  
-  // Toggle dark mode
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
-  };
-  
-  // Get provider status color
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'online': return 'bg-green-500';
-      case 'offline': return 'bg-red-500';
-      case 'degraded': return 'bg-yellow-500';
-      default: return 'bg-gray-500';
+  }, [code, selectedFile]);
+
+  // Initialize with current code
+  useEffect(() => {
+    if (files.length === 1 && files[0].name === 'app.ts' && files[0].content !== code) {
+      setFiles([{ name: 'app.ts', content: code, type: 'file' }]);
     }
-  };
-  
-  // Render different feature panels
-  const renderFeaturePanel = () => {
-    switch (activeFeature) {
-      case 'ai':
-        return renderAIGateway();
-      case 'auth':
-        return renderAuthMiddleware();
-      case 'shorten':
-        return renderUrlShortener();
-      case 'editor':
-        return renderMarkdownEditor();
-      case 'analytics':
-        return renderAnalyticsDashboard();
-      default:
-        return renderAIGateway();
-    }
-  };
-  
-  // AI Gateway Panel
-  const renderAIGateway = () => (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-6 rounded-xl text-white">
-        <h2 className="text-2xl font-bold mb-2">Zero-Latency AI Gateway</h2>
-        <p className="text-purple-100">Route LLM requests to the fastest/cheapest provider with ~2ms cold starts</p>
-      </div>
-      
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Provider</label>
-            <select
-              value={aiRequest.provider}
-              onChange={(e) => setAiRequest({ ...aiRequest, provider: e.target.value as any })}
-              className="w-full p-3 rounded-lg border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
-            >
-              {providers.map(provider => (
-                <option key={provider.name} value={provider.name}>
-                  {provider.name} ({provider.latency}ms, ${provider.cost}/token)
-                </option>
-              ))}
-            </select>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-2">Prompt</label>
-            <textarea
-              value={aiRequest.prompt}
-              onChange={(e) => setAiRequest({ ...aiRequest, prompt: e.target.value })}
-              placeholder="Enter your prompt..."
-              rows={6}
-              className="w-full p-3 rounded-lg border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 resize-none"
-            />
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Max Tokens</label>
-              <input
-                type="number"
-                value={aiRequest.maxTokens}
-                onChange={(e) => setAiRequest({ ...aiRequest, maxTokens: Number(e.target.value) })}
-                className="w-full p-3 rounded-lg border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Temperature</label>
-              <input
-                type="number"
-                step="0.1"
-                min="0"
-                max="1"
-                value={aiRequest.temperature}
-                onChange={(e) => setAiRequest({ ...aiRequest, temperature: Number(e.target.value) })}
-                className="w-full p-3 rounded-lg border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
-              />
-            </div>
-          </div>
-          
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={aiRequest.stream}
-                onChange={(e) => setAiRequest({ ...aiRequest, stream: e.target.checked })}
-                className="w-4 h-4"
-              />
-              <span>Stream Response</span>
-            </label>
-          </div>
-          
-          <button
-            onClick={handleAiRequest}
-            disabled={isLoading || !aiRequest.prompt.trim()}
-            className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white p-4 rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? 'Processing...' : 'Send Request'}
-          </button>
-        </div>
-        
-        <div className="space-y-4">
-          <h3 className="text-xl font-semibold">Provider Status</h3>
-          <div className="space-y-3">
-            {providers.map(provider => (
-              <div key={provider.name} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${getStatusColor(provider.status)}`} />
-                  <span className="font-medium">{provider.name}</span>
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  {provider.latency}ms • ${provider.cost}/token
-                </div>
-              </div>
-            ))}
-          </div>
-          
-          <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
-            <h4 className="font-semibold mb-2">scriptc Advantage</h4>
-            <ul className="text-sm space-y-1">
-              <li>• ~2ms cold starts (vs 35-100ms Node)</li>
-              <li>• ~1-4MB memory (vs 60-100MB Node)</li>
-              <li>• No GC pauses = deterministic latency</li>
-              <li>• 178KB WASM binary</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-      
-      {aiResponse && (
-        <div className="bg-gray-50 dark:bg-gray-900 p-6 rounded-lg border border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold mb-4">Response</h3>
-          <div className="space-y-2">
-            <p><strong>Provider:</strong> {aiResponse.provider}</p>
-            <p><strong>Latency:</strong> {aiResponse.latency}</p>
-            <p><strong>Tokens Used:</strong> {aiResponse.tokensUsed}</p>
-            <p><strong>Model:</strong> {aiResponse.model}</p>
-          </div>
-          <div className="mt-4 p-4 bg-white dark:bg-gray-800 rounded-lg">
-            <pre className="whitespace-pre-wrap text-sm">{aiResponse.completion}</pre>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-  
-  // Auth Middleware Panel
-  const renderAuthMiddleware = () => (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-blue-500 to-cyan-500 p-6 rounded-xl text-white">
-        <h2 className="text-2xl font-bold mb-2">Instant Auth Middleware</h2>
-        <p className="text-blue-100">Validate JWTs, API keys, and OAuth tokens at the edge with ~1ms checks</p>
-      </div>
-      
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Token</label>
-            <textarea
-              value={authToken}
-              onChange={(e) => setAuthToken(e.target.value)}
-              placeholder="Enter JWT, API key, or OAuth token..."
-              rows={4}
-              className="w-full p-3 rounded-lg border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 resize-none font-mono text-sm"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-2">Token Type</label>
-            <select className="w-full p-3 rounded-lg border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
-              <option value="jwt">JWT</option>
-              <option value="api_key">API Key</option>
-              <option value="oauth">OAuth Token</option>
-            </select>
-          </div>
-          
-          <button
-            onClick={handleAuthValidation}
-            disabled={isLoading || !authToken.trim()}
-            className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white p-4 rounded-lg font-semibold hover:from-blue-700 hover:to-cyan-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? 'Validating...' : 'Validate Token'}
-          </button>
-          
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
-            <h4 className="font-semibold mb-2">Try These Tokens</h4>
-            <div className="space-y-2 text-sm">
-              <button
-                onClick={() => setAuthToken('valid_jwt_token')}
-                className="block w-full text-left p-2 bg-white dark:bg-gray-800 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                Valid JWT
-              </button>
-              <button
-                onClick={() => setAuthToken('valid_api_key_123')}
-                className="block w-full text-left p-2 bg-white dark:bg-gray-800 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                Valid API Key
-              </button>
-              <button
-                onClick={() => setAuthToken('demo-token')}
-                className="block w-full text-left p-2 bg-white dark:bg-gray-800 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                Demo Token
-              </button>
-              <button
-                onClick={() => setAuthToken('invalid_token')}
-                className="block w-full text-left p-2 bg-white dark:bg-gray-800 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                Invalid Token
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        <div className="space-y-4">
-          <h3 className="text-xl font-semibold">Validation Result</h3>
-          
-          {authResult && (
-            <div className={`p-6 rounded-lg ${authResult.valid ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'}`}>
-              <h4 className="text-lg font-semibold mb-2">
-                {authResult.valid ? '✓ Valid Token' : '✗ Invalid Token'}
-              </h4>
-              <p><strong>Latency:</strong> {authResult.latency}</p>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                {authResult.valid 
-                  ? 'Token successfully validated. With scriptc, this check took ~1ms instead of 20-50ms with Node.js.'
-                  : 'Token validation failed. Invalid or expired token.'
-                }
-              </p>
-            </div>
-          )}
-          
-          <div className="bg-cyan-50 dark:bg-cyan-900/20 p-4 rounded-lg border border-cyan-200 dark:border-cyan-800">
-            <h4 className="font-semibold mb-2">scriptc Advantage</h4>
-            <ul className="text-sm space-y-1">
-              <li>• ~1ms auth checks (vs 20-50ms Node)</li>
-              <li>• No node:crypto dependency</li>
-              <li>• Tiny 178KB binary</li>
-              <li>• Deploy to any edge runtime</li>
-            </ul>
-          </div>
-          
-          <div className="space-y-2">
-            <h4 className="font-semibold">Supported Algorithms</h4>
-            <div className="flex flex-wrap gap-2">
-              {['HS256', 'RS256', 'ES256', 'PS256', 'EdDSA'].map(alg => (
-                <span key={alg} className="px-3 py-1 bg-white dark:bg-gray-800 rounded-full text-sm border border-gray-200 dark:border-gray-700">
-                  {alg}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-  
-  // URL Shortener Panel
-  const renderUrlShortener = () => (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-orange-500 to-yellow-500 p-6 rounded-xl text-white">
-        <h2 className="text-2xl font-bold mb-2">No-BS URL Shortener</h2>
-        <p className="text-orange-100">Zero-database URL shortener with KV storage and ~1ms latency</p>
-      </div>
-      
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">URL to Shorten</label>
-            <input
-              type="url"
-              value={urlToShorten}
-              onChange={(e) => setUrlToShorten(e.target.value)}
-              placeholder="https://example.com/very/long/url"
-              className="w-full p-3 rounded-lg border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-2">Custom ID (Optional)</label>
-            <input
-              value={customId}
-              onChange={(e) => setCustomId(e.target.value)}
-              placeholder="my-custom-id"
-              className="w-full p-3 rounded-lg border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
-            />
-          </div>
-          
-          <button
-            onClick={handleShortenUrl}
-            disabled={isLoading || !urlToShorten.trim()}
-            className="w-full bg-gradient-to-r from-orange-600 to-yellow-600 text-white p-4 rounded-lg font-semibold hover:from-orange-700 hover:to-yellow-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? 'Shortening...' : 'Shorten URL'}
-          </button>
-          
-          {shortenedUrl && (
-            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-              <h4 className="font-semibold mb-2">Your Short URL</h4>
-              <div className="flex gap-2">
-                <input
-                  value={shortenedUrl.short}
-                  readOnly
-                  className="flex-1 p-2 rounded border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-sm"
-                />
-                <button
-                  onClick={() => navigator.clipboard.writeText(shortenedUrl.short)}
-                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                >
-                  Copy
-                </button>
-              </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                Clicks: {shortenedUrl.clicks}
-              </p>
-            </div>
-          )}
-          
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
-            <h4 className="font-semibold mb-2">scriptc Advantage</h4>
-            <ul className="text-sm space-y-1">
-              <li>• Static compilation = no fetch polyfills</li>
-              <li>• 178KB binary fits in edge cache</li>
-              <li>• Deploy to Cloudflare KV, Redis, etc.</li>
-              <li>• Atomic increments for click counts</li>
-            </ul>
-          </div>
-        </div>
-        
-        <div className="space-y-4">
-          <h3 className="text-xl font-semibold">Recent URLs</h3>
-          
-          {urls.length > 0 ? (
-            <div className="space-y-3">
-              {urls.map(url => (
-                <div key={url.id} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg">
-                  <div className="flex-1">
-                    <p className="font-medium truncate">{url.short}</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{url.original}</p>
-                  </div>
-                  <div className="text-sm text-gray-500 dark:text-gray-400">
-                    {url.clicks} clicks
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-500 dark:text-gray-400 text-center py-4">
-              No URLs shortened yet. Create your first one!
-            </p>
-          )}
-          
-          <div className="space-y-2">
-            <h4 className="font-semibold">Features</h4>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { name: 'Custom Domains', icon: '🌐' },
-                { name: 'Analytics', icon: '📊' },
-                { name: 'Expiration', icon: '⏰' },
-                { name: 'Password Protect', icon: '🔒' }
-              ].map(feature => (
-                <div key={feature.name} className="flex items-center gap-2 p-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                  <span>{feature.icon}</span>
-                  <span className="text-sm">{feature.name}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-  
-  // Markdown Editor Panel
-  const renderMarkdownEditor = () => (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-teal-500 to-emerald-500 p-6 rounded-xl text-white">
-        <h2 className="text-2xl font-bold mb-2">Notion, but Offline-First</h2>
-        <p className="text-teal-100">Local-first markdown editor with end-to-end encryption and full-text search</p>
-      </div>
-      
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <button
-              onClick={createNewNote}
-              className="flex-1 bg-teal-600 text-white p-2 rounded-lg hover:bg-teal-700 transition-colors"
-            >
-              + New Note
-            </button>
-          </div>
-          
-          <div className="space-y-2 max-h-[600px] overflow-y-auto">
-            {notes.map(note => (
-              <div
-                key={note.id}
-                onClick={() => setActiveNoteId(note.id)}
-                className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                  activeNoteId === note.id 
-                    ? 'bg-teal-100 dark:bg-teal-900/30 border border-teal-400' 
-                    : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium truncate">{note.title}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      {note.updatedAt.toLocaleDateString()}
-                    </p>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteNote(note.id);
-                    }}
-                    className="text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    🗑️
-                  </button>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {note.tags.map(tag => (
-                    <span key={tag} className="px-2 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-          
-          <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-lg border border-emerald-200 dark:border-emerald-800">
-            <h4 className="font-semibold mb-2">scriptc Advantage</h4>
-            <ul className="text-sm space-y-1">
-              <li>• No Electron (100MB+ → ~1MB)</li>
-              <li>• Instant startup (no Node)</li>
-              <li>• Full-text search &lt;10ms</li>
-              <li>• End-to-end encrypted notes</li>
-            </ul>
-          </div>
-        </div>
-        
-        <div className="md:col-span-2 space-y-4">
-          <input
-            value={noteTitle}
-            onChange={(e) => setNoteTitle(e.target.value)}
-            placeholder="Note Title"
-            className="w-full p-3 rounded-lg border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-xl font-semibold"
-          />
-          
-          <div className="grid md:grid-cols-2 gap-4 h-[500px]">
-            <div className="space-y-2">
-              <h4 className="font-semibold">Editor</h4>
-              <textarea
-                value={noteContent}
-                onChange={(e) => setNoteContent(e.target.value)}
-                placeholder="Write your markdown here..."
-                className="w-full h-[450px] p-3 rounded-lg border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 resize-none font-mono text-sm"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <h4 className="font-semibold">Preview</h4>
-              <div className="h-[450px] p-3 rounded-lg border bg-gray-50 dark:bg-gray-900 border-gray-300 dark:border-gray-600 overflow-y-auto">
-                <MarkdownPreview content={noteContent} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-  
-  // Analytics Dashboard Panel
-  const renderAnalyticsDashboard = () => (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-indigo-500 to-purple-500 p-6 rounded-xl text-white">
-        <h2 className="text-2xl font-bold mb-2">Real-Time Analytics</h2>
-        <p className="text-indigo-100">Live monitoring of your scriptc-powered edge functions</p>
-      </div>
-      
-      <div className="grid md:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Requests', value: analytics.totalRequests.toLocaleString(), icon: '📊' },
-          { label: 'Avg Latency', value: `${analytics.avgLatency.toFixed(2)}ms`, icon: '⚡' },
-          { label: 'RPS', value: stats.requestsPerSecond.toLocaleString(), icon: '📈' },
-          { label: 'WASM Size', value: stats.wasmSize, icon: '💾' }
-        ].map(stat => (
-          <div key={stat.label} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-2xl">{stat.icon}</span>
-              <span className="font-semibold">{stat.label}</span>
-            </div>
-            <p className="text-2xl font-bold">{stat.value}</p>
-          </div>
-        ))}
-      </div>
-      
-      <div className="grid md:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Requests by Type</h3>
-          <div className="space-y-3">
-            {Object.entries(analytics.requestsByType).map(([type, count]) => (
-              <div key={type} className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg">
-                <div className="w-4 h-4 rounded bg-indigo-500" />
-                <span className="flex-1">{type}</span>
-                <span className="font-semibold">{count.toLocaleString()}</span>
-                <div className="w-32 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-indigo-500 rounded-full"
-                    style={{ width: `${(count / analytics.totalRequests) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Requests by Provider</h3>
-          <div className="space-y-3">
-            {Object.entries(analytics.requestsByProvider).map(([provider, count]) => (
-              <div key={provider} className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 rounded-lg">
-                <div className="w-4 h-4 rounded bg-purple-500" />
-                <span className="flex-1">{provider}</span>
-                <span className="font-semibold">{count.toLocaleString()}</span>
-                <div className="w-32 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-purple-500 rounded-full"
-                    style={{ width: `${(count / Object.values(analytics.requestsByProvider).reduce((a, b) => a + b, 0)) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-      
-      <div className="bg-indigo-50 dark:bg-indigo-900/20 p-6 rounded-lg border border-indigo-200 dark:border-indigo-800">
-        <h3 className="text-lg font-semibold mb-4">Performance Metrics</h3>
-        
-        <div className="grid md:grid-cols-3 gap-6">
-          <div>
-            <h4 className="font-semibold mb-2">Cold Start Latency</h4>
-            <div className="text-3xl font-bold text-indigo-600">{stats.coldStart}</div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              vs 35-100ms with Node.js
-            </p>
-          </div>
-          
-          <div>
-            <h4 className="font-semibold mb-2">Memory Usage</h4>
-            <div className="text-3xl font-bold text-indigo-600">{stats.memoryUsage}</div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              vs 60-100MB with Node.js
-            </p>
-          </div>
-          
-          <div>
-            <h4 className="font-semibold mb-2">Binary Size</h4>
-            <div className="text-3xl font-bold text-indigo-600">{stats.wasmSize}</div>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Compiled WASM binary
-            </p>
-          </div>
-        </div>
-        
-        <div className="mt-6 pt-4 border-t border-indigo-200 dark:border-indigo-800">
-          <h4 className="font-semibold mb-2">scriptc Advantages</h4>
-          <div className="grid md:grid-cols-2 gap-4 text-sm">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
-                <span>No V8 = no GC pauses</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
-                <span>Deterministic execution</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
-                <span>Static compilation</span>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
-                <span>Tiny memory footprint</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
-                <span>Deploy anywhere (WASM)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
-                <span>Zero JS runtime overhead</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-  
-  // Simple markdown preview component
-  const MarkdownPreview = ({ content }: { content: string }) => {
-    const renderLine = (line: string, index: number) => {
-      const trimmed = line.trim();
-      
-      if (trimmed.startsWith('# ')) {
-        return <h1 key={index} className="text-2xl font-bold mt-4 mb-2">{trimmed.substring(2)}</h1>;
-      }
-      if (trimmed.startsWith('## ')) {
-        return <h2 key={index} className="text-xl font-bold mt-3 mb-2">{trimmed.substring(3)}</h2>;
-      }
-      if (trimmed.startsWith('### ')) {
-        return <h3 key={index} className="text-lg font-bold mt-2 mb-2">{trimmed.substring(4)}</h3>;
-      }
-      if (trimmed.startsWith('> ')) {
-        return <blockquote key={index} className="border-l-4 border-gray-300 pl-4 my-2 text-gray-600 dark:text-gray-400">{trimmed.substring(2)}</blockquote>;
-      }
-      if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('+ ')) {
-        return <li key={index} className="list-disc ml-6">{trimmed.substring(2)}</li>;
-      }
-      if (trimmed.startsWith('```') && content.split('\n')[index + 1]?.startsWith('```')) {
-        return null;
-      }
-      if (trimmed.startsWith('```')) {
-        return <pre key={index} className="bg-gray-100 dark:bg-gray-800 p-2 rounded my-2 overflow-x-auto">{trimmed}</pre>;
-      }
-      if (trimmed.startsWith('**') && trimmed.endsWith('**')) {
-        return <strong key={index}>{trimmed.substring(2, trimmed.length - 2)}</strong>;
-      }
-      if (trimmed.startsWith('*') && trimmed.endsWith('*')) {
-        return <em key={index}>{trimmed.substring(1, trimmed.length - 1)}</em>;
-      }
-      if (trimmed.startsWith('[') && trimmed.includes('](') && trimmed.endsWith(')')) {
-        const match = trimmed.match(/\[([^\]]+)\]\(([^)]+)\)/);
-        if (match) {
-          return <a key={index} href={match[2]} className="text-blue-600 dark:text-blue-400 hover:underline">{match[1]}</a>;
+  }, [code, files]);
+
+  // Handle compilation
+  const handleCompile = useCallback(async () => {
+    setIsCompiling(true);
+    setError(null);
+    setOutput('');
+    setCompileResult(null);
+    addConsoleMessage('Starting compilation...');
+
+    try {
+      const result = await compileTypeScriptBrowser({
+        code,
+        filename,
+        target,
+        platform,
+        optimization: 'O2',
+      });
+
+      setCompileResult(result);
+
+      if (result.success) {
+        addConsoleMessage(`Compilation successful! Target: ${target}`);
+        if (result.downloadUrl) {
+          addConsoleMessage(`Download: ${result.downloadUrl}`);
+        }
+        setOutput(result.output || '');
+      } else {
+        setError(result.error || 'Compilation failed');
+        addConsoleMessage(`Compilation failed: ${result.error}`);
+        if (result.stderr) {
+          addConsoleMessage(result.stderr);
         }
       }
-      
-      return <p key={index} className="my-2">{line}</p>;
+    } catch (err: any) {
+      setError(err.message || 'Compilation error');
+      addConsoleMessage(`Error: ${err.message}`);
+    } finally {
+      setIsCompiling(false);
+    }
+  }, [code, filename, target, platform]);
+
+  // Add message to console
+  const addConsoleMessage = useCallback((message: string) => {
+    setConsoleMessages(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
+  }, []);
+
+  // Download compiled file
+  const handleDownload = useCallback(async () => {
+    if (!compileResult?.filename) return;
+
+    try {
+      const response = await fetch(`/api/download/${compileResult.filename}`);
+      if (!response.ok) {
+        throw new Error('File not found');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = compileResult.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      addConsoleMessage(`Downloaded: ${compileResult.filename}`);
+    } catch (err: any) {
+      setError(err.message);
+      addConsoleMessage(`Download error: ${err.message}`);
+    }
+  }, [compileResult, addConsoleMessage]);
+
+  // Login with GitHub
+  const handleGitHubLogin = useCallback(() => {
+    window.location.href = '/api/github/auth';
+  }, []);
+
+  // Logout from GitHub
+  const handleGitHubLogout = useCallback(async () => {
+    await fetch('/api/github/user', { method: 'DELETE' });
+    setGithubUser(null);
+    addConsoleMessage('Logged out from GitHub');
+  }, [addConsoleMessage]);
+
+  // Load template
+  const loadTemplate = useCallback((template: Template) => {
+    setCode(template.code);
+    setFilename(`${template.name.toLowerCase().replace(/\s+/g, '-')}.ts`);
+    setShowTemplates(false);
+    addConsoleMessage(`Loaded template: ${template.name}`);
+  }, [addConsoleMessage]);
+
+  // Generate share URL
+  const generateShareUrl = useCallback(() => {
+    const shareData = {
+      code,
+      filename,
+      target,
+      platform,
+      projectName,
     };
-    
-    return <div>{content.split('\n').map(renderLine)}</div>;
-  };
+    const encoded = btoa(encodeURIComponent(JSON.stringify(shareData)));
+    const url = `${window.location.origin}/?share=${encoded}`;
+    setShareUrl(url);
+    setShowShareModal(true);
+  }, [code, filename, target, platform, projectName]);
+
+  // Load from share URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const shareData = params.get('share');
+    if (shareData) {
+      try {
+        const decoded = JSON.parse(decodeURIComponent(atob(shareData)));
+        setCode(decoded.code || code);
+        setFilename(decoded.filename || filename);
+        setTarget(decoded.target || target);
+        setPlatform(decoded.platform || platform);
+        setProjectName(decoded.projectName || projectName);
+        addConsoleMessage('Loaded shared project');
+      } catch (err) {
+        console.error('Error loading share:', err);
+      }
+    }
+  }, [code, filename, target, platform, projectName, addConsoleMessage]);
+
+  // Toggle dark mode
+  const toggleDarkMode = useCallback(() => {
+    setIsDarkMode(!isDarkMode);
+    document.documentElement.classList.toggle('dark');
+  }, [isDarkMode]);
+
+  // Terminal Emulator Functions
+  const executeTerminalCommand = useCallback(async (command: string) => {
+    if (!command.trim()) return;
+
+    setTerminalHistory(prev => [...prev, { input: `$ ${command}`, output: '' }]);
+    setTerminalCommand('');
+
+    try {
+      // Handle built-in commands
+      if (command.toLowerCase() === 'clear' || command.toLowerCase() === 'cls') {
+        setTerminalHistory([]);
+        return;
+      }
+
+      if (command.toLowerCase() === 'help') {
+        setTerminalHistory(prev => [
+          ...prev.slice(0, -1),
+          {
+            input: `$ ${command}`,
+            output: 'Available commands:\n  clear/cls    - Clear terminal\n  help        - Show this help\n  ls          - List files\n  compile     - Compile current project\n  run <file>  - Run compiled binary\n  echo <text> - Print text\n  date        - Show current date\n  whoami      - Show current user',
+          },
+        ]);
+        return;
+      }
+
+      if (command.toLowerCase() === 'ls') {
+        const fileList = files.map(f => f.type === 'folder' ? `${f.name}/` : f.name).join('\n  ');
+        setTerminalHistory(prev => [
+          ...prev.slice(0, -1),
+          { input: `$ ${command}`, output: `Files:\n  ${fileList}` },
+        ]);
+        return;
+      }
+
+      if (command.toLowerCase() === 'date') {
+        const date = new Date().toLocaleString();
+        setTerminalHistory(prev => [
+          ...prev.slice(0, -1),
+          { input: `$ ${command}`, output: date },
+        ]);
+        return;
+      }
+
+      if (command.toLowerCase().startsWith('echo ')) {
+        const text = command.slice(5);
+        setTerminalHistory(prev => [
+          ...prev.slice(0, -1),
+          { input: `$ ${command}`, output: text },
+        ]);
+        return;
+      }
+
+      if (command.toLowerCase() === 'whoami') {
+        const user = githubUser?.login || 'anonymous';
+        setTerminalHistory(prev => [
+          ...prev.slice(0, -1),
+          { input: `$ ${command}`, output: user },
+        ]);
+        return;
+      }
+
+      if (command.toLowerCase() === 'compile') {
+        await handleCompile();
+        const result = compileResult?.success ? 'Compilation successful!' : compileResult?.error || 'Compilation failed';
+        setTerminalHistory(prev => [
+          ...prev.slice(0, -1),
+          { input: `$ ${command}`, output: result },
+        ]);
+        return;
+      }
+
+      if (command.toLowerCase().startsWith('run ')) {
+        const fileToRun = command.slice(4);
+        if (compileResult?.filename === fileToRun || fileToRun === 'app') {
+          setTerminalHistory(prev => [
+            ...prev.slice(0, -1),
+            { input: `$ ${command}`, output: 'Running compiled binary...\n[Note: Binary execution is simulated in browser. Download and run locally for actual execution.]' },
+          ]);
+        } else {
+          setTerminalHistory(prev => [
+            ...prev.slice(0, -1),
+            { input: `$ ${command}`, output: `File '${fileToRun}' not found or not compiled` },
+          ]);
+        }
+        return;
+      }
+
+      // Unknown command
+      setTerminalHistory(prev => [
+        ...prev.slice(0, -1),
+        { input: `$ ${command}`, output: `Command not found: ${command.split(' ')[0]}\nTry 'help' for available commands` },
+      ]);
+    } catch (err: any) {
+      setTerminalHistory(prev => [
+        ...prev.slice(0, -1),
+        { input: `$ ${command}`, output: `Error: ${err.message}` },
+      ]);
+    }
+  }, [files, githubUser, compileResult, handleCompile]);
+
+  // Handle terminal input
+  const handleTerminalKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      executeTerminalCommand(terminalCommand);
+    }
+  }, [terminalCommand, executeTerminalCommand]);
+
+  // File Management Functions
+  const createNewFile = useCallback(() => {
+    if (!newFileName.trim()) return;
+
+    const newFile: FileNode = {
+      name: newFileName,
+      content: newFileType === 'file' ? '// New file\n' : '',
+      type: newFileType,
+      children: newFileType === 'folder' ? [] : undefined,
+    };
+
+    setFiles(prev => [...prev, newFile]);
+    if (newFileType === 'file') {
+      setSelectedFile(newFileName);
+      setCode('// New file\n');
+    }
+
+    setNewFileName('');
+    setShowFileModal(false);
+    addConsoleMessage(`Created ${newFileType}: ${newFileName}`);
+  }, [newFileName, newFileType, addConsoleMessage]);
+
+  const deleteFile = useCallback((fileName: string) => {
+    if (files.length <= 1) {
+      addConsoleMessage('Cannot delete the last file');
+      return;
+    }
+
+    setFiles(prev => prev.filter(f => f.name !== fileName));
+    if (selectedFile === fileName) {
+      setSelectedFile(files[0]?.name || '');
+      setCode(files[0]?.content || '');
+    }
+    addConsoleMessage(`Deleted: ${fileName}`);
+  }, [files, selectedFile, addConsoleMessage]);
+
+  const selectFile = useCallback((fileName: string) => {
+    setSelectedFile(fileName);
+    const file = files.find(f => f.name === fileName);
+    if (file && file.type === 'file') {
+      setCode(file.content);
+      setFilename(fileName);
+    }
+  }, [files]);
+
+  const saveCurrentFile = useCallback(() => {
+    setFiles(prev => prev.map(f => 
+      f.name === selectedFile ? { ...f, content: code } : f
+    ));
+    addConsoleMessage(`Saved: ${selectedFile}`);
+  }, [code, selectedFile, addConsoleMessage]);
+
+  const toggleFolder = useCallback((folderName: string) => {
+    setExpandedFolders(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(folderName)) {
+        newSet.delete(folderName);
+      } else {
+        newSet.add(folderName);
+      }
+      return newSet;
+    });
+  }, []);
+
+  // Templates
+  const templates: Template[] = [
+    {
+      name: 'Hello World',
+      code: `const args = process.argv.slice(2);
+const name = args[0] || 'World';
+console.log(\`Hello, \${name}!\`);`,
+    },
+    {
+      name: 'HTTP Server',
+      code: `import { createServer } from 'http';
+
+const server = createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Hello from NanoCLI Server!');
+});
+
+const port = parseInt(process.argv[2] || '3000');
+server.listen(port, () => {
+  console.log(\`Server running on port \${port}\`);
+});`,
+    },
+    {
+      name: 'File Processor',
+      code: `import { readFileSync, writeFileSync } from 'fs';
+
+const inputFile = process.argv[2];
+const outputFile = process.argv[3];
+
+if (!inputFile || !outputFile) {
+  console.error('Usage: node app.js <input> <output>');
+  process.exit(1);
+}
+
+try {
+  const content = readFileSync(inputFile, 'utf8');
+  const processed = content.toUpperCase();
+  writeFileSync(outputFile, processed);
+  console.log(\`Processed \${inputFile} -> \${outputFile}\`);
+} catch (err) {
+  console.error('Error:', err.message);
+  process.exit(1);
+}`,
+    },
+    {
+      name: 'Math Utilities',
+      code: `function add(a: number, b: number): number {
+  return a + b;
+}
+
+function subtract(a: number, b: number): number {
+  return a - b;
+}
+
+function multiply(a: number, b: number): number {
+  return a * b;
+}
+
+function divide(a: number, b: number): number {
+  if (b === 0) throw new Error('Division by zero');
+  return a / b;
+}
+
+const args = process.argv.slice(2).map(Number);
+if (args.length < 2) {
+  console.log('Usage: math <num1> <num2> [operation: add|subtract|multiply|divide]');
+  process.exit(1);
+}
+
+const operation = (process.argv[4] as string) || 'add';
+const result = {
+  add: () => add(args[0], args[1]),
+  subtract: () => subtract(args[0], args[1]),
+  multiply: () => multiply(args[0], args[1]),
+  divide: () => divide(args[0], args[1]),
+}[operation]();
+
+console.log(\`\${args[0]} \${operation} \${args[1]} = \${result}\`);`,
+    },
+    {
+      name: 'API Client',
+      code: `async function fetchData(url: string): Promise<any> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(\`HTTP \${response.status}\`);
+  }
+  return response.json();
+}
+
+const apiUrl = process.argv[2];
+if (!apiUrl) {
+  console.error('Usage: api-client <url>');
+  process.exit(1);
+}
+
+fetchData(apiUrl)
+  .then(data => {
+    console.log('Response:', JSON.stringify(data, null, 2));
+  })
+  .catch(err => {
+    console.error('Error:', err.message);
+    process.exit(1);
+  });`,
+    },
+    {
+      name: 'CLI Calculator',
+      code: `function calculate(expression: string): number {
+  return Function('"use strict"; return (' + expression + ')')();
+}
+
+const expression = process.argv.slice(2).join(' ');
+if (!expression) {
+  console.error('Usage: calc "1 + 2 * 3"');
+  process.exit(1);
+}
+
+try {
+  const result = calculate(expression);
+  console.log(\`\${expression} = \${result}\`);
+} catch (err: any) {
+  console.error('Error:', err.message);
+  process.exit(1);
+}`,
+    },
+    {
+      name: 'JSON Processor',
+      code: `import { readFileSync, writeFileSync } from 'fs';
+
+const inputFile = process.argv[2];
+const outputFile = process.argv[3];
+
+if (!inputFile || !outputFile) {
+  console.error('Usage: json-processor <input.json> <output.json>');
+  process.exit(1);
+}
+
+try {
+  const data = JSON.parse(readFileSync(inputFile, 'utf8'));
+  const pretty = JSON.stringify(data, null, 2);
+  writeFileSync(outputFile, pretty);
+  console.log(\`Formatted JSON saved to \${outputFile}\`);
+} catch (err: any) {
+  console.error('Error:', err.message);
+  process.exit(1);
+}`,
+    },
+    {
+      name: 'Timer Utility',
+      code: `function formatTime(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
   
+  return \`\${days}d \${hours % 24}h \${minutes % 60}m \${seconds % 60}s\`;
+}
+
+const args = process.argv.slice(2);
+const duration = args.length > 0 ? parseInt(args[0]) * 1000 : 1000;
+
+console.log(\`Starting timer for \${duration / 1000} seconds...\`);
+
+setTimeout(() => {
+  console.log(\`Timer complete! Elapsed: \${formatTime(duration)}\`);
+  process.exit(0);
+}, duration);`,
+    },
+  ];
+
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-black font-sans">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white font-sans">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border-b border-gray-200 dark:border-gray-800">
+      <header className="sticky top-0 z-50 bg-gray-900/80 backdrop-blur-lg border-b border-gray-700">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-              Nano CLI Studio
+            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+              NanoCLI Studio
             </h1>
-            <span className="text-sm text-gray-500 dark:text-gray-400">
-              scriptc-powered edge apps
+            <span className="text-sm text-gray-400 hidden md:block">
+              Studio Edition
             </span>
           </div>
-          
+
           <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-6 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-                <span>Status: Online</span>
-              </div>
-              <div>
-                <span>Cold Start: {stats.coldStart}</span>
-              </div>
-              <div>
-                <span>Memory: {stats.memoryUsage}</span>
-              </div>
-            </div>
-            
             <button
               onClick={toggleDarkMode}
-              className="p-2 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
             >
-              {isDarkMode ? '☀️' : '🌙'}
+              {isDarkMode ? '\u2600\ufe0f' : '\ud83c\udf19'}
+            </button>
+
+            {githubUser ? (
+              <div className="flex items-center gap-2">
+                <img 
+                  src={githubUser.avatar_url} 
+                  alt={githubUser.login} 
+                  className="w-8 h-8 rounded-full border-2 border-purple-500"
+                />
+                <button
+                  onClick={handleGitHubLogout}
+                  className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition-colors"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleGitHubLogin}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition-colors"
+              >
+                Login with GitHub
+              </button>
+            )}
+
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
+            >
+              \u2699\ufe0f
             </button>
           </div>
         </div>
       </header>
-      
+
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Navigation */}
-        <nav className="mb-8">
-          <div className="flex gap-2 overflow-x-auto pb-2 -mb-2">
-            {[
-              { id: 'ai', label: 'AI Gateway', icon: '🤖' },
-              { id: 'auth', label: 'Auth Middleware', icon: '🔐' },
-              { id: 'shorten', label: 'URL Shortener', icon: '🔗' },
-              { id: 'editor', label: 'Markdown Editor', icon: '📝' },
-              { id: 'analytics', label: 'Analytics', icon: '📊' }
-            ].map(feature => (
+        {/* Main Content Grid */}
+        <div className="grid lg:grid-cols-4 gap-6">
+          {/* Left Sidebar - Project Info & Explorer */}
+          <div className="lg:col-span-1 space-y-4">
+            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-400 mb-3">Project</h3>
+              <input
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                placeholder="Project name"
+                className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
+              />
+              <input
+                value={filename}
+                onChange={(e) => setFilename(e.target.value.replace(/[^a-zA-Z0-9._-]/g, ''))}
+                placeholder="Filename"
+                className="w-full p-2 mt-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
+              />
               <button
-                key={feature.id}
-                onClick={() => setActiveFeature(feature.id as ActiveFeature)}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 whitespace-nowrap transition-all ${
-                  activeFeature === feature.id
-                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
-                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
+                onClick={saveCurrentFile}
+                className="w-full mt-2 p-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors"
               >
-                <span>{feature.icon}</span>
-                <span>{feature.label}</span>
+                Save File
               </button>
-            ))}
+            </div>
+
+            {/* Project Explorer */}
+            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-400">Project Explorer</h3>
+                <button
+                  onClick={() => setShowFileModal(true)}
+                  className="p-1 rounded bg-gray-700 hover:bg-gray-600 transition-colors"
+                >
+                  <span className="text-lg">+</span>
+                </button>
+              </div>
+              <div className="space-y-1 max-h-64 overflow-y-auto">
+                {files.map((file) => (
+                  <div key={file.name} className="flex items-center justify-between p-1 rounded hover:bg-gray-700/50">
+                    <button
+                      onClick={() => selectFile(file.name)}
+                      className="flex items-center gap-2 flex-1 text-left text-sm"
+                    >
+                      <span>
+                        {file.type === 'folder' ? 
+                          (expandedFolders.has(file.name) ? '\u25bc' : '\u25b6') :
+                          '\u2192'}
+                      </span>
+                      <span className={selectedFile === file.name ? 'text-purple-400' : 'text-gray-300'}>
+                        {file.name}
+                      </span>
+                    </button>
+                    {file.type === 'file' && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteFile(file.name);
+                        }}
+                        className="p-1 rounded hover:bg-red-600/20 transition-colors"
+                      >
+                        <span className="text-xs text-red-400">\u2715</span>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-400 mb-3">Templates</h3>
+              <button
+                onClick={() => setShowTemplates(!showTemplates)}
+                className="w-full flex items-center justify-between p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+              >
+                <span>Load Template</span>
+                <span>\u25bc</span>
+              </button>
+
+              {showTemplates && (
+                <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
+                  {templates.map((template) => (
+                    <button
+                      key={template.name}
+                      onClick={() => loadTemplate(template)}
+                      className="w-full text-left p-2 bg-gray-700 hover:bg-purple-600/20 rounded-lg text-sm transition-colors"
+                    >
+                      {template.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-400 mb-3">Actions</h3>
+              <div className="space-y-2">
+                <button
+                  onClick={handleCompile}
+                  disabled={isCompiling}
+                  className="w-full flex items-center justify-center gap-2 p-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 rounded-lg font-medium transition-colors"
+                >
+                  <span>{isCompiling ? '\u23f3 Compiling...' : '\u25b6 Compile'}</span>
+                </button>
+
+                <button
+                  onClick={handleDownload}
+                  disabled={!compileResult?.filename}
+                  className="w-full flex items-center justify-center gap-2 p-3 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 rounded-lg font-medium transition-colors"
+                >
+                  <span>\u2b07 Download</span>
+                </button>
+
+                <button
+                  onClick={generateShareUrl}
+                  className="w-full flex items-center justify-center gap-2 p-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
+                >
+                  <span>\ud83d\udd17 Share</span>
+                </button>
+
+                <button
+                  onClick={() => setShowCollaboration(!showCollaboration)}
+                  className={`w-full flex items-center justify-center gap-2 p-3 rounded-lg font-medium transition-colors ${
+                    showCollaboration 
+                      ? 'bg-green-600 hover:bg-green-700'
+                      : 'bg-gray-700 hover:bg-gray-600'
+                  }`}
+                >
+                  <span>{showCollaboration ? '\ud83d\udc65 Collab On' : '\ud83d\udc65 Collab'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Compilation Settings */}
+            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+              <h3 className="text-sm font-semibold text-gray-400 mb-3">Target</h3>
+              <div className="space-y-2">
+                <select
+                  value={target}
+                  onChange={(e) => setTarget(e.target.value as any)}
+                  className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
+                >
+                  <option value="exe">Native Binary</option>
+                  <option value="c">C Code</option>
+                  <option value="llvm">LLVM IR</option>
+                  <option value="wasm">WASM</option>
+                </select>
+
+                <select
+                  value={platform}
+                  onChange={(e) => setPlatform(e.target.value as any)}
+                  className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
+                >
+                  <option value="linux">Linux</option>
+                  <option value="macos">macOS</option>
+                  <option value="windows">Windows</option>
+                </select>
+              </div>
+            </div>
+
+            {showCollaboration && collaborators.length > 0 && (
+              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+                <h3 className="text-sm font-semibold text-gray-400 mb-3">Collaborators</h3>
+                <div className="space-y-2">
+                  {collaborators.map((collab) => (
+                    <div key={collab.id} className="flex items-center gap-2 p-2 bg-gray-700 rounded-lg">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: collab.color }}
+                      />
+                      <span className="text-sm">{collab.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </nav>
-        
-        {/* Main Content */}
-        <main className="bg-white dark:bg-gray-900 rounded-xl shadow-lg overflow-hidden">
-          {renderFeaturePanel()}
-        </main>
+
+          {/* Center - Editor */}
+          <div className="lg:col-span-3 space-y-4">
+            <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
+              <div className="flex border-b border-gray-700">
+                <button
+                  onClick={() => setActiveTab('editor')}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                    activeTab === 'editor' 
+                      ? 'bg-gray-700 text-white' 
+                      : 'text-gray-400 hover:bg-gray-700/50'
+                  }`}
+                >
+                  Editor
+                </button>
+                <button
+                  onClick={() => setActiveTab('output')}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                    activeTab === 'output' 
+                      ? 'bg-gray-700 text-white' 
+                      : 'text-gray-400 hover:bg-gray-700/50'
+                  }`}
+                >
+                  Output
+                </button>
+                <button
+                  onClick={() => setActiveTab('console')}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                    activeTab === 'console' 
+                      ? 'bg-gray-700 text-white' 
+                      : 'text-gray-400 hover:bg-gray-700/50'
+                  }`}
+                >
+                  Console
+                </button>
+                <button
+                  onClick={() => setActiveTab('terminal')}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${
+                    activeTab === 'terminal' 
+                      ? 'bg-gray-700 text-white' 
+                      : 'text-gray-400 hover:bg-gray-700/50'
+                  }`}
+                >
+                  Terminal
+                </button>
+              </div>
+
+              <div className="h-[600px] overflow-hidden">
+                {activeTab === 'editor' && (
+                  <Editor
+                    height="100%"
+                    defaultLanguage="typescript"
+                    value={code}
+                    onChange={(value = '') => {
+                      setCode(value);
+                      if (showCollaboration && wsManager.current?.isConnected()) {
+                        wsManager.current.send({
+                          type: 'edit',
+                          content: value,
+                          projectId,
+                          clientId,
+                        });
+                      }
+                    }}
+                    theme={isDarkMode ? 'vs-dark' : 'vs-light'}
+                    options={{
+                      minimap: { enabled: false },
+                      fontSize: 14,
+                      wordWrap: 'on',
+                      scrollBeyondLastLine: false,
+                      automaticLayout: true,
+                    }}
+                  />
+                )}
+
+                {activeTab === 'output' && (
+                  <div className="h-full p-4 overflow-y-auto bg-gray-900">
+                    {output ? (
+                      <pre className="text-sm text-gray-300 whitespace-pre-wrap">
+                        {output.length > 10000 ? `${output.substring(0, 10000)}...\n\n[Output truncated - download full file]` : output}
+                      </pre>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-gray-500">
+                        <p>Compile your code to see output here</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'console' && (
+                  <div className="h-full p-4 overflow-y-auto bg-gray-900">
+                    {consoleMessages.length > 0 ? (
+                      consoleMessages.map((msg, index) => (
+                        <div key={index} className="text-sm text-gray-300 mb-1">
+                          {msg}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-gray-500">
+                        <p>Console messages will appear here</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'terminal' && (
+                  <div className="h-full p-4 overflow-y-auto bg-black">
+                    <div className="space-y-1">
+                      {terminalHistory.map((entry, index) => (
+                        <div key={index} className="mb-2">
+                          <div className="text-green-400 font-mono text-sm">
+                            {entry.input}
+                          </div>
+                          {entry.output && (
+                            <div className="text-gray-300 font-mono text-sm whitespace-pre-wrap">
+                              {entry.output}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2 mt-4">
+                      <span className="text-green-400 font-mono">$</span>
+                      <input
+                        type="text"
+                        value={terminalCommand}
+                        onChange={(e) => setTerminalCommand(e.target.value)}
+                        onKeyDown={handleTerminalKeyDown}
+                        className="flex-1 bg-transparent border-none outline-none text-white font-mono text-sm"
+                        autoFocus
+                      />
+                      {terminalCursor && (
+                        <span className="text-white bg-white/50 w-1 h-4 animate-pulse"></span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Error Display */}
+            {error && (
+              <div className="bg-red-500/10 border border-red-500 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-red-500">\u274c</span>
+                  <span className="font-semibold text-red-400">Compilation Error</span>
+                </div>
+                <pre className="text-sm text-red-300 whitespace-pre-wrap">{error}</pre>
+              </div>
+            )}
+
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700 text-center">
+                <div className="text-2xl font-bold text-purple-400">{code.split('\n').length}</div>
+                <div className="text-sm text-gray-400">Lines</div>
+              </div>
+              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700 text-center">
+                <div className="text-2xl font-bold text-blue-400">{code.length}</div>
+                <div className="text-sm text-gray-400">Chars</div>
+              </div>
+              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700 text-center">
+                <div className="text-2xl font-bold text-green-400">
+                  {compileResult?.success ? '\u2713' : '\u2717'}
+                </div>
+                <div className="text-sm text-gray-400">Status</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      
+
+      {/* New File Modal */}
+      {showFileModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
+            <h3 className="text-lg font-semibold mb-4">Create New {newFileType}</h3>
+            <div className="mb-4">
+              <label className="block text-sm text-gray-400 mb-2">Name</label>
+              <input
+                value={newFileName}
+                onChange={(e) => setNewFileName(e.target.value.replace(/[^a-zA-Z0-9._-]/g, ''))}
+                placeholder={`Enter ${newFileType} name`}
+                className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
+              />
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm text-gray-400 mb-2">Type</label>
+              <select
+                value={newFileType}
+                onChange={(e) => setNewFileType(e.target.value as 'file' | 'folder')}
+                className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
+              >
+                <option value="file">File</option>
+                <option value="folder">Folder</option>
+              </select>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={createNewFile}
+                disabled={!newFileName.trim()}
+                className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 rounded-lg font-medium transition-colors"
+              >
+                Create
+              </button>
+              <button
+                onClick={() => setShowFileModal(false)}
+                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
+            <h3 className="text-lg font-semibold mb-4">Share Project</h3>
+            <div className="mb-4">
+              <label className="block text-sm text-gray-400 mb-2">Share URL</label>
+              <div className="flex gap-2">
+                <input
+                  value={shareUrl}
+                  readOnly
+                  className="flex-1 p-2 bg-gray-700 rounded-lg border border-gray-600 text-white text-sm"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareUrl);
+                    addConsoleMessage('Share URL copied to clipboard');
+                  }}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowShareModal(false)}
+              className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* GitHub Modal */}
+      {showGitHubModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
+            <h3 className="text-lg font-semibold mb-4">GitHub Integration</h3>
+            <p className="text-gray-400 mb-4">
+              Connect your GitHub account to save and load projects from repositories.
+            </p>
+            <button
+              onClick={handleGitHubLogin}
+              className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition-colors"
+            >
+              Connect with GitHub
+            </button>
+            <button
+              onClick={() => setShowGitHubModal(false)}
+              className="w-full mt-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
-      <footer className="max-w-7xl mx-auto px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+      <footer className="max-w-7xl mx-auto px-4 py-8 text-center text-sm text-gray-500">
         <p>
-          Built with ❤️ using <a href="https://scriptc.dev" className="text-purple-600 dark:text-purple-400 hover:underline">scriptc</a> • 
-          <a href="https://github.com/BrandDeb/Aha" className="text-purple-600 dark:text-purple-400 hover:underline">GitHub</a>
+          Built with \u2764\ufe0f using <a href="https://scriptc.dev" className="text-purple-400 hover:underline">scriptc</a> \u2022 
+          <a href="https://github.com/BrandDeb/Aha" className="text-purple-400 hover:underline">GitHub</a>
         </p>
         <p className="mt-2">
-          Nano CLI Studio - Edge-optimized TypeScript apps with zero JS runtime
+          NanoCLI Studio - Studio Edition with Live Terminal & Multi-File Support
         </p>
       </footer>
     </div>
