@@ -11,10 +11,10 @@ import path from 'path';
 
 const execFileAsync = promisify(execFile);
 
-type Target = 'exe' | 'c' | 'llvm' | 'wasm';
+type Target = 'exe' | 'llvm' | 'asm' | 'wasm';
 type Platform = 'linux' | 'macos' | 'windows';
 type Arch = 'x64' | 'arm64';
-type Optimization = 'none' | 'O1' | 'O2' | 'O3';
+type Optimization = 'release' | 'dev';
 
 interface CompileOptions {
   code: string;
@@ -23,6 +23,16 @@ interface CompileOptions {
   platform?: Platform;
   arch?: Arch;
   optimization?: Optimization;
+}
+
+/** A scriptc diagnostic, mapped back to the user's source */
+interface Diagnostic {
+  line: number;
+  column: number;
+  severity: 'error' | 'warning';
+  code: string;
+  message: string;
+  hint?: string;
 }
 
 interface CompileResult {
@@ -34,11 +44,32 @@ interface CompileResult {
   files?: Record<string, string>;
   filename?: string;
   downloadUrl?: string;
+  /** Size of the produced artifact in bytes */
+  size?: number;
+  /** Wall-clock build time in milliseconds */
+  durationMs?: number;
+  diagnostics?: Diagnostic[];
+}
+
+interface CoverageBlocker {
+  count: number;
+  message: string;
+  code: string;
+}
+
+interface CoverageResult {
+  success: boolean;
+  error?: string;
+  statements?: number;
+  static?: number;
+  percent?: number;
+  blockers?: CoverageBlocker[];
 }
 
 interface ExecError extends Error {
   stdout?: string;
   stderr?: string;
+  killed?: boolean;
 }
 
 export const TEMP_DIR = path.join(process.cwd(), 'temp');
@@ -50,15 +81,29 @@ export const MAX_CODE_SIZE = 512 * 1024;
 const EXEC_TIMEOUT_MS = 60_000;
 const EXEC_MAX_BUFFER = 10 * 1024 * 1024;
 
-const TARGETS: readonly Target[] = ['exe', 'c', 'llvm', 'wasm'];
+/** Builds are CPU heavy; cap how many run at once */
+const MAX_CONCURRENT_BUILDS = Number(process.env.MAX_CONCURRENT_BUILDS) || 2;
+
+const TARGETS: readonly Target[] = ['exe', 'llvm', 'asm', 'wasm'];
 const PLATFORMS: readonly Platform[] = ['linux', 'macos', 'windows'];
 const ARCHES: readonly Arch[] = ['x64', 'arm64'];
-const OPTIMIZATIONS: readonly Optimization[] = ['none', 'O1', 'O2', 'O3'];
+const OPTIMIZATIONS: readonly Optimization[] = ['release', 'dev'];
+/** Pre-0.2 optimization levels still sent by older clients */
+const LEGACY_OPTIMIZATIONS: Record<string, Optimization> = {
+  none: 'dev',
+  O1: 'release',
+  O2: 'release',
+  O3: 'release',
+};
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
   return typeof value === 'string' && (allowed as readonly string[]).includes(value)
     ? (value as T)
     : undefined;
+}
+
+function parseOptimization(value: unknown): Optimization | undefined {
+  return oneOf(value, OPTIMIZATIONS) ?? (typeof value === 'string' ? LEGACY_OPTIMIZATIONS[value] : undefined);
 }
 
 /**
@@ -78,16 +123,22 @@ export function parseCompileOptions(body: unknown): CompileOptions | { error: st
     return { error: `Code exceeds maximum size of ${MAX_CODE_SIZE} bytes` };
   }
 
+  if (input.target === 'c') {
+    return { error: 'C output was removed in scriptc 0.2; use the asm or llvm target' };
+  }
+
   const fields = [
     ['target', TARGETS],
     ['platform', PLATFORMS],
     ['arch', ARCHES],
-    ['optimization', OPTIMIZATIONS],
   ] as const;
   for (const [key, allowed] of fields) {
     if (input[key] !== undefined && !oneOf(input[key], allowed)) {
       return { error: `Invalid ${key}` };
     }
+  }
+  if (input.optimization !== undefined && !parseOptimization(input.optimization)) {
+    return { error: 'Invalid optimization' };
   }
 
   return {
@@ -96,7 +147,7 @@ export function parseCompileOptions(body: unknown): CompileOptions | { error: st
     target: oneOf(input.target, TARGETS),
     platform: oneOf(input.platform, PLATFORMS),
     arch: oneOf(input.arch, ARCHES),
-    optimization: oneOf(input.optimization, OPTIMIZATIONS),
+    optimization: parseOptimization(input.optimization),
   };
 }
 
@@ -145,9 +196,98 @@ async function writeTempFile(code: string, filename: string): Promise<string> {
   return filePath;
 }
 
-/** Run a toolchain binary with an argument vector (never through a shell). */
-function run(command: string, args: string[], env?: Record<string, string>) {
-  return execFileAsync(command, args, {
+/** Name shown to the user for a generated source file (drops the unique id) */
+function displayName(filename: string): string {
+  return filename.replace(/^[0-9a-f]{32}-?/, '') || 'main.ts';
+}
+
+/**
+ * Parse scriptc's `file:line:col - error SCxxxx: message` diagnostics (and
+ * the `hint:` lines that follow them) into structured data.
+ */
+export function parseDiagnostics(output: string): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+  const lines = output.split(/\r?\n/);
+  for (const line of lines) {
+    const match = /^(?:.*?):(\d+):(\d+) - (error|warning) (SC\d+): (.+)$/.exec(line);
+    if (match) {
+      diagnostics.push({
+        line: Number(match[1]),
+        column: Number(match[2]),
+        severity: match[3] as Diagnostic['severity'],
+        code: match[4],
+        message: match[5].trim(),
+      });
+      continue;
+    }
+    const hint = /^\s+hint: (.+)$/.exec(line);
+    const last = diagnostics[diagnostics.length - 1];
+    if (hint && last && !last.hint) {
+      last.hint = hint[1].trim();
+    }
+  }
+  return diagnostics;
+}
+
+/**
+ * Parse the human-readable `scriptc coverage` report.
+ */
+export function parseCoverage(output: string): Omit<CoverageResult, 'success'> {
+  const statements = /statements analyzed\s+(\d+)/.exec(output);
+  const statically = /compile statically\s+(\d+)\s+\((\d+(?:\.\d+)?)%\)/.exec(output);
+  const blockers: CoverageBlocker[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    const match = /^\s*×(\d+)\s+(.+?)\s+(SC\d+)\s*$/.exec(line);
+    if (match) {
+      blockers.push({ count: Number(match[1]), message: match[2], code: match[3] });
+    }
+  }
+  return {
+    statements: statements ? Number(statements[1]) : undefined,
+    static: statically ? Number(statically[1]) : undefined,
+    percent: statically ? Number(statically[2]) : undefined,
+    blockers,
+  };
+}
+
+/** Strip server paths from toolchain output before returning it to clients */
+function sanitize(text: string | undefined, filename: string): string | undefined {
+  if (!text) return text;
+  const tempPrefix = TEMP_DIR.endsWith(path.sep) ? TEMP_DIR : TEMP_DIR + path.sep;
+  return text
+    .split(tempPrefix + filename).join(displayName(filename))
+    .split(tempPrefix).join('');
+}
+
+let activeBuilds = 0;
+const buildQueue: Array<() => void> = [];
+
+async function withBuildSlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (activeBuilds >= MAX_CONCURRENT_BUILDS) {
+    // Wait for a finishing build to hand its slot over directly
+    await new Promise<void>(resolve => buildQueue.push(resolve));
+  } else {
+    activeBuilds++;
+  }
+  try {
+    return await fn();
+  } finally {
+    const next = buildQueue.shift();
+    if (next) {
+      next();
+    } else {
+      activeBuilds--;
+    }
+  }
+}
+
+function scriptcBinary(): string {
+  return path.join(process.cwd(), 'node_modules', '.bin', process.platform === 'win32' ? 'scriptc.cmd' : 'scriptc');
+}
+
+/** Run scriptc with an argument vector (never through a shell). */
+function scriptc(args: string[], env?: Record<string, string>) {
+  return execFileAsync(scriptcBinary(), args, {
     timeout: EXEC_TIMEOUT_MS,
     maxBuffer: EXEC_MAX_BUFFER,
     cwd: TEMP_DIR,
@@ -155,18 +295,22 @@ function run(command: string, args: string[], env?: Record<string, string>) {
   });
 }
 
-function scriptc(args: string[], env?: Record<string, string>) {
-  return run('npx', ['scriptc', ...args], env);
-}
-
-function failure(error: unknown): CompileResult {
+function failure(error: unknown, filename: string): CompileResult {
   const err = error as ExecError;
-  return {
-    success: false,
-    error: err?.message || 'Compilation failed',
-    stderr: err?.stderr,
-    stdout: err?.stdout,
-  };
+  const stderr = sanitize(err?.stderr, filename);
+  const stdout = sanitize(err?.stdout, filename);
+  const diagnostics = parseDiagnostics(`${stderr ?? ''}\n${stdout ?? ''}`);
+  const first = diagnostics.find(d => d.severity === 'error');
+  let message = 'Compilation failed';
+  if (err?.killed) {
+    message = `Compilation timed out after ${EXEC_TIMEOUT_MS / 1000}s`;
+  } else if (first) {
+    message = `${first.code}: ${first.message} (line ${first.line})`;
+  } else {
+    const firstLine = stderr?.split('\n').find(line => line.trim());
+    if (firstLine) message = firstLine.trim().slice(0, 300);
+  }
+  return { success: false, error: message, stderr, stdout, diagnostics };
 }
 
 function hostPlatform(): Platform {
@@ -180,8 +324,8 @@ function hostArch(): Arch {
 }
 
 /**
- * scriptc only produces executables for the machine it runs on, so a request
- * for another platform/arch is reported instead of silently ignored.
+ * Executables are linked for the machine this server runs on; other
+ * platforms need per-target runtime packs and SDKs we don't ship.
  */
 function unsupportedCrossCompile(options: CompileOptions): CompileResult | null {
   const platform = hostPlatform();
@@ -189,123 +333,42 @@ function unsupportedCrossCompile(options: CompileOptions): CompileResult | null 
   if ((options.platform && options.platform !== platform) || (options.arch && options.arch !== arch)) {
     return {
       success: false,
-      error: `Cross-compilation is not supported: this server builds ${platform}-${arch} executables. ` +
-        'Choose the C or LLVM IR target to build for other platforms locally.',
+      error: `Cross-compilation is not available: this server builds ${platform}-${arch} executables. ` +
+        'Use the WASM target for a portable binary, or the LLVM IR / assembly targets to inspect the output.',
     };
   }
   return null;
 }
 
-/**
- * Write the source and run `scriptc build` (optionally with extra flags).
- * Returns paths of the executable and the generated translation unit.
- */
-async function scriptcBuild(options: CompileOptions, extraArgs: string[] = [], env?: Record<string, string>) {
-  const filename = makeSourceFilename(options.filename);
-  const filePath = await writeTempFile(options.code, filename);
-  const outputFilename = withExtension(filename, hostPlatform() === 'windows' ? '.exe' : '');
-  const outputPath = path.join(TEMP_DIR, outputFilename);
-
-  const { stdout, stderr } = await scriptc(['build', filePath, '-o', outputPath, ...extraArgs], env);
-  return { filename, outputFilename, outputPath, stdout, stderr };
+interface BuildSpec {
+  /** Output file extension, including the dot ('' for none) */
+  extension: string;
+  args: string[];
+  env?: Record<string, string>;
+  binary: boolean;
 }
 
-/**
- * Compile TypeScript to native binary using scriptc
- */
-export async function compileToNative(options: CompileOptions): Promise<CompileResult> {
-  const unsupported = unsupportedCrossCompile(options);
-  if (unsupported) return unsupported;
-
-  try {
-    const { outputFilename, outputPath, stdout, stderr } = await scriptcBuild(options);
-    const binary = await fs.readFile(outputPath);
-    return {
-      success: true,
-      output: binary.toString('base64'),
-      filename: outputFilename,
-      downloadUrl: downloadUrlFor(outputFilename),
-      stdout,
-      stderr,
-    };
-  } catch (error) {
-    return failure(error);
-  }
-}
-
-/**
- * Compile TypeScript to C code using scriptc's C backend
- */
-export async function compileToC(options: CompileOptions): Promise<CompileResult> {
-  try {
-    const { filename } = await scriptcBuild(options, ['--backend', 'c', '--keep-c']);
-    const outputFilename = withExtension(filename, '.c');
-    const compiledCode = await fs.readFile(path.join(TEMP_DIR, outputFilename), 'utf8');
-
-    return {
-      success: true,
-      output: compiledCode,
-      filename: outputFilename,
-      downloadUrl: downloadUrlFor(outputFilename),
-    };
-  } catch (error) {
-    return failure(error);
-  }
-}
-
-/**
- * Compile TypeScript to LLVM IR using scriptc (the default backend keeps the .ll)
- */
-export async function compileToLLVM(options: CompileOptions): Promise<CompileResult> {
-  try {
-    const { filename } = await scriptcBuild(options, ['--backend', 'llvm', '--keep-c']);
-    const outputFilename = withExtension(filename, '.ll');
-    const compiledCode = await fs.readFile(path.join(TEMP_DIR, outputFilename), 'utf8');
-
-    return {
-      success: true,
-      output: compiledCode,
-      filename: outputFilename,
-      downloadUrl: downloadUrlFor(outputFilename),
-    };
-  } catch (error) {
-    return failure(error);
-  }
-}
-
-/**
- * Compile TypeScript to WASM (WASI Preview 1) using scriptc's wasm32-wasi
- * target. That target needs a wasm-capable C toolchain (e.g. SCRIPTC_CC=zigcc);
- * when it is unavailable the LLVM IR is returned as a fallback.
- */
-export async function compileToWASM(options: CompileOptions): Promise<CompileResult> {
-  try {
-    const filename = makeSourceFilename(options.filename);
-    const filePath = await writeTempFile(options.code, filename);
-    const wasmOutput = withExtension(filename, '.wasm');
-    const wasmPath = path.join(TEMP_DIR, wasmOutput);
-
-    try {
-      await scriptc(['build', filePath, '-o', wasmPath], { SCRIPTC_TARGET: 'wasm32-wasi' });
-      const result = await fs.readFile(wasmPath);
+function buildSpec(options: CompileOptions): BuildSpec {
+  const optimization = ['--optimization', options.optimization || 'release'];
+  switch (options.target) {
+    case 'llvm':
+      return { extension: '.ll', args: ['--emit=llvm'], binary: false };
+    case 'asm':
+      return { extension: '.s', args: ['--emit=asm'], binary: false };
+    case 'wasm':
       return {
-        success: true,
-        output: result.toString('base64'),
-        filename: wasmOutput,
-        downloadUrl: downloadUrlFor(wasmOutput),
+        extension: '.wasm',
+        args: optimization,
+        env: { SCRIPTC_TARGET: 'wasm32-wasi' },
+        binary: true,
       };
-    } catch {
-      // Fall back to LLVM IR below
-    }
-
-    const llvm = await compileToLLVM(options);
-    if (!llvm.success) return llvm;
-    return {
-      ...llvm,
-      error: 'WASM compilation requires a wasm32-wasi toolchain (set SCRIPTC_CC=zigcc). LLVM IR provided as fallback.',
-    };
-  } catch (error) {
-    return failure(error);
+    case 'exe':
+    default:
+      return {
+        extension: hostPlatform() === 'windows' ? '.exe' : '',
+        args: ['--strip', '--no-keep-llvm', ...optimization],
+        binary: true,
+      };
   }
 }
 
@@ -313,19 +376,67 @@ export async function compileToWASM(options: CompileOptions): Promise<CompileRes
  * Compile TypeScript with scriptc
  */
 export async function compileTypeScript(options: CompileOptions): Promise<CompileResult> {
-  const target = options.target || 'exe';
-
-  switch (target) {
-    case 'c':
-      return compileToC(options);
-    case 'llvm':
-      return compileToLLVM(options);
-    case 'wasm':
-      return compileToWASM(options);
-    case 'exe':
-    default:
-      return compileToNative(options);
+  if ((options.target || 'exe') === 'exe') {
+    const unsupported = unsupportedCrossCompile(options);
+    if (unsupported) return unsupported;
   }
+
+  const spec = buildSpec(options);
+  const filename = makeSourceFilename(options.filename);
+
+  return withBuildSlot(async () => {
+    try {
+      const filePath = await writeTempFile(options.code, filename);
+      const outputFilename = withExtension(filename, spec.extension);
+      const outputPath = path.join(TEMP_DIR, outputFilename);
+
+      const started = Date.now();
+      const { stdout, stderr } = await scriptc(['build', filePath, '-o', outputPath, ...spec.args], spec.env);
+      const durationMs = Date.now() - started;
+
+      const artifact = await fs.readFile(outputPath);
+      return {
+        success: true,
+        output: spec.binary ? artifact.toString('base64') : artifact.toString('utf8'),
+        filename: outputFilename,
+        downloadUrl: downloadUrlFor(outputFilename),
+        size: artifact.length,
+        durationMs,
+        stdout: sanitize(stdout, filename),
+        stderr: sanitize(stderr, filename),
+        diagnostics: parseDiagnostics(sanitize(stderr, filename) ?? ''),
+      };
+    } catch (error) {
+      if (options.target === 'wasm' && /spawnSync zig ENOENT/.test(String((error as ExecError)?.stderr))) {
+        return {
+          ...failure(error, filename),
+          error: 'WASM linking needs zig on the server PATH (scriptc uses it as the wasm32-wasi linker).',
+        };
+      }
+      return failure(error, filename);
+    }
+  });
+}
+
+/**
+ * Report how much of a program scriptc can compile statically, and what
+ * blocks the rest (`scriptc coverage`).
+ */
+export async function analyzeCoverage(options: Pick<CompileOptions, 'code' | 'filename'>): Promise<CoverageResult> {
+  const filename = makeSourceFilename(options.filename);
+  return withBuildSlot(async () => {
+    try {
+      const filePath = await writeTempFile(options.code, filename);
+      const { stdout, stderr } = await scriptc(['coverage', filePath]);
+      return { success: true, ...parseCoverage(`${stdout}\n${stderr}`) };
+    } catch (error) {
+      const err = error as ExecError;
+      return {
+        success: false,
+        error: err?.killed ? 'Analysis timed out' : sanitize(err?.stderr, filename)?.trim() || 'Analysis failed',
+      };
+    }
+  });
 }
 
 /**
@@ -355,4 +466,4 @@ export async function cleanupOldTempFiles(maxAgeMs: number = 60 * 60 * 1000): Pr
   }
 }
 
-export type { CompileOptions, CompileResult };
+export type { CompileOptions, CompileResult, CoverageResult, Diagnostic };

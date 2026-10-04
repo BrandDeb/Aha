@@ -24,10 +24,7 @@ export async function POST(request: NextRequest) {
     // Opportunistically prune stale build artifacts
     void cleanupOldTempFiles();
 
-    const result = await compileTypeScript({
-      ...options,
-      optimization: options.optimization || 'O2',
-    });
+    const result = await compileTypeScript(options);
 
     return NextResponse.json(result);
   } catch (error) {

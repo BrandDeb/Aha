@@ -14,6 +14,7 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Compiler working directory (user-submitted code)
     "temp/**",
+    "dist/**",
   ]),
   {
     rules: {

@@ -42,3 +42,7 @@ next-env.d.ts
 
 # compiler output
 /temp/
+
+# scriptc output
+/dist/
+.scriptc/

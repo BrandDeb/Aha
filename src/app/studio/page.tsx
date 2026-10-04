@@ -14,8 +14,10 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import dynamic from 'next/dynamic';
-import { compileTypeScriptBrowser, type CompileResult } from '@/lib/compiler-browser';
+import { CodeEditor } from '@/components/CodeEditor';
+import { SiteFooter, SiteHeader } from '@/components/SiteHeader';
+import { compileTypeScriptBrowser, formatSize, type CompileResult } from '@/lib/compiler-browser';
+import { DEFAULT_CODE, TEMPLATES, type Template } from '@/lib/templates';
 import { WebSocketManager } from '@/lib/websocket';
 import type {
   CollaboratorInfo,
@@ -25,12 +27,6 @@ import type {
   GitHubRepoItem,
   GitHubUserInfo,
 } from '@/types';
-
-// Load Monaco Editor dynamically
-const Editor = dynamic(
-  () => import('@monaco-editor/react').then((mod) => mod.default),
-  { ssr: false, loading: () => <div className="loading">Loading editor...</div> }
-);
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -50,12 +46,6 @@ interface TerminalEntry {
   output: string;
 }
 
-// Template type
-interface Template {
-  name: string;
-  code: string;
-}
-
 // The GitHub file the editor content was loaded from (or will be saved to)
 interface LinkedRepoFile {
   path: string;
@@ -63,24 +53,7 @@ interface LinkedRepoFile {
 }
 
 export default function StudioPage() {
-  const [code, setCode] = useState<string>(`// NanoCLI Studio - Studio Edition
-// Write TypeScript, Get Native Binaries
-
-const args = process.argv.slice(2);
-const name = args[0] || 'World';
-
-console.log(\`Hello, \${name}!\`);
-
-// Add more code to see the power of scriptc
-function add(a: number, b: number): number {
-  return a + b;
-}
-
-const result = add(3, 5);
-console.log(\`3 + 5 = \${result}\`);
-
-// Export for use in other modules
-module.exports = { add };`);
+  const [code, setCode] = useState<string>(DEFAULT_CODE);
 
   const [filename, setFilename] = useState<string>('app.ts');
   const [target, setTarget] = useState<CompileTarget>('exe');
@@ -91,8 +64,6 @@ module.exports = { add };`);
   const [output, setOutput] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'editor' | 'output' | 'console' | 'terminal'>('editor');
   const [consoleMessages, setConsoleMessages] = useState<string[]>([]);
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
-  const [showSettings, setShowSettings] = useState<boolean>(false);
   const [projectName, setProjectName] = useState<string>('my-cli');
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
   const [shareUrl, setShareUrl] = useState<string>('');
@@ -314,14 +285,12 @@ module.exports = { add };`);
         code,
         filename,
         target,
-        platform,
-        optimization: 'O2',
       });
 
       setCompileResult(result);
 
       if (result.success) {
-        addConsoleMessage(`Compilation successful! Target: ${target}`);
+        addConsoleMessage(`Built ${result.filename} (${formatSize(result.size)}) in ${result.durationMs}ms`);
         if (result.downloadUrl) {
           addConsoleMessage(`Download: ${result.downloadUrl}`);
         }
@@ -341,7 +310,7 @@ module.exports = { add };`);
     } finally {
       setIsCompiling(false);
     }
-  }, [code, filename, target, platform, addConsoleMessage]);
+  }, [code, filename, target, addConsoleMessage]);
 
   // Download compiled file
   const handleDownload = useCallback(async () => {
@@ -373,6 +342,7 @@ module.exports = { add };`);
   // Login with GitHub
   const handleGitHubLogin = useCallback(() => {
     // Full-page navigation: the OAuth flow is a server redirect, not a client route
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign('/api/github/auth');
   }, []);
 
@@ -386,7 +356,7 @@ module.exports = { add };`);
   // Load template
   const loadTemplate = useCallback((template: Template) => {
     setCode(template.code);
-    setFilename(`${template.name.toLowerCase().replace(/\s+/g, '-')}.ts`);
+    setFilename(template.filename);
     setShowTemplates(false);
     addConsoleMessage(`Loaded template: ${template.name}`);
   }, [addConsoleMessage]);
@@ -424,12 +394,6 @@ module.exports = { add };`);
       }
     }
   }, [addConsoleMessage]);
-
-  // Toggle dark mode
-  const toggleDarkMode = useCallback(() => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
-  }, [isDarkMode]);
 
   // Terminal Emulator Functions
   const executeTerminalCommand = useCallback(async (command: string) => {
@@ -602,259 +566,50 @@ module.exports = { add };`);
     });
   }, []);
 
-  // Templates
-  const templates: Template[] = [
-    {
-      name: 'Hello World',
-      code: `const args = process.argv.slice(2);
-const name = args[0] || 'World';
-console.log(\`Hello, \${name}!\`);`,
-    },
-    {
-      name: 'HTTP Server',
-      code: `import { createServer } from 'http';
-
-const server = createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('Hello from NanoCLI Server!');
-});
-
-const port = parseInt(process.argv[2] || '3000');
-server.listen(port, () => {
-  console.log(\`Server running on port \${port}\`);
-});`,
-    },
-    {
-      name: 'File Processor',
-      code: `import { readFileSync, writeFileSync } from 'fs';
-
-const inputFile = process.argv[2];
-const outputFile = process.argv[3];
-
-if (!inputFile || !outputFile) {
-  console.error('Usage: node app.js <input> <output>');
-  process.exit(1);
-}
-
-try {
-  const content = readFileSync(inputFile, 'utf8');
-  const processed = content.toUpperCase();
-  writeFileSync(outputFile, processed);
-  console.log(\`Processed \${inputFile} -> \${outputFile}\`);
-} catch (err) {
-  console.error('Error:', err.message);
-  process.exit(1);
-}`,
-    },
-    {
-      name: 'Math Utilities',
-      code: `function add(a: number, b: number): number {
-  return a + b;
-}
-
-function subtract(a: number, b: number): number {
-  return a - b;
-}
-
-function multiply(a: number, b: number): number {
-  return a * b;
-}
-
-function divide(a: number, b: number): number {
-  if (b === 0) throw new Error('Division by zero');
-  return a / b;
-}
-
-const args = process.argv.slice(2).map(Number);
-if (args.length < 2) {
-  console.log('Usage: math <num1> <num2> [operation: add|subtract|multiply|divide]');
-  process.exit(1);
-}
-
-const operation = (process.argv[4] as string) || 'add';
-const result = {
-  add: () => add(args[0], args[1]),
-  subtract: () => subtract(args[0], args[1]),
-  multiply: () => multiply(args[0], args[1]),
-  divide: () => divide(args[0], args[1]),
-}[operation]();
-
-console.log(\`\${args[0]} \${operation} \${args[1]} = \${result}\`);`,
-    },
-    {
-      name: 'API Client',
-      code: `async function fetchData(url: string): Promise<any> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(\`HTTP \${response.status}\`);
-  }
-  return response.json();
-}
-
-const apiUrl = process.argv[2];
-if (!apiUrl) {
-  console.error('Usage: api-client <url>');
-  process.exit(1);
-}
-
-fetchData(apiUrl)
-  .then(data => {
-    console.log('Response:', JSON.stringify(data, null, 2));
-  })
-  .catch(err => {
-    console.error('Error:', err.message);
-    process.exit(1);
-  });`,
-    },
-    {
-      name: 'CLI Calculator',
-      code: `function calculate(expression: string): number {
-  return Function('"use strict"; return (' + expression + ')')();
-}
-
-const expression = process.argv.slice(2).join(' ');
-if (!expression) {
-  console.error('Usage: calc "1 + 2 * 3"');
-  process.exit(1);
-}
-
-try {
-  const result = calculate(expression);
-  console.log(\`\${expression} = \${result}\`);
-} catch (err: any) {
-  console.error('Error:', err.message);
-  process.exit(1);
-}`,
-    },
-    {
-      name: 'JSON Processor',
-      code: `import { readFileSync, writeFileSync } from 'fs';
-
-const inputFile = process.argv[2];
-const outputFile = process.argv[3];
-
-if (!inputFile || !outputFile) {
-  console.error('Usage: json-processor <input.json> <output.json>');
-  process.exit(1);
-}
-
-try {
-  const data = JSON.parse(readFileSync(inputFile, 'utf8'));
-  const pretty = JSON.stringify(data, null, 2);
-  writeFileSync(outputFile, pretty);
-  console.log(\`Formatted JSON saved to \${outputFile}\`);
-} catch (err: any) {
-  console.error('Error:', err.message);
-  process.exit(1);
-}`,
-    },
-    {
-      name: 'Timer Utility',
-      code: `function formatTime(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  
-  return \`\${days}d \${hours % 24}h \${minutes % 60}m \${seconds % 60}s\`;
-}
-
-const args = process.argv.slice(2);
-const duration = args.length > 0 ? parseInt(args[0]) * 1000 : 1000;
-
-console.log(\`Starting timer for \${duration / 1000} seconds...\`);
-
-setTimeout(() => {
-  console.log(\`Timer complete! Elapsed: \${formatTime(duration)}\`);
-  process.exit(0);
-}, duration);`,
-    },
-  ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white font-sans">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-gray-900/80 backdrop-blur-lg border-b border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-              NanoCLI Studio
-            </h1>
-            <span className="text-sm text-gray-400 hidden md:block">
-              Studio Edition
-            </span>
-          </div>
+    <div className="min-h-screen app-bg text-gray-100">
+      <SiteHeader active="/studio">
+        {githubUser ? (
+          <button onClick={handleGitHubLogout} className="btn btn-ghost btn-sm" title="Sign out of GitHub">
+            {/* eslint-disable-next-line @next/next/no-img-element -- remote avatar, no optimization needed */}
+            <img src={githubUser.avatar_url} alt="" className="h-5 w-5 rounded-full" />
+            {githubUser.login}
+          </button>
+        ) : (
+          <button onClick={handleGitHubLogin} className="btn btn-secondary btn-sm">Sign in with GitHub</button>
+        )}
+      </SiteHeader>
 
-          <div className="flex items-center gap-4">
-            <button
-              onClick={toggleDarkMode}
-              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
-            >
-              {isDarkMode ? '☀️' : '🌙'}
-            </button>
-
-            {githubUser ? (
-              <div className="flex items-center gap-2">
-                <img 
-                  src={githubUser.avatar_url} 
-                  alt={githubUser.login} 
-                  className="w-8 h-8 rounded-full border-2 border-purple-500"
-                />
-                <button
-                  onClick={handleGitHubLogout}
-                  className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition-colors"
-                >
-                  Logout
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={handleGitHubLogin}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition-colors"
-              >
-                Login with GitHub
-              </button>
-            )}
-
-            <button
-              onClick={() => setShowSettings(!showSettings)}
-              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
-            >
-              ⚙️
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-4 py-6">
         {/* Main Content Grid */}
         <div className="grid lg:grid-cols-4 gap-6">
           {/* Left Sidebar - Project Info & Explorer */}
           <div className="lg:col-span-1 space-y-4">
-            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Project</h3>
+            <div className="surface p-4">
+              <h3 className="eyebrow mb-3">Project</h3>
               <input
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
                 placeholder="Project name"
-                className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
+                className="input"
               />
               <input
                 value={filename}
                 onChange={(e) => setFilename(e.target.value.replace(/[^a-zA-Z0-9._-]/g, ''))}
                 placeholder="Filename"
-                className="w-full p-2 mt-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
+                className="input mt-2"
               />
               <button
                 onClick={saveCurrentFile}
-                className="w-full mt-2 p-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors"
+                className="w-full mt-2 p-2 bg-gray-800 border border-border-strong hover:bg-gray-700 rounded-lg text-sm font-medium transition-colors"
               >
                 Save File
               </button>
             </div>
 
             {/* Project Explorer */}
-            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+            <div className="surface p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-gray-400">Project Explorer</h3>
                 <button
@@ -896,11 +651,11 @@ setTimeout(() => {
               </div>
             </div>
 
-            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Templates</h3>
+            <div className="surface p-4">
+              <h3 className="eyebrow mb-3">Templates</h3>
               <button
                 onClick={() => setShowTemplates(!showTemplates)}
-                className="w-full flex items-center justify-between p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                className="btn btn-secondary w-full justify-between"
               >
                 <span>Load Template</span>
                 <span>▼</span>
@@ -908,7 +663,7 @@ setTimeout(() => {
 
               {showTemplates && (
                 <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
-                  {templates.map((template) => (
+                  {TEMPLATES.map((template) => (
                     <button
                       key={template.name}
                       onClick={() => loadTemplate(template)}
@@ -922,18 +677,18 @@ setTimeout(() => {
             </div>
 
             {githubUser && (
-              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-                <h3 className="text-sm font-semibold text-gray-400 mb-3">GitHub</h3>
+              <div className="surface p-4">
+                <h3 className="eyebrow mb-3">GitHub</h3>
                 <button
                   onClick={() => setShowRepoBrowser(true)}
-                  className="w-full flex items-center justify-between p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors mb-2"
+                  className="btn btn-secondary w-full justify-between mb-2"
                 >
                   <span>Browse Repos</span>
                   <span>▼</span>
                 </button>
                 <button
                   onClick={checkGitStatus}
-                  className="w-full flex items-center justify-between p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors mb-2"
+                  className="btn btn-secondary w-full justify-between mb-2"
                 >
                   <span>Git Status</span>
                   {gitStatus.modified.length > 0 && (
@@ -955,22 +710,22 @@ setTimeout(() => {
                 <button
                   onClick={saveToGitHub}
                   disabled={!selectedRepo || isSaving}
-                  className="w-full p-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 rounded-lg text-sm font-medium transition-colors"
+                  className="w-full p-2 bg-gray-100 text-black hover:bg-white disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
                 >
                   {isSaving ? 'Committing...' : 'Commit to GitHub'}
                 </button>
               </div>
             )}
 
-            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Actions</h3>
+            <div className="surface p-4">
+              <h3 className="eyebrow mb-3">Actions</h3>
               <div className="space-y-2">
                 <button
                   onClick={handleCompile}
                   disabled={isCompiling}
-                  className="w-full flex items-center justify-center gap-2 p-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 rounded-lg font-medium transition-colors"
+                  className="w-full flex items-center justify-center gap-2 p-3 bg-gray-100 text-black hover:bg-white disabled:opacity-50 rounded-lg font-medium transition-colors"
                 >
-                  <span>{isCompiling ? '⏳ Compiling...' : '▶ Compile'}</span>
+                  <span>{isCompiling ? 'Compiling…' : 'Compile'}</span>
                 </button>
 
                 <button
@@ -978,14 +733,14 @@ setTimeout(() => {
                   disabled={!compileResult?.filename}
                   className="w-full flex items-center justify-center gap-2 p-3 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 rounded-lg font-medium transition-colors"
                 >
-                  <span>⬇ Download</span>
+                  <span>Download</span>
                 </button>
 
                 <button
                   onClick={generateShareUrl}
-                  className="w-full flex items-center justify-center gap-2 p-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
+                  className="w-full flex items-center justify-center gap-2 p-3 bg-gray-800 border border-border-strong hover:bg-gray-700 rounded-lg font-medium transition-colors"
                 >
-                  <span>🔗 Share</span>
+                  <span>Share</span>
                 </button>
 
                 <button
@@ -996,41 +751,34 @@ setTimeout(() => {
                       : 'bg-gray-700 hover:bg-gray-600'
                   }`}
                 >
-                  <span>{showCollaboration ? '👥 Collab On' : '👥 Collab'}</span>
+                  <span>{showCollaboration ? 'Collaborating' : 'Collaborate'}</span>
                 </button>
               </div>
             </div>
 
             {/* Compilation Settings */}
-            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Target</h3>
+            <div className="surface p-4">
+              <h3 className="eyebrow mb-3">Target</h3>
               <div className="space-y-2">
                 <select
                   value={target}
                   onChange={(e) => setTarget(e.target.value as CompileTarget)}
-                  className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
+                  className="input"
                 >
-                  <option value="exe">Native Binary</option>
-                  <option value="c">C Code</option>
+                  <option value="exe">Native executable</option>
+                  <option value="wasm">WASM (WASI)</option>
                   <option value="llvm">LLVM IR</option>
-                  <option value="wasm">WASM</option>
+                  <option value="asm">Assembly</option>
                 </select>
-
-                <select
-                  value={platform}
-                  onChange={(e) => setPlatform(e.target.value as CompilePlatform)}
-                  className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
-                >
-                  <option value="linux">Linux</option>
-                  <option value="macos">macOS</option>
-                  <option value="windows">Windows</option>
-                </select>
+                <p className="text-xs text-gray-500">
+                  Native builds target the server host ({platform === 'linux' ? 'Linux' : platform}). Use WASM for a portable binary.
+                </p>
               </div>
             </div>
 
             {showCollaboration && collaborators.length > 0 && (
-              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-                <h3 className="text-sm font-semibold text-gray-400 mb-3">Collaborators</h3>
+              <div className="surface p-4">
+                <h3 className="eyebrow mb-3">Collaborators</h3>
                 <div className="space-y-2">
                   {collaborators.map((collab) => (
                     <div key={collab.id} className="flex items-center gap-2 p-2 bg-gray-700 rounded-lg">
@@ -1048,7 +796,7 @@ setTimeout(() => {
 
           {/* Center - Editor */}
           <div className="lg:col-span-3 space-y-4">
-            <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
+            <div className="surface overflow-hidden">
               <div className="flex border-b border-gray-700">
                 <button
                   onClick={() => setActiveTab('editor')}
@@ -1094,11 +842,11 @@ setTimeout(() => {
 
               <div className="h-[600px] overflow-hidden">
                 {activeTab === 'editor' && (
-                  <Editor
-                    height="100%"
-                    defaultLanguage="typescript"
+                  <CodeEditor
                     value={code}
-                    onChange={(value = '') => {
+                    diagnostics={compileResult?.diagnostics}
+                    onRun={handleCompile}
+                    onChange={(value) => {
                       setCode(value);
                       if (showCollaboration && wsManager.current?.isConnected()) {
                         wsManager.current.send({
@@ -1109,19 +857,11 @@ setTimeout(() => {
                         });
                       }
                     }}
-                    theme={isDarkMode ? 'vs-dark' : 'vs-light'}
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 14,
-                      wordWrap: 'on',
-                      scrollBeyondLastLine: false,
-                      automaticLayout: true,
-                    }}
                   />
                 )}
 
                 {activeTab === 'output' && (
-                  <div className="h-full p-4 overflow-y-auto bg-gray-900">
+                  <div className="h-full p-4 overflow-y-auto bg-gray-900 font-mono text-[13px]">
                     {output ? (
                       <pre className="text-sm text-gray-300 whitespace-pre-wrap">
                         {output.length > 10000 ? `${output.substring(0, 10000)}...\n\n[Output truncated - download full file]` : output}
@@ -1135,7 +875,7 @@ setTimeout(() => {
                 )}
 
                 {activeTab === 'console' && (
-                  <div className="h-full p-4 overflow-y-auto bg-gray-900">
+                  <div className="h-full p-4 overflow-y-auto bg-gray-900 font-mono text-[13px]">
                     {consoleMessages.length > 0 ? (
                       consoleMessages.map((msg, index) => (
                         <div key={index} className="text-sm text-gray-300 mb-1">
@@ -1198,15 +938,15 @@ setTimeout(() => {
 
             {/* Stats */}
             <div className="grid grid-cols-3 gap-4">
-              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700 text-center">
+              <div className="surface p-4 text-center">
                 <div className="text-2xl font-bold text-purple-400">{code.split('\n').length}</div>
                 <div className="text-sm text-gray-400">Lines</div>
               </div>
-              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700 text-center">
+              <div className="surface p-4 text-center">
                 <div className="text-2xl font-bold text-blue-400">{code.length}</div>
                 <div className="text-sm text-gray-400">Chars</div>
               </div>
-              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700 text-center">
+              <div className="surface p-4 text-center">
                 <div className="text-2xl font-bold text-green-400">
                   {compileResult?.success ? '✓' : '✗'}
                 </div>
@@ -1219,8 +959,8 @@ setTimeout(() => {
 
       {/* New File Modal */}
       {showFileModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="surface p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold mb-4">Create New {newFileType}</h3>
             <div className="mb-4">
               <label className="block text-sm text-gray-400 mb-2">Name</label>
@@ -1228,7 +968,7 @@ setTimeout(() => {
                 value={newFileName}
                 onChange={(e) => setNewFileName(e.target.value.replace(/[^a-zA-Z0-9._-]/g, ''))}
                 placeholder={`Enter ${newFileType} name`}
-                className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
+                className="input"
               />
             </div>
             <div className="mb-4">
@@ -1236,7 +976,7 @@ setTimeout(() => {
               <select
                 value={newFileType}
                 onChange={(e) => setNewFileType(e.target.value as 'file' | 'folder')}
-                className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
+                className="input"
               >
                 <option value="file">File</option>
                 <option value="folder">Folder</option>
@@ -1246,7 +986,7 @@ setTimeout(() => {
               <button
                 onClick={createNewFile}
                 disabled={!newFileName.trim()}
-                className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 rounded-lg font-medium transition-colors"
+                className="flex-1 px-4 py-2 bg-gray-100 text-black hover:bg-white disabled:opacity-50 rounded-lg font-medium transition-colors"
               >
                 Create
               </button>
@@ -1263,8 +1003,8 @@ setTimeout(() => {
 
       {/* Share Modal */}
       {showShareModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="surface p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold mb-4">Share Project</h3>
             <div className="mb-4">
               <label className="block text-sm text-gray-400 mb-2">Share URL</label>
@@ -1279,7 +1019,7 @@ setTimeout(() => {
                     navigator.clipboard.writeText(shareUrl);
                     addConsoleMessage('Share URL copied to clipboard');
                   }}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition-colors"
+                  className="px-4 py-2 bg-gray-100 text-black hover:bg-white rounded-lg text-sm font-medium transition-colors"
                 >
                   Copy
                 </button>
@@ -1297,15 +1037,15 @@ setTimeout(() => {
 
       {/* GitHub Modal */}
       {showGitHubModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="surface p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-semibold mb-4">GitHub Integration</h3>
             <p className="text-gray-400 mb-4">
               Connect your GitHub account to save and load projects from repositories.
             </p>
             <button
               onClick={handleGitHubLogin}
-              className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition-colors"
+              className="w-full px-4 py-3 bg-gray-100 text-black hover:bg-white rounded-lg font-medium transition-colors"
             >
               Connect with GitHub
             </button>
@@ -1321,8 +1061,8 @@ setTimeout(() => {
 
       {/* Repository Browser Modal */}
       {showRepoBrowser && !selectedRepo && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 max-w-2xl w-full mx-4 border border-gray-700 max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="surface p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">GitHub Repositories</h3>
               <button
@@ -1360,8 +1100,8 @@ setTimeout(() => {
 
       {/* Repository Files Modal */}
       {showRepoBrowser && selectedRepo && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 max-w-2xl w-full mx-4 border border-gray-700 max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="surface p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4 gap-2">
               <h3 className="text-lg font-semibold truncate">
                 {selectedRepo.full_name}{repoPath ? `/${repoPath}` : ''}
@@ -1429,17 +1169,7 @@ setTimeout(() => {
           </div>
         </div>
       )}
-
-      {/* Footer */}
-      <footer className="max-w-7xl mx-auto px-4 py-8 text-center text-sm text-gray-500">
-        <p>
-          Built with ❤️ using <a href="https://scriptc.dev" className="text-purple-400 hover:underline">scriptc</a> • 
-          <a href="https://github.com/BrandDeb/Aha" className="text-purple-400 hover:underline">GitHub</a>
-        </p>
-        <p className="mt-2">
-          NanoCLI Studio - Studio Edition with Live Terminal & Multi-File Support
-        </p>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

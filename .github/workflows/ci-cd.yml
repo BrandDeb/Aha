@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  NODE_VERSION: '22'
+  NODE_VERSION: '24'
   NEXT_PUBLIC_BASE_URL: 'http://localhost:3000'
 
 jobs:
@@ -112,22 +112,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install clang and LLVM
+      - name: Compile and run with scriptc
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang llvm
-
-      - name: Test compilation
-        run: |
-          echo 'const x: number = 5; console.log(x);' > /tmp/test.ts
-          npx scriptc build /tmp/test.ts --target c --out /tmp/test.c
-          test -f /tmp/test.c && echo "C compilation: OK" || exit 1
-
-      - name: Test native compilation
-        run: |
-          echo 'console.log("Hello");' > /tmp/test.ts
-          npx scriptc build /tmp/test.ts --target binary --out /tmp/test --linker ./clang-wrapper.sh
-          test -f /tmp/test && echo "Native compilation: OK" || echo "Native compilation: SKIPPED (no clang)"
+          echo 'const x: number = 5; console.log(`x = ${x}`);' > /tmp/test.ts
+          npx scriptc build /tmp/test.ts -o /tmp/test --strip
+          test "$(/tmp/test)" = "x = 5"
+          npx scriptc build /tmp/test.ts --emit=llvm -o /tmp/test.ll
+          grep -q "define" /tmp/test.ll
 
   # Security scan
   security-scan:
@@ -165,6 +156,7 @@ jobs:
         run: |
           echo "Testing compilation speed..."
           START=$(date +%s%N)
-          npx scriptc build --help > /dev/null 2>&1
+          echo 'console.log("hi");' > /tmp/bench.ts
+          npx scriptc build /tmp/bench.ts -o /tmp/bench > /dev/null
           END=$(date +%s%N)
-          echo "scriptc startup: $((($END - $START) / 1000000))ms"
+          echo "scriptc build: $((($END - $START) / 1000000))ms"

@@ -1,802 +1,489 @@
 'use client';
 
 /**
- * NanoCLI Studio - Main Page
- * Zero-Runtime TypeScript CLI Generator
- * 
- * Write TypeScript in your browser → Get native binaries in seconds.
- * No Node. No npm. No dependencies. Just 178KB of pure, instant performance.
+ * NanoCLI Studio - Editor
+ * Write TypeScript in the browser, compile it to a native binary with scriptc.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import dynamic from 'next/dynamic';
-import { compileTypeScriptBrowser, type CompileResult } from '@/lib/compiler-browser';
+import { CodeEditor } from '@/components/CodeEditor';
+import { SiteHeader } from '@/components/SiteHeader';
+import {
+  analyzeCoverageBrowser,
+  compileTypeScriptBrowser,
+  formatSize,
+  type CompileResult,
+  type CoverageResult,
+} from '@/lib/compiler-browser';
+import { DEFAULT_CODE, TEMPLATES, type Template } from '@/lib/templates';
 import { WebSocketManager } from '@/lib/websocket';
-import type { CollaboratorInfo, CompilePlatform, CompileTarget, GitHubUserInfo } from '@/types';
+import type { CollaboratorInfo, CompileTarget, GitHubUserInfo } from '@/types';
 
-// Load Monaco Editor dynamically to reduce bundle size
-const Editor = dynamic(
-  () => import('@monaco-editor/react').then((mod) => mod.default),
-  { ssr: false, loading: () => <div className="loading">Loading editor...</div> }
-);
+const TARGETS: { value: CompileTarget; label: string; hint: string }[] = [
+  { value: 'exe', label: 'Native', hint: 'Executable for the build server (Linux x64)' },
+  { value: 'wasm', label: 'WASM', hint: 'Portable WASI Preview 1 module' },
+  { value: 'llvm', label: 'LLVM IR', hint: 'Textual LLVM IR' },
+  { value: 'asm', label: 'Assembly', hint: 'Target assembly' },
+];
+
+type PanelTab = 'problems' | 'output' | 'console';
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export default function HomePage() {
-  const [code, setCode] = useState<string>(`// NanoCLI Studio - Write TypeScript, Get Native Binaries
-// Try it: Click "Compile" to generate a native binary
-
-const args = process.argv.slice(2);
-const name = args[0] || 'World';
-
-console.log(\`Hello, \${name}!\`);
-
-// Add more code to see the power of scriptc
-function add(a: number, b: number): number {
-  return a + b;
+function hexPreview(base64: string, bytes = 256): string {
+  const raw = atob(base64.slice(0, Math.ceil((bytes * 4) / 3)));
+  const lines: string[] = [];
+  for (let offset = 0; offset < raw.length; offset += 16) {
+    const chunk = raw.slice(offset, offset + 16);
+    const hex = Array.from(chunk, (c) => c.charCodeAt(0).toString(16).padStart(2, '0')).join(' ');
+    const ascii = Array.from(chunk, (c) => (c >= ' ' && c <= '~' ? c : '.')).join('');
+    lines.push(`${offset.toString(16).padStart(8, '0')}  ${hex.padEnd(47)}  ${ascii}`);
+  }
+  return lines.join('\n');
 }
 
-const result = add(3, 5);
-console.log(\`3 + 5 = \${result}\`);
-
-// Export for use in other modules
-module.exports = { add };`);
-  
+export default function HomePage() {
+  const [code, setCode] = useState<string>(DEFAULT_CODE);
   const [filename, setFilename] = useState<string>('app.ts');
-  const [target, setTarget] = useState<CompileTarget>('exe');
-  const [platform, setPlatform] = useState<CompilePlatform>('linux');
-  const [isCompiling, setIsCompiling] = useState<boolean>(false);
-  const [compileResult, setCompileResult] = useState<CompileResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [output, setOutput] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'editor' | 'output' | 'console'>('editor');
-  const [consoleMessages, setConsoleMessages] = useState<string[]>([]);
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
-  const [showSettings, setShowSettings] = useState<boolean>(false);
   const [projectName, setProjectName] = useState<string>('my-cli');
-  const [showShareModal, setShowShareModal] = useState<boolean>(false);
+  const [target, setTarget] = useState<CompileTarget>('exe');
+  const [isCompiling, setIsCompiling] = useState(false);
+  const [compileResult, setCompileResult] = useState<CompileResult | null>(null);
+  const [coverage, setCoverage] = useState<CoverageResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [panelTab, setPanelTab] = useState<PanelTab>('problems');
+  const [consoleMessages, setConsoleMessages] = useState<string[]>([]);
   const [shareUrl, setShareUrl] = useState<string>('');
-  const [showTemplates, setShowTemplates] = useState<boolean>(false);
-  const [showGitHubModal, setShowGitHubModal] = useState<boolean>(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [githubUser, setGithubUser] = useState<GitHubUserInfo | null>(null);
-  const [showCollaboration, setShowCollaboration] = useState<boolean>(false);
+  const [showCollaboration, setShowCollaboration] = useState(false);
   const [collaborators, setCollaborators] = useState<CollaboratorInfo[]>([]);
-  
+
   const [clientId] = useState(() => crypto.randomUUID());
   const [projectId] = useState(() => crypto.randomUUID());
   const wsManager = useRef<WebSocketManager | null>(null);
-  
+
+  const addConsoleMessage = useCallback((message: string) => {
+    setConsoleMessages(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
+  }, []);
+
   // Initialize WebSocket connection for collaboration
   useEffect(() => {
-    if (showCollaboration) {
-      wsManager.current = new WebSocketManager(projectId, clientId, 'User');
-      wsManager.current.connect();
-      
-      wsManager.current.on('collaborator_joined', (message) => {
-        setCollaborators(prev => [...prev, {
-          id: message.clientId,
-          name: message.content || 'Anonymous',
-          color: '#' + Math.floor(Math.random() * 16777215).toString(16),
-        }]);
-      });
-      
-      wsManager.current.on('collaborator_left', (message) => {
-        setCollaborators(prev => prev.filter(c => c.id !== message.clientId));
-      });
-      
-      wsManager.current.on('content_update', (message) => {
-        if (message.content !== undefined) {
-          setCode(message.content);
-        }
-      });
-      
-      return () => {
-        wsManager.current?.disconnect();
-      };
-    }
+    if (!showCollaboration) return;
+    const manager = new WebSocketManager(projectId, clientId, 'User');
+    wsManager.current = manager;
+    manager.connect();
+
+    manager.on('collaborator_joined', (message) => {
+      setCollaborators(prev => [...prev.filter(c => c.id !== message.clientId), {
+        id: message.clientId,
+        name: typeof message.name === 'string' ? message.name : 'Anonymous',
+        color: `hsl(${Math.floor(Math.random() * 360)} 80% 60%)`,
+      }]);
+    });
+    manager.on('collaborator_left', (message) => {
+      setCollaborators(prev => prev.filter(c => c.id !== message.clientId));
+    });
+    manager.on('content_update', (message) => {
+      if (typeof message.content === 'string') setCode(message.content);
+    });
+
+    return () => {
+      manager.disconnect();
+      setCollaborators([]);
+    };
   }, [showCollaboration, projectId, clientId]);
-  
+
   // Check GitHub authentication status
   useEffect(() => {
     fetch('/api/github/user')
       .then(res => res.json())
       .then(data => {
-        if (data.authenticated) {
-          setGithubUser(data.user);
-        }
+        if (data.authenticated) setGithubUser(data.user);
       })
-      .catch(console.error);
+      .catch(() => {});
   }, []);
-  
-  // Add message to console
-  const addConsoleMessage = useCallback((message: string) => {
-    setConsoleMessages(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
-  }, []);
-  
-  // Handle compilation
-  const handleCompile = useCallback(async () => {
-    setIsCompiling(true);
-    setError(null);
-    setOutput('');
-    setCompileResult(null);
-    addConsoleMessage('Starting compilation...');
-    
+
+  // Load from a ?template= or ?share= link (once, on mount — re-running would clobber edits)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const template = TEMPLATES.find(t => t.id === params.get('template'));
+    if (template) {
+      /* eslint-disable-next-line react-hooks/set-state-in-effect -- window.location is only readable after hydration */
+      setCode(template.code);
+      setFilename(template.filename);
+      return;
+    }
+    const shareData = params.get('share');
+    if (!shareData) return;
     try {
-      const result = await compileTypeScriptBrowser({
-        code,
-        filename,
-        target,
-        platform,
-        optimization: 'O2',
-      });
-      
+      const decoded = JSON.parse(decodeURIComponent(atob(shareData)));
+      /* eslint-disable react-hooks/set-state-in-effect -- window.location is only readable after hydration */
+      if (typeof decoded.code === 'string') setCode(decoded.code);
+      if (typeof decoded.filename === 'string') setFilename(decoded.filename);
+      if (TARGETS.some(t => t.value === decoded.target)) setTarget(decoded.target);
+      if (typeof decoded.projectName === 'string') setProjectName(decoded.projectName);
+      /* eslint-enable react-hooks/set-state-in-effect */
+      addConsoleMessage('Loaded shared project');
+    } catch {
+      addConsoleMessage('Could not read the shared project link');
+    }
+  }, [addConsoleMessage]);
+
+  const handleCodeChange = useCallback((value: string) => {
+    setCode(value);
+    if (showCollaboration && wsManager.current?.isConnected()) {
+      wsManager.current.send({ type: 'edit', content: value, projectId, clientId });
+    }
+  }, [showCollaboration, projectId, clientId]);
+
+  const handleCompile = useCallback(async () => {
+    if (isCompiling) return;
+    setIsCompiling(true);
+    addConsoleMessage(`Compiling ${filename} → ${target}`);
+    try {
+      const result = await compileTypeScriptBrowser({ code, filename, target });
       setCompileResult(result);
-      
       if (result.success) {
-        addConsoleMessage(`Compilation successful! Target: ${target}`);
-        if (result.downloadUrl) {
-          addConsoleMessage(`Download: ${result.downloadUrl}`);
-        }
-        setOutput(result.output || '');
+        addConsoleMessage(`Built ${result.filename} (${formatSize(result.size)}) in ${result.durationMs}ms`);
+        if (result.error) addConsoleMessage(result.error);
+        setPanelTab('output');
       } else {
-        setError(result.error || 'Compilation failed');
-        addConsoleMessage(`Compilation failed: ${result.error}`);
-        if (result.stderr) {
-          addConsoleMessage(result.stderr);
-        }
+        addConsoleMessage(`Build failed: ${result.error}`);
+        setPanelTab(result.diagnostics?.length ? 'problems' : 'console');
+        if (!result.diagnostics?.length && result.stderr) addConsoleMessage(result.stderr);
       }
     } catch (err) {
-      setError(errorMessage(err) || 'Compilation error');
       addConsoleMessage(`Error: ${errorMessage(err)}`);
     } finally {
       setIsCompiling(false);
     }
-  }, [code, filename, target, platform, addConsoleMessage]);
-  
-  // Download compiled file
+  }, [isCompiling, code, filename, target, addConsoleMessage]);
+
+  const handleCoverage = useCallback(async () => {
+    setIsAnalyzing(true);
+    const result = await analyzeCoverageBrowser(code, filename);
+    setCoverage(result);
+    setIsAnalyzing(false);
+    addConsoleMessage(result.success
+      ? `Coverage: ${result.percent}% of ${result.statements} statements compile statically`
+      : `Coverage failed: ${result.error}`);
+  }, [code, filename, addConsoleMessage]);
+
   const handleDownload = useCallback(async () => {
     if (!compileResult?.filename) return;
-    
     try {
       const response = await fetch(`/api/download/${encodeURIComponent(compileResult.filename)}`);
-      if (!response.ok) {
-        throw new Error('File not found');
-      }
-      
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      if (!response.ok) throw new Error('The build artifact has expired — compile again');
+      const url = URL.createObjectURL(await response.blob());
       const a = document.createElement('a');
       a.href = url;
-      a.download = compileResult.filename;
-      document.body.appendChild(a);
+      a.download = compileResult.filename.replace(/^[0-9a-f]{32}-?/, '') || compileResult.filename;
       a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-      
-      addConsoleMessage(`Downloaded: ${compileResult.filename}`);
+      URL.revokeObjectURL(url);
+      addConsoleMessage(`Downloaded ${a.download}`);
     } catch (err) {
-      setError(errorMessage(err));
       addConsoleMessage(`Download error: ${errorMessage(err)}`);
+      setPanelTab('console');
     }
   }, [compileResult, addConsoleMessage]);
-  
-  // Login with GitHub
+
   const handleGitHubLogin = useCallback(() => {
     // Full-page navigation: the OAuth flow is a server redirect, not a client route
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign('/api/github/auth');
   }, []);
-  
-  // Logout from GitHub
+
   const handleGitHubLogout = useCallback(async () => {
     await fetch('/api/github/user', { method: 'DELETE' });
     setGithubUser(null);
-    addConsoleMessage('Logged out from GitHub');
+    addConsoleMessage('Signed out of GitHub');
   }, [addConsoleMessage]);
-  
-  // Load template
-  const loadTemplate = useCallback((template: { name: string; code: string }) => {
+
+  const loadTemplate = useCallback((template: Template) => {
     setCode(template.code);
-    setFilename(`${template.name.toLowerCase().replace(/\s+/g, '-')}.ts`);
-    setShowTemplates(false);
+    setFilename(template.filename);
+    setCompileResult(null);
+    setCoverage(null);
     addConsoleMessage(`Loaded template: ${template.name}`);
   }, [addConsoleMessage]);
-  
-  // Generate share URL
+
   const generateShareUrl = useCallback(() => {
-    const shareData = {
-      code,
-      filename,
-      target,
-      platform,
-      projectName,
-    };
-    const encoded = btoa(encodeURIComponent(JSON.stringify(shareData)));
-    const url = `${window.location.origin}/?share=${encoded}`;
-    setShareUrl(url);
+    const encoded = btoa(encodeURIComponent(JSON.stringify({ code, filename, target, projectName })));
+    setShareUrl(`${window.location.origin}/?share=${encoded}`);
+    setCopied(false);
     setShowShareModal(true);
-  }, [code, filename, target, platform, projectName]);
-  
-  // Load from share URL (once, on mount — re-running would clobber edits)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const shareData = params.get('share');
-    if (shareData) {
-      try {
-        const decoded = JSON.parse(decodeURIComponent(atob(shareData)));
-        /* eslint-disable react-hooks/set-state-in-effect -- window.location is only readable after hydration */
-        if (typeof decoded.code === 'string') setCode(decoded.code);
-        if (typeof decoded.filename === 'string') setFilename(decoded.filename);
-        if (['exe', 'c', 'llvm', 'wasm'].includes(decoded.target)) setTarget(decoded.target);
-        if (['linux', 'macos', 'windows'].includes(decoded.platform)) setPlatform(decoded.platform);
-        if (typeof decoded.projectName === 'string') setProjectName(decoded.projectName);
-        /* eslint-enable react-hooks/set-state-in-effect */
-        addConsoleMessage('Loaded shared project');
-      } catch (err) {
-        console.error('Error loading share:', err);
-      }
-    }
-  }, [addConsoleMessage]);
-  
-  // Toggle dark mode
-  const toggleDarkMode = useCallback(() => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
-  }, [isDarkMode]);
-  
-  // Templates
-  const templates = [
-    {
-      name: 'Hello World',
-      code: `const args = process.argv.slice(2);
-const name = args[0] || 'World';
-console.log(\`Hello, \${name}!\`);`,
-    },
-    {
-      name: 'HTTP Server',
-      code: `import { createServer } from 'http';
+  }, [code, filename, target, projectName]);
 
-const server = createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('Hello from NanoCLI Server!');
-});
+  const diagnostics = compileResult?.diagnostics ?? [];
+  const problems = diagnostics.filter(d => d.severity === 'error');
+  const isBinary = compileResult?.success && (target === 'exe' || target === 'wasm') && !compileResult.filename?.endsWith('.ll');
 
-const port = parseInt(process.argv[2] || '3000');
-server.listen(port, () => {
-  console.log(\`Server running on port \${port}\`);
-});`,
-    },
-    {
-      name: 'File Processor',
-      code: `import { readFileSync, writeFileSync } from 'fs';
-
-const inputFile = process.argv[2];
-const outputFile = process.argv[3];
-
-if (!inputFile || !outputFile) {
-  console.error('Usage: node app.js <input> <output>');
-  process.exit(1);
-}
-
-try {
-  const content = readFileSync(inputFile, 'utf8');
-  const processed = content.toUpperCase();
-  writeFileSync(outputFile, processed);
-  console.log(\`Processed \${inputFile} -> \${outputFile}\`);
-} catch (err) {
-  console.error('Error:', err.message);
-  process.exit(1);
-}`,
-    },
-    {
-      name: 'Math Utilities',
-      code: `function add(a: number, b: number): number {
-  return a + b;
-}
-
-function subtract(a: number, b: number): number {
-  return a - b;
-}
-
-function multiply(a: number, b: number): number {
-  return a * b;
-}
-
-function divide(a: number, b: number): number {
-  if (b === 0) throw new Error('Division by zero');
-  return a / b;
-}
-
-const args = process.argv.slice(2).map(Number);
-if (args.length < 2) {
-  console.log('Usage: math <num1> <num2> [operation: add|subtract|multiply|divide]');
-  process.exit(1);
-}
-
-const operation = (process.argv[4] as string) || 'add';
-const result = {
-  add: () => add(args[0], args[1]),
-  subtract: () => subtract(args[0], args[1]),
-  multiply: () => multiply(args[0], args[1]),
-  divide: () => divide(args[0], args[1]),
-}[operation]();
-
-console.log(\`\${args[0]} \${operation} \${args[1]} = \${result}\`);`,
-    },
-    {
-      name: 'API Client',
-      code: `async function fetchData(url: string): Promise<any> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(\`HTTP \${response.status}\`);
-  }
-  return response.json();
-}
-
-const apiUrl = process.argv[2];
-if (!apiUrl) {
-  console.error('Usage: api-client <url>');
-  process.exit(1);
-}
-
-fetchData(apiUrl)
-  .then(data => {
-    console.log('Response:', JSON.stringify(data, null, 2));
-  })
-  .catch(err => {
-    console.error('Error:', err.message);
-    process.exit(1);
-  });`,
-    },
-    {
-      name: 'CLI Calculator',
-      code: `function calculate(expression: string): number {
-  // Simple calculator that evaluates basic arithmetic
-  // Note: In production, use a proper parser for security
-  return Function('"use strict"; return (' + expression + ')')();
-}
-
-const expression = process.argv.slice(2).join(' ');
-if (!expression) {
-  console.error('Usage: calc "1 + 2 * 3"');
-  process.exit(1);
-}
-
-try {
-  const result = calculate(expression);
-  console.log(\`\${expression} = \${result}\`);
-} catch (err: any) {
-  console.error('Error:', err.message);
-  process.exit(1);
-}`,
-    },
-    {
-      name: 'JSON Processor',
-      code: `import { readFileSync, writeFileSync } from 'fs';
-
-const inputFile = process.argv[2];
-const outputFile = process.argv[3];
-
-if (!inputFile || !outputFile) {
-  console.error('Usage: json-processor <input.json> <output.json>');
-  process.exit(1);
-}
-
-try {
-  const data = JSON.parse(readFileSync(inputFile, 'utf8'));
-  const pretty = JSON.stringify(data, null, 2);
-  writeFileSync(outputFile, pretty);
-  console.log(\`Formatted JSON saved to \${outputFile}\`);
-} catch (err: any) {
-  console.error('Error:', err.message);
-  process.exit(1);
-}`,
-    },
-    {
-      name: 'Timer Utility',
-      code: `function formatTime(ms: number): string {
-  const seconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  
-  return \`\${days}d \${hours % 24}h \${minutes % 60}m \${seconds % 60}s\`;
-}
-
-const args = process.argv.slice(2);
-const duration = args.length > 0 ? parseInt(args[0]) * 1000 : 1000;
-
-console.log(\`Starting timer for \${duration / 1000} seconds...\`);
-
-setTimeout(() => {
-  console.log(\`Timer complete! Elapsed: \${formatTime(duration)}\`);
-  process.exit(0);
-}, duration);`,
-    },
-  ];
-  
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white font-sans">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-gray-900/80 backdrop-blur-lg border-b border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-              NanoCLI Studio
-            </h1>
-            <span className="text-sm text-gray-400 hidden md:block">
-              Zero-Runtime TypeScript Compiler
-            </span>
+    <div className="flex h-dvh flex-col bg-black text-gray-100">
+      <SiteHeader
+        active="/"
+        fluid
+        center={
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <input
+              value={projectName}
+              onChange={(e) => setProjectName(e.target.value)}
+              aria-label="Project name"
+              className="w-36 rounded-md bg-transparent px-2 py-1 text-right text-gray-300 hover:bg-white/[0.04] focus:bg-white/[0.06] focus:outline-none"
+            />
+            <span>/</span>
+            <input
+              value={filename}
+              onChange={(e) => setFilename(e.target.value.replace(/[^a-zA-Z0-9._-]/g, ''))}
+              aria-label="Filename"
+              className="w-36 rounded-md bg-transparent px-2 py-1 font-mono text-gray-100 hover:bg-white/[0.04] focus:bg-white/[0.06] focus:outline-none"
+            />
           </div>
-          
-          <div className="flex items-center gap-4">
-            <button
-              onClick={toggleDarkMode}
-              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
-            >
-              {isDarkMode ? '☀️' : '🌙'}
-            </button>
-            
-            {githubUser ? (
-              <div className="flex items-center gap-2">
-                <img 
-                  src={githubUser.avatar_url} 
-                  alt={githubUser.login} 
-                  className="w-8 h-8 rounded-full border-2 border-purple-500"
-                />
+        }
+      >
+        <button onClick={generateShareUrl} className="btn btn-ghost btn-sm">Share</button>
+        {githubUser ? (
+          <button onClick={handleGitHubLogout} className="btn btn-ghost btn-sm" title="Sign out of GitHub">
+            {/* eslint-disable-next-line @next/next/no-img-element -- remote avatar, no optimization needed */}
+            <img src={githubUser.avatar_url} alt="" className="h-5 w-5 rounded-full" />
+            {githubUser.login}
+          </button>
+        ) : (
+          <button onClick={handleGitHubLogin} className="btn btn-secondary btn-sm">Sign in with GitHub</button>
+        )}
+      </SiteHeader>
+
+      <div className="flex min-h-0 flex-1">
+        {/* Templates */}
+        <aside className="hidden w-64 shrink-0 flex-col border-r border-border md:flex">
+          <div className="px-4 pt-4 pb-2 eyebrow">Templates</div>
+          <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+            {TEMPLATES.map((template) => (
+              <li key={template.id}>
                 <button
-                  onClick={handleGitHubLogout}
-                  className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition-colors"
+                  onClick={() => loadTemplate(template)}
+                  className={`w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-white/[0.04] ${
+                    filename === template.filename ? 'bg-white/[0.06]' : ''
+                  }`}
                 >
-                  Logout
+                  <div className="text-sm text-gray-100">{template.name}</div>
+                  <div className="mt-0.5 text-xs leading-snug text-gray-500">{template.description}</div>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="border-t border-border p-3">
+            <button
+              onClick={() => setShowCollaboration(on => !on)}
+              aria-pressed={showCollaboration}
+              className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-sm text-gray-300 hover:bg-white/[0.04]"
+            >
+              Live collaboration
+              <span className={`relative h-5 w-9 rounded-full transition-colors ${showCollaboration ? 'bg-accent' : 'bg-gray-700'}`}>
+                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${showCollaboration ? 'left-[18px]' : 'left-0.5'}`} />
+              </span>
+            </button>
+            {showCollaboration && (
+              <div className="mt-2 space-y-1 px-2.5 text-xs text-gray-500">
+                {collaborators.length === 0 ? 'Share the link to invite others.' : collaborators.map(c => (
+                  <div key={c.id} className="flex items-center gap-2 text-gray-300">
+                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c.color }} />
+                    {c.name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </aside>
+
+        {/* Editor + panel */}
+        <main className="flex min-w-0 flex-1 flex-col">
+          <div className="flex h-12 items-center gap-3 border-b border-border px-3">
+            <div className="segmented" role="group" aria-label="Output target">
+              {TARGETS.map((t) => (
+                <button key={t.value} aria-pressed={target === t.value} title={t.hint} onClick={() => setTarget(t.value)}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <button onClick={handleCoverage} disabled={isAnalyzing} className="btn btn-ghost btn-sm">
+                {isAnalyzing ? 'Analyzing…' : 'Check coverage'}
+              </button>
+              <button onClick={handleCompile} disabled={isCompiling} className="btn btn-primary btn-sm">
+                {isCompiling ? 'Compiling…' : 'Compile'}
+                <span className="kbd border-black/15 text-black/60">⌘↵</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 bg-gray-900">
+            <CodeEditor value={code} onChange={handleCodeChange} diagnostics={diagnostics} onRun={handleCompile} />
+          </div>
+
+          <section className="flex h-60 shrink-0 flex-col border-t border-border bg-black">
+            <div className="flex h-10 items-center gap-1 border-b border-border px-2" role="tablist">
+              {([
+                ['problems', `Problems${problems.length ? ` · ${problems.length}` : ''}`],
+                ['output', 'Output'],
+                ['console', 'Console'],
+              ] as const).map(([tab, label]) => (
+                <button
+                  key={tab}
+                  role="tab"
+                  aria-selected={panelTab === tab}
+                  onClick={() => setPanelTab(tab)}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                    panelTab === tab ? 'bg-white/[0.08] text-gray-100' : 'text-gray-500 hover:text-gray-100'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-3 font-mono text-[12.5px] leading-relaxed">
+              {panelTab === 'problems' && (
+                diagnostics.length === 0 ? (
+                  <p className="text-gray-500">
+                    {compileResult?.success === false ? compileResult.error : 'No problems. Compile to type-check against the scriptc surface.'}
+                  </p>
+                ) : diagnostics.map((d, i) => (
+                  <div key={i} className="mb-2">
+                    <span className={d.severity === 'error' ? 'text-danger' : 'text-warning'}>{d.code}</span>
+                    <span className="text-gray-500"> {filename}:{d.line}:{d.column} </span>
+                    <span className="text-gray-100">{d.message}</span>
+                    {d.hint && <div className="pl-4 text-gray-500">hint: {d.hint}</div>}
+                  </div>
+                ))
+              )}
+              {panelTab === 'output' && (
+                !compileResult?.success ? (
+                  <p className="text-gray-500">Compile your program to see the artifact here.</p>
+                ) : isBinary ? (
+                  <pre className="whitespace-pre text-gray-400">{hexPreview(compileResult.output ?? '')}</pre>
+                ) : (
+                  <pre className="whitespace-pre text-gray-300">
+                    {(compileResult.output ?? '').length > 20000
+                      ? `${compileResult.output?.slice(0, 20000)}\n\n… truncated — download for the full file`
+                      : compileResult.output}
+                  </pre>
+                )
+              )}
+              {panelTab === 'console' && (
+                consoleMessages.length === 0
+                  ? <p className="text-gray-500">Build logs appear here.</p>
+                  : consoleMessages.map((msg, i) => <div key={i} className="whitespace-pre-wrap text-gray-400">{msg}</div>)
+              )}
+            </div>
+          </section>
+        </main>
+
+        {/* Build inspector */}
+        <aside className="hidden w-72 shrink-0 flex-col gap-6 overflow-y-auto border-l border-border p-4 xl:flex">
+          <div>
+            <div className="eyebrow mb-3">Build</div>
+            {!compileResult ? (
+              <p className="text-sm text-gray-500">
+                Press <span className="kbd">⌘↵</span> to compile <span className="font-mono text-gray-300">{filename}</span> with scriptc.
+              </p>
+            ) : compileResult.success ? (
+              <div className="space-y-3 animate-fade-in">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="h-2 w-2 rounded-full bg-success" />
+                  <span className="text-gray-100">Build succeeded</span>
+                </div>
+                <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border">
+                  <div className="bg-black p-3">
+                    <dt className="text-xs text-gray-500">Size</dt>
+                    <dd className="mt-1 font-mono text-lg text-gray-100">{formatSize(compileResult.size)}</dd>
+                  </div>
+                  <div className="bg-black p-3">
+                    <dt className="text-xs text-gray-500">Build time</dt>
+                    <dd className="mt-1 font-mono text-lg text-gray-100">{compileResult.durationMs}ms</dd>
+                  </div>
+                </dl>
+                {compileResult.error && <p className="text-xs text-warning">{compileResult.error}</p>}
+                <button onClick={handleDownload} className="btn btn-secondary w-full">
+                  Download {compileResult.filename?.replace(/^[0-9a-f]{32}-?/, '')}
                 </button>
               </div>
             ) : (
-              <button
-                onClick={handleGitHubLogin}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition-colors"
-              >
-                Login with GitHub
-              </button>
-            )}
-            
-            <button
-              onClick={() => setShowSettings(!showSettings)}
-              className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
-            >
-              ⚙️
-            </button>
-          </div>
-        </div>
-      </header>
-      
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Main Content Grid */}
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Left Sidebar - Project Info */}
-          <div className="space-y-4">
-            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Project</h3>
-              <input
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                placeholder="Project name"
-                className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
-              />
-              <input
-                value={filename}
-                onChange={(e) => setFilename(e.target.value.replace(/[^a-zA-Z0-9._-]/g, ''))}
-                placeholder="Filename"
-                className="w-full p-2 mt-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
-              />
-            </div>
-            
-            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Templates</h3>
-              <button
-                onClick={() => setShowTemplates(!showTemplates)}
-                className="w-full flex items-center justify-between p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-              >
-                <span>Load Template</span>
-                <span>▼</span>
-              </button>
-              
-              {showTemplates && (
-                <div className="mt-2 space-y-2 max-h-64 overflow-y-auto">
-                  {templates.map((template) => (
-                    <button
-                      key={template.name}
-                      onClick={() => loadTemplate(template)}
-                      className="w-full text-left p-2 bg-gray-700 hover:bg-purple-600/20 rounded-lg text-sm transition-colors"
-                    >
-                      {template.name}
-                    </button>
-                  ))}
+              <div className="space-y-2 animate-fade-in">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="h-2 w-2 rounded-full bg-danger" />
+                  <span className="text-gray-100">Build failed</span>
                 </div>
-              )}
-            </div>
-            
-            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Actions</h3>
-              <div className="space-y-2">
-                <button
-                  onClick={handleCompile}
-                  disabled={isCompiling}
-                  className="w-full flex items-center justify-center gap-2 p-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 rounded-lg font-medium transition-colors"
-                >
-                  <span>{isCompiling ? '⏳ Compiling...' : '▶ Compile'}</span>
-                </button>
-                
-                <button
-                  onClick={handleDownload}
-                  disabled={!compileResult?.filename}
-                  className="w-full flex items-center justify-center gap-2 p-3 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 rounded-lg font-medium transition-colors"
-                >
-                  <span>⬇ Download</span>
-                </button>
-                
-                <button
-                  onClick={generateShareUrl}
-                  className="w-full flex items-center justify-center gap-2 p-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
-                >
-                  <span>🔗 Share</span>
-                </button>
-                
-                <button
-                  onClick={() => setShowCollaboration(!showCollaboration)}
-                  className={`w-full flex items-center justify-center gap-2 p-3 rounded-lg font-medium transition-colors ${
-                    showCollaboration 
-                      ? 'bg-green-600 hover:bg-green-700'
-                      : 'bg-gray-700 hover:bg-gray-600'
-                  }`}
-                >
-                  <span>{showCollaboration ? '👥 Collaboration On' : '👥 Collaboration'}</span>
-                </button>
-              </div>
-            </div>
-            
-            {showCollaboration && collaborators.length > 0 && (
-              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-                <h3 className="text-sm font-semibold text-gray-400 mb-3">Collaborators</h3>
-                <div className="space-y-2">
-                  {collaborators.map((collab) => (
-                    <div key={collab.id} className="flex items-center gap-2 p-2 bg-gray-700 rounded-lg">
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: collab.color }}
-                      />
-                      <span className="text-sm">{collab.name}</span>
-                    </div>
-                  ))}
-                </div>
+                <p className="text-sm text-gray-400">{compileResult.error}</p>
               </div>
             )}
-            
-            {/* Compilation Settings */}
-            <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-400 mb-3">Target</h3>
-              <div className="space-y-2">
-                <select
-                  value={target}
-                  onChange={(e) => setTarget(e.target.value as CompileTarget)}
-                  className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
-                >
-                  <option value="exe">Native Binary</option>
-                  <option value="c">C Code</option>
-                  <option value="llvm">LLVM IR</option>
-                  <option value="wasm">WASM</option>
-                </select>
-                
-                <select
-                  value={platform}
-                  onChange={(e) => setPlatform(e.target.value as CompilePlatform)}
-                  className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
-                >
-                  <option value="linux">Linux</option>
-                  <option value="macos">macOS</option>
-                  <option value="windows">Windows</option>
-                </select>
-              </div>
-            </div>
           </div>
-          
-          {/* Center - Editor */}
-          <div className="lg:col-span-2 space-y-4">
-            <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden">
-              <div className="flex border-b border-gray-700">
-                <button
-                  onClick={() => setActiveTab('editor')}
-                  className={`px-4 py-2 text-sm font-medium transition-colors ${
-                    activeTab === 'editor' 
-                      ? 'bg-gray-700 text-white' 
-                      : 'text-gray-400 hover:bg-gray-700/50'
-                  }`}
-                >
-                  Editor
-                </button>
-                <button
-                  onClick={() => setActiveTab('output')}
-                  className={`px-4 py-2 text-sm font-medium transition-colors ${
-                    activeTab === 'output' 
-                      ? 'bg-gray-700 text-white' 
-                      : 'text-gray-400 hover:bg-gray-700/50'
-                  }`}
-                >
-                  Output
-                </button>
-                <button
-                  onClick={() => setActiveTab('console')}
-                  className={`px-4 py-2 text-sm font-medium transition-colors ${
-                    activeTab === 'console' 
-                      ? 'bg-gray-700 text-white' 
-                      : 'text-gray-400 hover:bg-gray-700/50'
-                  }`}
-                >
-                  Console
-                </button>
-              </div>
-              
-              <div className="h-[600px] overflow-hidden">
-                {activeTab === 'editor' && (
-                  <Editor
-                    height="100%"
-                    defaultLanguage="typescript"
-                    value={code}
-                    onChange={(value = '') => {
-                      setCode(value);
-                      if (showCollaboration && wsManager.current?.isConnected()) {
-                        wsManager.current.send({
-                          type: 'edit',
-                          content: value,
-                          projectId,
-                          clientId,
-                        });
-                      }
-                    }}
-                    theme={isDarkMode ? 'vs-dark' : 'vs-light'}
-                    options={{
-                      minimap: { enabled: false },
-                      fontSize: 14,
-                      wordWrap: 'on',
-                      scrollBeyondLastLine: false,
-                      automaticLayout: true,
-                    }}
+
+          <div>
+            <div className="eyebrow mb-3">scriptc coverage</div>
+            {!coverage ? (
+              <p className="text-sm text-gray-500">
+                See how much of this program compiles statically, and what blocks the rest.
+              </p>
+            ) : coverage.success ? (
+              <div className="space-y-3 animate-fade-in">
+                <div className="flex items-baseline justify-between">
+                  <span className="font-mono text-2xl text-gray-100">{coverage.percent}%</span>
+                  <span className="text-xs text-gray-500">{coverage.static}/{coverage.statements} statements</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-gray-800">
+                  <div
+                    className={`h-full rounded-full ${coverage.percent === 100 ? 'bg-success' : 'bg-warning'}`}
+                    style={{ width: `${coverage.percent ?? 0}%` }}
                   />
-                )}
-                
-                {activeTab === 'output' && (
-                  <div className="h-full p-4 overflow-y-auto bg-gray-900">
-                    {output ? (
-                      <pre className="text-sm text-gray-300 whitespace-pre-wrap">
-                        {output.length > 10000 ? `${output.substring(0, 10000)}...\n\n[Output truncated - download full file]` : output}
-                      </pre>
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-gray-500">
-                        <p>Compile your code to see output here</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {activeTab === 'console' && (
-                  <div className="h-full p-4 overflow-y-auto bg-gray-900">
-                    {consoleMessages.length > 0 ? (
-                      consoleMessages.map((msg, index) => (
-                        <div key={index} className="text-sm text-gray-300 mb-1">
-                          {msg}
-                        </div>
-                      ))
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-gray-500">
-                        <p>Console messages will appear here</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Error Display */}
-            {error && (
-              <div className="bg-red-500/10 border border-red-500 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-red-500">❌</span>
-                  <span className="font-semibold text-red-400">Compilation Error</span>
                 </div>
-                <pre className="text-sm text-red-300 whitespace-pre-wrap">{error}</pre>
+                {coverage.blockers?.map((b) => (
+                  <div key={b.code + b.message} className="text-xs">
+                    <span className="font-mono text-warning">{b.code}</span>
+                    <span className="text-gray-400"> ×{b.count} {b.message}</span>
+                  </div>
+                ))}
               </div>
+            ) : (
+              <p className="text-sm text-danger">{coverage.error}</p>
             )}
-            
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700 text-center">
-                <div className="text-2xl font-bold text-purple-400">{code.split('\n').length}</div>
-                <div className="text-sm text-gray-400">Lines</div>
-              </div>
-              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700 text-center">
-                <div className="text-2xl font-bold text-blue-400">{code.length}</div>
-                <div className="text-sm text-gray-400">Chars</div>
-              </div>
-              <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700 text-center">
-                <div className="text-2xl font-bold text-green-400">
-                  {compileResult?.success ? '✓' : '✗'}
-                </div>
-                <div className="text-sm text-gray-400">Status</div>
-              </div>
-            </div>
           </div>
-        </div>
+
+          <div className="mt-auto rounded-lg border border-border p-3 text-xs leading-relaxed text-gray-500">
+            Compiled by <a href="https://scriptc.dev" className="text-gray-300 hover:underline">scriptc</a>: ordinary
+            TypeScript to a native executable — no Node, no V8, no runtime in the artifact.
+          </div>
+        </aside>
       </div>
-      
+
       {/* Share Modal */}
       {showShareModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
-            <h3 className="text-lg font-semibold mb-4">Share Project</h3>
-            <div className="mb-4">
-              <label className="block text-sm text-gray-400 mb-2">Share URL</label>
-              <div className="flex gap-2">
-                <input
-                  value={shareUrl}
-                  readOnly
-                  className="flex-1 p-2 bg-gray-700 rounded-lg border border-gray-600 text-white text-sm"
-                />
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(shareUrl);
-                    addConsoleMessage('Share URL copied to clipboard');
-                  }}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition-colors"
-                >
-                  Copy
-                </button>
-              </div>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onClick={() => setShowShareModal(false)}
+        >
+          <div className="surface w-full max-w-md p-5 mx-4 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-semibold">Share project</h3>
+            <p className="mt-1 text-sm text-gray-500">Anyone with the link opens a copy of this code.</p>
+            <div className="mt-4 flex gap-2">
+              <input value={shareUrl} readOnly className="input font-mono text-xs" onFocus={(e) => e.target.select()} />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(shareUrl);
+                  setCopied(true);
+                }}
+                className="btn btn-primary"
+              >
+                {copied ? 'Copied' : 'Copy'}
+              </button>
             </div>
-            <button
-              onClick={() => setShowShareModal(false)}
-              className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
-            >
-              Close
-            </button>
+            <button onClick={() => setShowShareModal(false)} className="btn btn-ghost mt-3 w-full">Close</button>
           </div>
         </div>
       )}
-      
-      {/* GitHub Modal */}
-      {showGitHubModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 border border-gray-700">
-            <h3 className="text-lg font-semibold mb-4">GitHub Integration</h3>
-            <p className="text-gray-400 mb-4">
-              Connect your GitHub account to save and load projects from repositories.
-            </p>
-            <button
-              onClick={handleGitHubLogin}
-              className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition-colors"
-            >
-              Connect with GitHub
-            </button>
-            <button
-              onClick={() => setShowGitHubModal(false)}
-              className="w-full mt-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-      
-      {/* Footer */}
-      <footer className="max-w-7xl mx-auto px-4 py-8 text-center text-sm text-gray-500">
-        <p>
-          Built with ❤️ using <a href="https://scriptc.dev" className="text-purple-400 hover:underline">scriptc</a> • 
-          <a href="https://github.com/BrandDeb/Aha" className="text-purple-400 hover:underline">GitHub</a>
-        </p>
-        <p className="mt-2">
-          NanoCLI Studio - Zero-Runtime TypeScript Compiler
-        </p>
-      </footer>
     </div>
   );
 }

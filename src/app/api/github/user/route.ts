@@ -7,10 +7,8 @@ export async function GET(request: NextRequest) {
   
   const parsed = user ? safeJsonParse<Record<string, unknown> | null>(user, null) : null;
   if (!parsed || !token) {
-    return NextResponse.json(
-      { error: 'Not authenticated', authenticated: false },
-      { status: 401 }
-    );
+    // Signed out is a normal state for this endpoint, not an error
+    return NextResponse.json({ authenticated: false });
   }
   
   return NextResponse.json({ user: parsed, authenticated: true });
