@@ -8,7 +8,7 @@ executable that runs without Node.js.
 
 [![CI/CD Pipeline](https://github.com/BrandDeb/Aha/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/BrandDeb/Aha/actions/workflows/ci-cd.yml)
 [![scriptc](https://github.com/BrandDeb/Aha/actions/workflows/scriptc.yml/badge.svg)](https://github.com/BrandDeb/Aha/actions/workflows/scriptc.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![License: Proprietary](https://img.shields.io/badge/License-Proprietary-black.svg)
 
 ---
 
@@ -48,19 +48,26 @@ Reproduce with `npm run templates:build` and the binaries in `dist/templates/`.
 
 ## Features
 
-| | |
-|---|---|
-| **scriptc 0.2 compilation** | Native executable, WASM (WASI Preview 1), LLVM IR or assembly from the same source |
-| **Inline diagnostics** | scriptc errors (code, location, rewrite hint) are drawn in the editor and listed under Problems |
-| **Coverage analysis** | "Check coverage" runs `scriptc coverage`: percentage that compiles statically, plus each blocker |
-| **Templates** | Nine starter programs; CI compiles every one with scriptc on Linux and macOS |
-| **Monaco editor** | TypeScript IntelliSense configured for Node programs (no DOM globals), ⌘↵ to compile |
-| **GitHub** | Browse repos and folders, open a file, commit changes back with conflict detection |
-| **Live collaboration** | WebSocket relay with origin checks and server-assigned identities |
-| **Share links** | Encode the current program in a URL |
+The workspace at `/` is a monochrome glass IDE built around scriptc.
 
-Native executables are linked for the machine the server runs on (no cross-compilation in the default
-image). Use the WASM target for a portable artifact.
+| Area | What it does |
+|---|---|
+| **Projects** | File tree with folders, create/rename/move/delete, entry file, relative imports between files, autosave to the browser |
+| **Terminal** | A shell over the project (`ls cd cat mv rm tree echo > file …`). `run` compiles to WASM and executes it in a Web Worker in the tab with the project mounted; files it writes appear in the explorer |
+| **Build** | Native, WASM, LLVM IR or assembly; pipeline timings (queue → write → compile → package), artifact size and download, scriptc coverage, run profile (exit code, time, memory) |
+| **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
+| **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
+| **Assistant** | Claude (`claude-opus-5-5`): explain, fix build errors, generate tests, chat — with one-click Apply that versions the previous file first |
+| **Formatting** | Prettier in the browser, format on save, configurable rules |
+| **History** | Versions on save, on successful builds and before pulls/restores/assistant edits; compare and restore |
+| **Graph** | Import graph from the entry, cycle detection, unused files, unresolved imports, external modules |
+| **Export** | ZIP export/import, secret GitHub Gist, share links that carry the whole project |
+| **Editing** | Split view, zen mode, command palette (⌘K), remappable shortcuts with export/import, built-in extensions (minimap, word wrap, bracket pairs, sticky scroll, TODO highlights, byte field) |
+| **Accessibility** | Light, dark and high-contrast themes; ARIA tree, tabs and dialogs with focus management; skip link; live regions for builds and toasts; reduced motion respected |
+| **Templates** | Ten starter projects including a multi-file CLI; CI compiles every one with scriptc |
+
+Native executables are linked for the machine the server runs on. Use the WASM target (or `run`) for a
+portable artifact.
 
 ---
 
@@ -68,12 +75,12 @@ image). Use the WASM target for a portable artifact.
 
 | Route | |
 |---|---|
-| `/` | Editor — templates, editor, Problems/Output/Console, build inspector and coverage |
-| `/studio` | Studio — multi-file explorer, simulated terminal, GitHub browser and commits |
-| `/unified` | Toolkit — editor plus demo panels (AI gateway, auth, URL shortener, analytics use simulated data) |
-| `/landing` | Overview / marketing page |
+| `/` | Workspace |
+| `/landing` | Overview |
+| `/unified` | Toolkit — demo panels (AI gateway, auth, URL shortener, analytics use simulated data) |
 | `/faq` | Searchable FAQ |
-| `/onboarding` | Three-step tour ending in the editor with a template loaded (`/?template=<id>`) |
+| `/onboarding` | Three-step tour ending in the workspace with a template (`/?template=<id>`) |
+| `/studio` | Redirects to `/` |
 
 ---
 
@@ -100,6 +107,7 @@ collaboration relay and forwards every other upgrade (e.g. dev HMR) to Next.js.
 
 ```json
 { "code": "console.log('hi')", "filename": "app.ts", "target": "exe", "optimization": "release" }
+{ "files": { "src/main.ts": "import { x } from './x'", "src/x.ts": "export const x = 1" }, "entry": "src/main.ts", "target": "wasm" }
 ```
 
 - `target`: `exe` | `wasm` | `llvm` | `asm` (C output was removed in scriptc 0.2)
@@ -118,9 +126,15 @@ collaboration relay and forwards every other upgrade (e.g. dev HMR) to Next.js.
 }
 ```
 
-On failure, `diagnostics` holds `{ line, column, severity, code, message, hint }` entries and `error`
-summarizes the first one. Sources are limited to 512 KB, builds to 60 s and `MAX_CONCURRENT_BUILDS`
-(default 2) at a time.
+Successful builds include `phases` (`queue`, `write`, `compile`, `package` with milliseconds). On failure,
+`diagnostics` holds `{ file, line, column, severity, code, message, hint }` entries and `error` summarizes
+the first one. A single file is limited to 512 KB, a project to 200 files / 2 MB, builds to 60 s and
+`MAX_CONCURRENT_BUILDS` (default 2) at a time.
+
+### `POST /api/ai`
+
+`{ action: "chat" | "explain" | "fix" | "tests", prompt, history, files, activeFile, selection?, diagnostics }`
+→ streamed plain text. Requires `ANTHROPIC_API_KEY`; returns 503 with an explanation otherwise.
 
 ### `POST /api/coverage`
 
@@ -140,6 +154,11 @@ GET    /api/github/repos                                 Your repositories
 GET    /api/github/repos/:owner/:repo/contents?path=     List a directory
 GET    /api/github/repos/:owner/:repo/file?path=         Read a file → { content, sha }
 PUT    /api/github/repos/:owner/:repo/file               Commit { path, content, message?, sha? }
+GET    /api/github/repos/:owner/:repo/branches           { default, branches }
+POST   /api/github/repos/:owner/:repo/branches           Create { name, from }
+GET    /api/github/repos/:owner/:repo/tree?branch=       Pull every text file → { sha, files, skipped }
+POST   /api/github/repos/:owner/:repo/commit             Multi-file commit { branch, message, changes, expectedHead }
+POST   /api/github/gists                                 Secret gist { description, files }
 ```
 
 ### Downloads
@@ -165,6 +184,10 @@ GITHUB_REDIRECT_URI=http://localhost:3000/api/github/callback
 # Collaboration: origins allowed to open sockets (defaults to NEXT_PUBLIC_BASE_URL;
 # same-origin connections are always allowed)
 WS_ALLOWED_ORIGINS=http://localhost:3000
+
+# Assistant (Claude)
+ANTHROPIC_API_KEY=
+AI_REQUESTS_PER_10_MIN=30   # per client (first X-Forwarded-For hop)
 
 # Compiler
 MAX_CONCURRENT_BUILDS=2
@@ -193,23 +216,18 @@ SCRIPTC_LINKER=          # optional: linker driver scriptc uses for executables
 
 ```
 src/
-├── app/
-│   ├── page.tsx                 Editor
-│   ├── studio/ unified/ landing/ faq/ onboarding/
-│   ├── globals.css              Design tokens (Geist-style dark system)
-│   └── api/                     compile, coverage, download, github, ws
-├── components/
-│   ├── CodeEditor.tsx           Monaco + theme + scriptc markers
-│   └── SiteHeader.tsx           Header, nav and footer
-├── edge/index.ts                Edge request handlers (auth check, URL shortener)
-└── lib/
-    ├── compiler.ts              scriptc wrapper (server only)
-    ├── compiler-browser.ts      Client for the compile/coverage APIs
-    ├── templates.ts             Starter programs (compiled in CI)
-    ├── github.ts                GitHub REST helpers
-    └── websocket.ts             Collaboration client
+├── app/                         Pages and API routes (compile, coverage, download, ai, github, ws)
+├── components/                  CodeEditor (Monaco + themes + markers), ByteField, SiteHeader
+├── workspace/
+│   ├── Workspace.tsx            Layout, commands, shortcuts, build/run actions
+│   ├── store.tsx                Project, tabs, Git link, history, settings (localStorage)
+│   ├── project.ts               Pure helpers: tree, paths, git status, import graph, keybindings
+│   ├── wasi.worker.ts           Runs WASI modules off the main thread
+│   ├── components/              FileTree, Terminal, CommandPalette, SettingsDialog, dialogs
+│   └── panels/                  Build, Git, Assistant, History, Graph, Package
+└── lib/                         compiler (server), compiler-browser, github, ai, templates
 scripts/build-templates.ts       Builds every template with scriptc
-tests/                           node:test suites
+tests/                           node:test suites (unit + scriptc integration)
 server.js                        Custom server + WebSocket relay
 ```
 
@@ -217,13 +235,14 @@ server.js                        Custom server + WebSocket relay
 
 ## Contributing
 
-1. Fork and branch from `main`
-2. `npm run lint && npm run typecheck && npm test`
-3. Open a pull request
+Contributions are by invitation. Run `npm run lint && npm run typecheck && npm test` before opening a
+pull request; contributions are assigned to the owner (see [LICENSE](LICENSE), section 4).
 
 New templates go in `src/lib/templates.ts`; the test suite compiles each one with scriptc, so keep them
 inside scriptc's supported surface (narrow `catch` bindings, no `eval`, ES modules).
 
 ## License
 
-MIT
+Proprietary — Copyright © 2026 BrandDeb. All rights reserved. No use, copying, modification or
+distribution is permitted without a written agreement; see [LICENSE](LICENSE). Third-party components
+(scriptc, Next.js, React, Monaco Editor and others) remain under their own licenses.

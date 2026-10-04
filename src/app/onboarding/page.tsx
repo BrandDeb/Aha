@@ -23,7 +23,7 @@ export default function OnboardingPage() {
         <Link href="/" className="btn btn-ghost btn-sm">Skip</Link>
       </SiteHeader>
 
-      <main className="mx-auto max-w-2xl px-4 pt-16 pb-24">
+      <main id="main" className="mx-auto max-w-2xl px-4 pt-16 pb-24">
         <ol className="mb-10 flex items-center gap-3" aria-label="Progress">
           {STEPS.map((label, i) => (
             <li key={label} className="flex flex-1 items-center gap-3">

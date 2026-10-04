@@ -16,7 +16,7 @@ interface FAQItem {
   category: Category;
 }
 
-const CATEGORIES = ['General', 'Compiling', 'Studio', 'GitHub', 'Self-hosting', 'Security'] as const;
+const CATEGORIES = ['General', 'Compiling', 'Workspace', 'GitHub', 'Assistant', 'Self-hosting', 'Security'] as const;
 type Category = (typeof CATEGORIES)[number];
 
 const FAQS: FAQItem[] = [
@@ -70,51 +70,69 @@ const FAQS: FAQItem[] = [
   },
   {
     id: 'templates',
-    category: 'Studio',
+    category: 'Workspace',
     question: 'What do the templates cover?',
-    answer: 'Nine starter programs — hello world, a recursive-descent calculator, wc, a JSON formatter, typed math utilities, a Fibonacci benchmark, an HTTP server, a fetch client and an async countdown. CI compiles every one of them with scriptc, so they always build.',
+    answer: 'Ten starter projects — a multi-file CLI with argument parsing, hello world, a recursive-descent calculator, wc, a JSON formatter, typed math utilities, a Fibonacci benchmark, an HTTP server, a fetch client and an async countdown. CI compiles every one of them with scriptc, so they always build. Open them from New project or the command palette.',
   },
   {
     id: 'shortcuts',
-    category: 'Studio',
+    category: 'Workspace',
     question: 'What keyboard shortcuts are there?',
-    answer: '⌘↵ / Ctrl+Enter compiles. Everything else is standard Monaco: ⌘F find, ⌘/ toggle comment, ⌥↑/↓ move line, F2 rename symbol, and ⌘K ⌘0 to fold everything.',
+    answer: '⌘K opens the command palette, ⌘↵ compiles, ⌘⇧↵ runs in the terminal, ⌘S saves a version (formatting first if enabled), ⌘⇧F formats, ⌘B and ⌘J toggle the explorer and terminal, ⌘\\ splits the editor and ⌘⌥Z enters zen mode. Every shortcut can be remapped — and exported or imported — under Settings → Keyboard shortcuts. On Windows and Linux, ⌘ is Ctrl.',
   },
   {
     id: 'collab',
-    category: 'Studio',
+    category: 'Workspace',
     question: 'How does live collaboration work?',
-    answer: 'Turn on live collaboration and share the project link. Edits are relayed over a WebSocket to everyone in the same project. The server only accepts connections from the studio’s own origin and stamps each message with the sender’s connection identity.',
+    answer: 'Start a live session from the command palette. Edits to each file are relayed over a WebSocket to everyone in the same session. The server only accepts connections from the studio’s own origin and stamps each message with the sender’s connection identity.',
   },
   {
     id: 'saving',
-    category: 'Studio',
+    category: 'Workspace',
     question: 'Is my work saved?',
-    answer: 'Not automatically. Use Share to get a link that encodes the code, commit to GitHub from the studio, or download the source. Reloading the page starts from the default program.',
+    answer: 'Yes — the workspace autosaves to this browser as you type. Versions are stored in History when you press ⌘S, after each successful build and before pulls, restores and assistant edits; compare or restore them any time. To move work elsewhere, export a ZIP or a gist, copy a share link, or push to GitHub.',
   },
   {
     id: 'terminal',
-    category: 'Studio',
-    question: 'Does the terminal run my binary?',
-    answer: 'No — the studio terminal is a small simulated shell (ls, echo, compile, …) that runs in your browser. Download the executable to run it on your machine.',
+    category: 'Workspace',
+    question: 'Does the terminal run my program?',
+    answer: 'Yes. `run` compiles the project to a WASI module and executes it in a Web Worker in your tab, with the project files mounted as its working directory — files it writes appear in the explorer. Output streams live, Ctrl+C stops it, and the Build panel shows exit code, wall time and memory. The native executable runs on your machine after download. The terminal also has ls, cd, cat, mv, rm, tree, build, format, git status and output redirection.',
   },
   {
     id: 'github-connect',
     category: 'GitHub',
     question: 'What can the GitHub integration do?',
-    answer: 'Sign in with GitHub, browse your repositories and folders, open a file in the editor, and commit the editor contents back — either updating the file you opened (with conflict detection) or creating a new one in the folder you browsed to.',
+    answer: 'Pull any branch of your repositories into the workspace, see changed files with +/− counts, review each one as a side-by-side diff, create branches, and commit and push all changes at once. If someone pushed since your pull, the push is refused so their work is never overwritten — pull, then commit again.',
   },
   {
     id: 'github-scope',
     category: 'GitHub',
     question: 'What access does the GitHub app request?',
-    answer: 'The OAuth app asks for the `repo` and `read:user` scopes so it can read and write repository contents, including private repositories you choose to open. The token is kept in an HTTP-only cookie and is never exposed to page scripts. Sign out to delete it.',
+    answer: 'The OAuth app asks for `repo` (read and write repository contents, including private repositories you choose to open), `read:user` and `gist` (for gist export). The token is kept in an HTTP-only cookie and is never exposed to page scripts.',
+  },
+  {
+    id: 'assistant',
+    category: 'Assistant',
+    question: 'What can the assistant do?',
+    answer: 'It explains the active file, fixes scriptc compile errors and writes test programs, and answers questions about your project. It sees every project file, your selection and the latest diagnostics. Code blocks come with Apply, which writes the file and saves the previous version to History first. It runs on Claude and needs ANTHROPIC_API_KEY on the server.',
+  },
+  {
+    id: 'assistant-data',
+    category: 'Assistant',
+    question: 'What does the assistant send, and where?',
+    answer: 'Only when you ask it something: the project files, your selection and the current errors go to the server, which forwards them to Anthropic’s API to generate the answer. Nothing is sent in the background.',
+  },
+  {
+    id: 'license',
+    category: 'General',
+    question: 'Can I use or redistribute NanoCLI Studio’s source?',
+    answer: 'No. NanoCLI Studio is proprietary software — copyright BrandDeb, all rights reserved. Using, copying, hosting or modifying it requires a written agreement. Programs you compile with it are yours.',
   },
   {
     id: 'self-host',
     category: 'Self-hosting',
     question: 'How do I run my own instance?',
-    answer: 'Clone the repository and run `docker compose up -d`. The image contains the Next.js app, the collaboration server, scriptc and its clang/lld/zig toolchain. For GitHub sign-in, create an OAuth app and set GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET and NEXT_PUBLIC_BASE_URL.',
+    answer: 'Licensed deployments run with `docker compose up -d`: the image contains the Next.js app, the collaboration server, scriptc and its clang/lld/zig toolchain. For GitHub sign-in, create an OAuth app and set GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET and NEXT_PUBLIC_BASE_URL; for the assistant, set ANTHROPIC_API_KEY.',
   },
   {
     id: 'node',
@@ -154,7 +172,7 @@ export default function FAQPage() {
         <Link href="/" className="btn btn-primary btn-sm">Open editor</Link>
       </SiteHeader>
 
-      <main className="mx-auto max-w-3xl px-4 pt-16 pb-24">
+      <main id="main" className="mx-auto max-w-3xl px-4 pt-16 pb-24">
         <div className="eyebrow">Help</div>
         <h1 className="mt-3 text-4xl font-semibold tracking-tight">Frequently asked questions</h1>
         <p className="mt-3 text-gray-400">

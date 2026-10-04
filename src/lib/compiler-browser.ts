@@ -6,8 +6,11 @@
 import type { CompilePlatform, CompileTarget } from '@/types';
 
 interface CompileOptions {
-  code: string;
+  code?: string;
   filename?: string;
+  /** Multi-file project (path -> source) with the file to build */
+  files?: Record<string, string>;
+  entry?: string;
   target?: CompileTarget;
   platform?: CompilePlatform;
   arch?: 'x64' | 'arm64';
@@ -16,6 +19,7 @@ interface CompileOptions {
 
 /** A scriptc diagnostic, located in the submitted source */
 interface Diagnostic {
+  file?: string;
   line: number;
   column: number;
   severity: 'error' | 'warning';
@@ -35,6 +39,7 @@ interface CompileResult {
   size?: number;
   durationMs?: number;
   diagnostics?: Diagnostic[];
+  phases?: { name: 'queue' | 'write' | 'compile' | 'package'; ms: number }[];
 }
 
 interface CoverageResult {
@@ -76,8 +81,13 @@ export function compileTypeScriptBrowser(options: CompileOptions): Promise<Compi
 /**
  * Ask scriptc how much of the program compiles statically
  */
-export function analyzeCoverageBrowser(code: string, filename?: string): Promise<CoverageResult> {
-  return postJson<CoverageResult>('/api/coverage', { code, filename });
+export function analyzeCoverageBrowser(code: string, filename?: string): Promise<CoverageResult>;
+export function analyzeCoverageBrowser(project: { files: Record<string, string>; entry: string }): Promise<CoverageResult>;
+export function analyzeCoverageBrowser(
+  input: string | { files: Record<string, string>; entry: string },
+  filename?: string
+): Promise<CoverageResult> {
+  return postJson<CoverageResult>('/api/coverage', typeof input === 'string' ? { code: input, filename } : input);
 }
 
 /**
@@ -86,6 +96,7 @@ export function analyzeCoverageBrowser(code: string, filename?: string): Promise
 export function formatSize(bytes: number | undefined): string {
   if (bytes === undefined) return '';
   if (bytes < 1024) return `${bytes} B`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
 }
 

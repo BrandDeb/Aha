@@ -1192,7 +1192,7 @@ console.log(\`3 + 5 = \${result}\`);`);
     <div className="min-h-screen app-bg">
       <SiteHeader active="/unified" />
       
-      <div className="max-w-6xl mx-auto px-4 py-8">
+      <div id="main" className="max-w-6xl mx-auto px-4 py-8">
         {/* Navigation */}
         <nav className="mb-8">
           <div className="flex gap-2 overflow-x-auto pb-2 -mb-2">

@@ -46,7 +46,7 @@ export function githubErrorResponse(error: unknown, fallback: string): NextRespo
       : 502;
     return NextResponse.json({ error: fallback, status: error.status }, { status });
   }
-  if (error instanceof Error && (error.message === 'Invalid repository' || error.message === 'Invalid path')) {
+  if (error instanceof Error && ['Invalid repository', 'Invalid path', 'Invalid branch'].includes(error.message)) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
   console.error(fallback, error);

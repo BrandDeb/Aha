@@ -1,25 +1,18 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { ByteField } from './ByteField';
 
 const NAV = [
-  { href: '/', label: 'Editor' },
-  { href: '/studio', label: 'Studio' },
-  { href: '/unified', label: 'Toolkit' },
+  { href: '/', label: 'Workspace' },
   { href: '/landing', label: 'Overview' },
+  { href: '/unified', label: 'Toolkit' },
   { href: '/faq', label: 'FAQ' },
 ] as const;
 
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <Link href="/landing" className="flex items-center gap-2.5 shrink-0" aria-label="NanoCLI home">
-      <span className="grid h-7 w-7 place-items-center rounded-md bg-gray-100 text-[11px] font-bold text-black font-mono">
-        &gt;_
-      </span>
-      {!compact && (
-        <span className="text-[15px] font-semibold tracking-tight text-gray-100">
-          NanoCLI
-        </span>
-      )}
+    <Link href="/landing" className="flex shrink-0 items-center" aria-label="NanoCLI home">
+      <span className={`display leading-none text-gray-100 ${compact ? 'text-lg' : 'text-[22px]'}`}>NANOCLI</span>
     </Link>
   );
 }
@@ -33,12 +26,16 @@ interface SiteHeaderProps {
   center?: ReactNode;
   /** Full-width bar for app layouts, centered container for content pages */
   fluid?: boolean;
+  /** How strongly the byte field shows behind the page */
+  byteField?: 'ambient' | 'hero';
 }
 
-export function SiteHeader({ active, children, center, fluid = false }: SiteHeaderProps) {
+export function SiteHeader({ active, children, center, fluid = false, byteField = 'ambient' }: SiteHeaderProps) {
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-black/70 backdrop-blur-xl supports-[backdrop-filter]:bg-black/55">
-      <div className={`flex h-14 items-center gap-6 px-4 ${fluid ? '' : 'mx-auto max-w-6xl'}`}>
+    <>
+    <ByteField intensity={byteField} />
+    <header className="sticky top-3 z-40 px-3">
+      <div className={`glass flex h-14 items-center gap-6 rounded-2xl px-4 ${fluid ? '' : 'mx-auto max-w-6xl'}`}>
         <Logo />
         <nav className="hidden md:flex items-center gap-1 text-sm" aria-label="Main">
           {NAV.map(item => (
@@ -65,12 +62,13 @@ export function SiteHeader({ active, children, center, fluid = false }: SiteHead
             rel="noreferrer"
             className="hidden sm:inline-flex badge hover:text-gray-100 transition-colors"
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-success" />
+            <span className="dot" aria-hidden="true" />
             scriptc 0.2
           </a>
         </div>
       </div>
     </header>
+    </>
   );
 }
 
@@ -80,12 +78,12 @@ export function SiteFooter() {
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-8 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Logo compact />
-          <span>Native binaries from TypeScript, compiled with scriptc.</span>
+          <span>© 2026 BrandDeb. All rights reserved.</span>
         </div>
         <div className="flex items-center gap-5">
           <a href="https://scriptc.dev" className="hover:text-gray-100 transition-colors">scriptc docs</a>
           <a href="https://github.com/vercel-labs/scriptc" className="hover:text-gray-100 transition-colors">scriptc on GitHub</a>
-          <a href="https://github.com/BrandDeb/Aha" className="hover:text-gray-100 transition-colors">Source</a>
+          <Link href="/faq" className="hover:text-gray-100 transition-colors">FAQ</Link>
         </div>
       </div>
     </footer>

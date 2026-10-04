@@ -7,7 +7,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { TEMPLATES } from '../src/lib/templates.ts';
+import { TEMPLATES, templateFiles } from '../src/lib/templates.ts';
 
 const outDir = path.join(process.cwd(), 'dist', 'templates');
 const srcDir = path.join(outDir, 'src');
@@ -18,8 +18,12 @@ mkdirSync(srcDir, { recursive: true });
 
 let failed = 0;
 for (const template of TEMPLATES) {
-  const source = path.join(srcDir, template.filename);
-  writeFileSync(source, template.code);
+  const { files, entry } = templateFiles(template);
+  for (const [file, content] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(srcDir, template.id, file)), { recursive: true });
+    writeFileSync(path.join(srcDir, template.id, file), content);
+  }
+  const source = path.join(srcDir, template.id, entry);
 
   const targets: { label: string; out: string; env?: Record<string, string> }[] = [
     { label: 'native', out: path.join(outDir, template.id) },

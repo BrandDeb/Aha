@@ -19,6 +19,9 @@ type Optimization = 'release' | 'dev';
 interface CompileOptions {
   code: string;
   filename?: string;
+  /** Multi-file project: relative path -> source. `entry` names the file to build. */
+  files?: Record<string, string>;
+  entry?: string;
   target?: Target;
   platform?: Platform;
   arch?: Arch;
@@ -27,6 +30,8 @@ interface CompileOptions {
 
 /** A scriptc diagnostic, mapped back to the user's source */
 interface Diagnostic {
+  /** Project-relative path of the file the diagnostic belongs to */
+  file?: string;
   line: number;
   column: number;
   severity: 'error' | 'warning';
@@ -49,6 +54,13 @@ interface CompileResult {
   /** Wall-clock build time in milliseconds */
   durationMs?: number;
   diagnostics?: Diagnostic[];
+  /** Timings of each build stage, in order */
+  phases?: BuildPhase[];
+}
+
+interface BuildPhase {
+  name: 'queue' | 'write' | 'compile' | 'package';
+  ms: number;
 }
 
 interface CoverageBlocker {
@@ -76,6 +88,13 @@ export const TEMP_DIR = path.join(process.cwd(), 'temp');
 
 /** Maximum accepted source size (bytes) */
 export const MAX_CODE_SIZE = 512 * 1024;
+
+/** Multi-file project limits */
+export const MAX_PROJECT_FILES = 200;
+export const MAX_PROJECT_SIZE = 2 * 1024 * 1024;
+
+/** Files written to the build directory; everything else in a project is ignored */
+const SOURCE_EXTENSIONS = /\.(?:ts|mts|cts|tsx|js|mjs|cjs|json)$/;
 
 /** Maximum time a single toolchain invocation may run */
 const EXEC_TIMEOUT_MS = 60_000;
@@ -116,10 +135,20 @@ export function parseCompileOptions(body: unknown): CompileOptions | { error: st
   }
   const input = body as Record<string, unknown>;
 
-  if (typeof input.code !== 'string' || input.code.length === 0) {
+  let files: Record<string, string> | undefined;
+  let entry: string | undefined;
+  let code = input.code;
+  if (input.files !== undefined) {
+    const project = parseProject(input.files, input.entry);
+    if ('error' in project) return project;
+    ({ files, entry } = project);
+    code = files[entry];
+  }
+
+  if (typeof code !== 'string' || code.length === 0) {
     return { error: 'Code is required' };
   }
-  if (Buffer.byteLength(input.code, 'utf8') > MAX_CODE_SIZE) {
+  if (Buffer.byteLength(code, 'utf8') > MAX_CODE_SIZE) {
     return { error: `Code exceeds maximum size of ${MAX_CODE_SIZE} bytes` };
   }
 
@@ -142,13 +171,52 @@ export function parseCompileOptions(body: unknown): CompileOptions | { error: st
   }
 
   return {
-    code: input.code,
-    filename: typeof input.filename === 'string' ? input.filename : undefined,
+    code,
+    files,
+    entry,
+    filename: typeof input.filename === 'string' ? input.filename : entry,
     target: oneOf(input.target, TARGETS),
     platform: oneOf(input.platform, PLATFORMS),
     arch: oneOf(input.arch, ARCHES),
     optimization: parseOptimization(input.optimization),
   };
+}
+
+/**
+ * A project-relative path: plain segments of letters, digits, `_`, `-` and
+ * `.`, no leading dots (so no `..` or hidden files), no absolute paths.
+ */
+export function isValidProjectPath(filePath: string): boolean {
+  return filePath.length <= 200 &&
+    /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(filePath);
+}
+
+function parseProject(rawFiles: unknown, rawEntry: unknown): { files: Record<string, string>; entry: string } | { error: string } {
+  if (!rawFiles || typeof rawFiles !== 'object' || Array.isArray(rawFiles)) {
+    return { error: 'files must be an object of path -> source' };
+  }
+  const entries = Object.entries(rawFiles as Record<string, unknown>);
+  if (entries.length === 0 || entries.length > MAX_PROJECT_FILES) {
+    return { error: `A project must have 1-${MAX_PROJECT_FILES} files` };
+  }
+  let total = 0;
+  const files: Record<string, string> = {};
+  for (const [filePath, content] of entries) {
+    if (!isValidProjectPath(filePath)) return { error: `Invalid file path: ${filePath.slice(0, 80)}` };
+    if (typeof content !== 'string') return { error: `File content must be a string: ${filePath}` };
+    total += Buffer.byteLength(content, 'utf8');
+    files[filePath] = content;
+  }
+  if (total > MAX_PROJECT_SIZE) {
+    return { error: `Project exceeds maximum size of ${MAX_PROJECT_SIZE} bytes` };
+  }
+  if (typeof rawEntry !== 'string' || !(rawEntry in files)) {
+    return { error: 'entry must name a file in the project' };
+  }
+  if (!/\.(?:ts|mts|cts|js|mjs|cjs)$/.test(rawEntry)) {
+    return { error: 'entry must be a TypeScript or JavaScript file' };
+  }
+  return { files, entry: rawEntry };
 }
 
 /**
@@ -189,16 +257,49 @@ function withExtension(filename: string, extension: string): string {
   return filename.replace(/\.ts$/, extension);
 }
 
-async function writeTempFile(code: string, filename: string): Promise<string> {
-  await fs.mkdir(TEMP_DIR, { recursive: true });
-  const filePath = path.join(TEMP_DIR, filename);
-  await fs.writeFile(filePath, code, 'utf8');
-  return filePath;
+interface PreparedBuild {
+  /** Unique id for this build (32 hex chars) */
+  id: string;
+  /** Directory holding the project's sources */
+  dir: string;
+  /** Absolute path of the entry file */
+  entryPath: string;
+  /** Project-relative entry path, e.g. src/main.ts */
+  entry: string;
+  /** Readable base for output names, e.g. main */
+  base: string;
+}
+
+/**
+ * Write a project (or a single file) into its own build directory under
+ * TEMP_DIR. Paths were validated by parseCompileOptions; they are resolved
+ * again here so nothing can land outside the build directory.
+ */
+async function prepareBuild(options: CompileOptions): Promise<PreparedBuild> {
+  const sourceName = makeSourceFilename(options.filename);
+  const id = sourceName.slice(0, 32);
+  const dir = path.join(TEMP_DIR, id);
+
+  const files = options.files ?? { [displayName(sourceName)]: options.code };
+  const entry = options.files && options.entry ? options.entry : displayName(sourceName);
+
+  await fs.mkdir(dir, { recursive: true });
+  for (const [relative, content] of Object.entries(files)) {
+    if (!isValidProjectPath(relative) || !SOURCE_EXTENSIONS.test(relative)) continue;
+    const target = path.resolve(dir, relative);
+    if (!target.startsWith(dir + path.sep)) continue;
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(target, content, 'utf8');
+  }
+
+  const base = path.basename(entry).replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48) || 'main';
+  return { id, dir, entryPath: path.join(dir, entry), entry, base };
 }
 
 /** Name shown to the user for a generated source file (drops the unique id) */
 function displayName(filename: string): string {
-  return filename.replace(/^[0-9a-f]{32}-?/, '') || 'main.ts';
+  const rest = filename.replace(/^[0-9a-f]{32}-?/, '');
+  return rest && !rest.startsWith('.') ? rest : `main${rest || '.ts'}`;
 }
 
 /**
@@ -209,14 +310,15 @@ export function parseDiagnostics(output: string): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
   const lines = output.split(/\r?\n/);
   for (const line of lines) {
-    const match = /^(?:.*?):(\d+):(\d+) - (error|warning) (SC\d+): (.+)$/.exec(line);
+    const match = /^(.*?):(\d+):(\d+) - (error|warning) (SC\d+): (.+)$/.exec(line);
     if (match) {
       diagnostics.push({
-        line: Number(match[1]),
-        column: Number(match[2]),
-        severity: match[3] as Diagnostic['severity'],
-        code: match[4],
-        message: match[5].trim(),
+        ...(match[1] ? { file: match[1].trim() } : {}),
+        line: Number(match[2]),
+        column: Number(match[3]),
+        severity: match[4] as Diagnostic['severity'],
+        code: match[5],
+        message: match[6].trim(),
       });
       continue;
     }
@@ -251,11 +353,11 @@ export function parseCoverage(output: string): Omit<CoverageResult, 'success'> {
 }
 
 /** Strip server paths from toolchain output before returning it to clients */
-function sanitize(text: string | undefined, filename: string): string | undefined {
+function sanitize(text: string | undefined, build: PreparedBuild): string | undefined {
   if (!text) return text;
   const tempPrefix = TEMP_DIR.endsWith(path.sep) ? TEMP_DIR : TEMP_DIR + path.sep;
   return text
-    .split(tempPrefix + filename).join(displayName(filename))
+    .split(build.dir + path.sep).join('')
     .split(tempPrefix).join('');
 }
 
@@ -295,17 +397,17 @@ function scriptc(args: string[], env?: Record<string, string>) {
   });
 }
 
-function failure(error: unknown, filename: string): CompileResult {
+function failure(error: unknown, build: PreparedBuild): CompileResult {
   const err = error as ExecError;
-  const stderr = sanitize(err?.stderr, filename);
-  const stdout = sanitize(err?.stdout, filename);
+  const stderr = sanitize(err?.stderr, build);
+  const stdout = sanitize(err?.stdout, build);
   const diagnostics = parseDiagnostics(`${stderr ?? ''}\n${stdout ?? ''}`);
   const first = diagnostics.find(d => d.severity === 'error');
   let message = 'Compilation failed';
   if (err?.killed) {
     message = `Compilation timed out after ${EXEC_TIMEOUT_MS / 1000}s`;
   } else if (first) {
-    message = `${first.code}: ${first.message} (line ${first.line})`;
+    message = `${first.code}: ${first.message} (${first.file ? `${first.file}:` : 'line '}${first.line})`;
   } else {
     const firstLine = stderr?.split('\n').find(line => line.trim());
     if (firstLine) message = firstLine.trim().slice(0, 300);
@@ -373,7 +475,7 @@ function buildSpec(options: CompileOptions): BuildSpec {
 }
 
 /**
- * Compile TypeScript with scriptc
+ * Compile a file or project with scriptc
  */
 export async function compileTypeScript(options: CompileOptions): Promise<CompileResult> {
   if ((options.target || 'exe') === 'exe') {
@@ -382,38 +484,48 @@ export async function compileTypeScript(options: CompileOptions): Promise<Compil
   }
 
   const spec = buildSpec(options);
-  const filename = makeSourceFilename(options.filename);
+  const queuedAt = Date.now();
 
   return withBuildSlot(async () => {
+    const phases: BuildPhase[] = [{ name: 'queue', ms: Date.now() - queuedAt }];
+    let mark = Date.now();
+    const lap = (name: BuildPhase['name']) => {
+      const now = Date.now();
+      phases.push({ name, ms: now - mark });
+      mark = now;
+    };
+
+    const build = await prepareBuild(options);
+    lap('write');
     try {
-      const filePath = await writeTempFile(options.code, filename);
-      const outputFilename = withExtension(filename, spec.extension);
+      const outputFilename = `${build.id}-${build.base}${spec.extension}`;
       const outputPath = path.join(TEMP_DIR, outputFilename);
 
-      const started = Date.now();
-      const { stdout, stderr } = await scriptc(['build', filePath, '-o', outputPath, ...spec.args], spec.env);
-      const durationMs = Date.now() - started;
+      const { stdout, stderr } = await scriptc(['build', build.entryPath, '-o', outputPath, ...spec.args], spec.env);
+      lap('compile');
 
       const artifact = await fs.readFile(outputPath);
+      lap('package');
       return {
         success: true,
         output: spec.binary ? artifact.toString('base64') : artifact.toString('utf8'),
         filename: outputFilename,
         downloadUrl: downloadUrlFor(outputFilename),
         size: artifact.length,
-        durationMs,
-        stdout: sanitize(stdout, filename),
-        stderr: sanitize(stderr, filename),
-        diagnostics: parseDiagnostics(sanitize(stderr, filename) ?? ''),
+        durationMs: phases.slice(1).reduce((sum, phase) => sum + phase.ms, 0),
+        phases,
+        stdout: sanitize(stdout, build),
+        stderr: sanitize(stderr, build),
+        diagnostics: parseDiagnostics(sanitize(stderr, build) ?? ''),
       };
     } catch (error) {
+      lap('compile');
+      const result = failure(error, build);
+      result.phases = phases;
       if (options.target === 'wasm' && /spawnSync zig ENOENT/.test(String((error as ExecError)?.stderr))) {
-        return {
-          ...failure(error, filename),
-          error: 'WASM linking needs zig on the server PATH (scriptc uses it as the wasm32-wasi linker).',
-        };
+        result.error = 'WASM linking needs zig on the server PATH (scriptc uses it as the wasm32-wasi linker).';
       }
-      return failure(error, filename);
+      return result;
     }
   });
 }
@@ -422,18 +534,17 @@ export async function compileTypeScript(options: CompileOptions): Promise<Compil
  * Report how much of a program scriptc can compile statically, and what
  * blocks the rest (`scriptc coverage`).
  */
-export async function analyzeCoverage(options: Pick<CompileOptions, 'code' | 'filename'>): Promise<CoverageResult> {
-  const filename = makeSourceFilename(options.filename);
+export async function analyzeCoverage(options: Pick<CompileOptions, 'code' | 'filename' | 'files' | 'entry'>): Promise<CoverageResult> {
   return withBuildSlot(async () => {
+    const build = await prepareBuild(options);
     try {
-      const filePath = await writeTempFile(options.code, filename);
-      const { stdout, stderr } = await scriptc(['coverage', filePath]);
+      const { stdout, stderr } = await scriptc(['coverage', build.entryPath]);
       return { success: true, ...parseCoverage(`${stdout}\n${stderr}`) };
     } catch (error) {
       const err = error as ExecError;
       return {
         success: false,
-        error: err?.killed ? 'Analysis timed out' : sanitize(err?.stderr, filename)?.trim() || 'Analysis failed',
+        error: err?.killed ? 'Analysis timed out' : sanitize(err?.stderr, build)?.trim() || 'Analysis failed',
       };
     }
   });
@@ -447,23 +558,21 @@ export async function cleanupOldTempFiles(maxAgeMs: number = 60 * 60 * 1000): Pr
     const now = Date.now();
     const entries = await fs.readdir(TEMP_DIR, { withFileTypes: true });
     await Promise.all(
-      entries
-        .filter(entry => entry.isFile())
-        .map(async entry => {
-          const filePath = path.join(TEMP_DIR, entry.name);
-          try {
-            const stats = await fs.stat(filePath);
-            if (now - stats.mtimeMs > maxAgeMs) {
-              await fs.unlink(filePath);
-            }
-          } catch {
-            // File removed concurrently, ignore
+      entries.map(async entry => {
+        const entryPath = path.join(TEMP_DIR, entry.name);
+        try {
+          const stats = await fs.stat(entryPath);
+          if (now - stats.mtimeMs > maxAgeMs) {
+            await fs.rm(entryPath, { recursive: true, force: true });
           }
-        })
+        } catch {
+          // Removed concurrently, ignore
+        }
+      })
     );
   } catch {
     // TEMP_DIR doesn't exist yet, nothing to clean
   }
 }
 
-export type { CompileOptions, CompileResult, CoverageResult, Diagnostic };
+export type { BuildPhase, CompileOptions, CompileResult, CoverageResult, Diagnostic };

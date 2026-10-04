@@ -260,3 +260,185 @@ export async function updateRepoFile(
 }
 
 export type { GitHubTokenResponse, GitHubUser, GitHubRepo, GitHubContentItem, GitHubCommitResult };
+
+// ---------------------------------------------------------------------------
+// Git Data API: branches, whole-tree pulls and multi-file commits
+// ---------------------------------------------------------------------------
+
+interface GitHubBranch {
+  name: string;
+  sha: string;
+  protected: boolean;
+}
+
+/** Text files pulled from a repository, keyed by path */
+interface PulledTree {
+  ref: string;
+  /** Commit sha the files were read at (used to detect conflicting pushes) */
+  sha: string;
+  files: Record<string, string>;
+  /** Paths left out because they were binary, too large or over the file limit */
+  skipped: string[];
+}
+
+interface MultiFileCommitResult {
+  sha: string;
+  html_url: string;
+}
+
+export const MAX_PULL_FILES = 150;
+const MAX_PULL_FILE_SIZE = 256 * 1024;
+
+/** Git branch names we accept from clients */
+export function isValidBranchName(name: string): boolean {
+  return /^[A-Za-z0-9._/-]{1,100}$/.test(name) &&
+    !name.includes('..') && !name.startsWith('/') && !name.startsWith('-') &&
+    !name.endsWith('/') && !name.endsWith('.lock') && !name.includes('//');
+}
+
+function repoBase(owner: string, repo: string): string {
+  if (!isValidRepoName(owner) || !isValidRepoName(repo)) {
+    throw new Error('Invalid repository');
+  }
+  return `/repos/${owner}/${repo}`;
+}
+
+function encodeRef(ref: string): string {
+  if (!isValidBranchName(ref)) throw new Error('Invalid branch');
+  return ref.split('/').map(encodeURIComponent).join('/');
+}
+
+export async function getDefaultBranch(token: string, owner: string, repo: string): Promise<string> {
+  const info = await getGitHubClient(token).request<{ default_branch: string }>('GET', repoBase(owner, repo));
+  return info.default_branch;
+}
+
+export async function listBranches(token: string, owner: string, repo: string): Promise<GitHubBranch[]> {
+  const branches = await getGitHubClient(token).request<{ name: string; commit: { sha: string }; protected: boolean }[]>(
+    'GET',
+    `${repoBase(owner, repo)}/branches?per_page=100`
+  );
+  return branches.map(b => ({ name: b.name, sha: b.commit.sha, protected: b.protected }));
+}
+
+async function getBranchHead(token: string, owner: string, repo: string, branch: string): Promise<string> {
+  const ref = await getGitHubClient(token).request<{ object: { sha: string } }>(
+    'GET',
+    `${repoBase(owner, repo)}/git/ref/heads/${encodeRef(branch)}`
+  );
+  return ref.object.sha;
+}
+
+export async function createBranch(token: string, owner: string, repo: string, name: string, from: string): Promise<GitHubBranch> {
+  if (!isValidBranchName(name)) throw new Error('Invalid branch');
+  const sha = await getBranchHead(token, owner, repo, from);
+  await getGitHubClient(token).request('POST', `${repoBase(owner, repo)}/git/refs`, {
+    ref: `refs/heads/${name}`,
+    sha,
+  });
+  return { name, sha, protected: false };
+}
+
+/**
+ * Read every text file of a branch (up to MAX_PULL_FILES files of 256 KB).
+ */
+export async function pullTree(token: string, owner: string, repo: string, branch: string): Promise<PulledTree> {
+  const client = getGitHubClient(token);
+  const base = repoBase(owner, repo);
+  const sha = await getBranchHead(token, owner, repo, branch);
+  const commit = await client.request<{ tree: { sha: string } }>('GET', `${base}/git/commits/${sha}`);
+  const tree = await client.request<{ tree: { path: string; type: string; sha: string; size?: number }[]; truncated: boolean }>(
+    'GET',
+    `${base}/git/trees/${commit.tree.sha}?recursive=1`
+  );
+
+  const skipped: string[] = [];
+  const blobs = tree.tree.filter(entry => {
+    if (entry.type !== 'blob') return false;
+    if ((entry.size ?? 0) > MAX_PULL_FILE_SIZE) {
+      skipped.push(entry.path);
+      return false;
+    }
+    return true;
+  });
+  for (const extra of blobs.splice(MAX_PULL_FILES)) skipped.push(extra.path);
+
+  const files: Record<string, string> = {};
+  const queue = [...blobs];
+  const worker = async () => {
+    for (let entry = queue.shift(); entry; entry = queue.shift()) {
+      const blob = await client.request<{ content: string; encoding: string }>('GET', `${base}/git/blobs/${entry.sha}`);
+      const bytes = Buffer.from(blob.content, blob.encoding === 'base64' ? 'base64' : 'utf8');
+      if (bytes.includes(0)) {
+        skipped.push(entry.path);
+        continue;
+      }
+      files[entry.path] = bytes.toString('utf8');
+    }
+  };
+  await Promise.all(Array.from({ length: 8 }, worker));
+
+  return { ref: branch, sha, files, skipped: skipped.sort() };
+}
+
+/**
+ * Commit several file changes at once. `changes` maps path -> new content,
+ * or null to delete. When `expectedHead` is given and the branch has moved
+ * since, the commit is refused with a 409 so nobody's push is overwritten.
+ */
+export async function commitFiles(
+  token: string,
+  owner: string,
+  repo: string,
+  branch: string,
+  message: string,
+  changes: Record<string, string | null>,
+  expectedHead?: string
+): Promise<MultiFileCommitResult> {
+  const client = getGitHubClient(token);
+  const base = repoBase(owner, repo);
+  const head = await getBranchHead(token, owner, repo, branch);
+  if (expectedHead && expectedHead !== head) {
+    throw new GitHubApiError(409, 'Branch has new commits since your last pull');
+  }
+  const parent = await client.request<{ tree: { sha: string } }>('GET', `${base}/git/commits/${head}`);
+
+  const tree = await client.request<{ sha: string }>('POST', `${base}/git/trees`, {
+    base_tree: parent.tree.sha,
+    tree: Object.entries(changes).map(([filePath, content]) => {
+      encodeRepoPath(filePath); // rejects traversal segments
+      return content === null
+        ? { path: filePath, mode: '100644', type: 'blob', sha: null }
+        : { path: filePath, mode: '100644', type: 'blob', content };
+    }),
+  });
+  const commit = await client.request<{ sha: string; html_url: string }>('POST', `${base}/git/commits`, {
+    message,
+    tree: tree.sha,
+    parents: [head],
+  });
+  await client.request('PATCH', `${base}/git/refs/heads/${encodeRef(branch)}`, { sha: commit.sha });
+  return { sha: commit.sha, html_url: commit.html_url };
+}
+
+/**
+ * Create a secret gist from project files. Gist file names cannot contain
+ * '/', so nested paths are flattened with '__'.
+ */
+export async function createGist(
+  token: string,
+  description: string,
+  files: Record<string, string>
+): Promise<{ id: string; html_url: string }> {
+  const gistFiles: Record<string, { content: string }> = {};
+  for (const [filePath, content] of Object.entries(files)) {
+    if (content.trim()) gistFiles[filePath.replace(/\//g, '__')] = { content };
+  }
+  return getGitHubClient(token).request<{ id: string; html_url: string }>('POST', '/gists', {
+    description,
+    public: false,
+    files: gistFiles,
+  });
+}
+
+export type { GitHubBranch, PulledTree, MultiFileCommitResult };

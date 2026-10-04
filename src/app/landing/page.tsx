@@ -16,35 +16,35 @@ const STATS = [
 
 const FEATURES = [
   {
-    title: 'Ordinary TypeScript',
-    body: 'No annotations or dialect. Code is type-checked by the real TypeScript compiler, and what compiles behaves like Node.',
+    title: 'Run it in the tab',
+    body: 'The terminal compiles your project to WebAssembly and executes it in a worker — with your files mounted and output streaming live.',
   },
   {
-    title: 'Native or WebAssembly',
-    body: 'Emit a standalone executable, a WASI Preview 1 module, LLVM IR or assembly from the same source.',
+    title: 'Real projects',
+    body: 'A file tree with folders, relative imports between files, split editors and an import graph that flags cycles and dead files.',
+  },
+  {
+    title: 'Git without leaving',
+    body: 'Pull a branch, review every change as a side-by-side diff, create branches and push multi-file commits that never overwrite a teammate.',
+  },
+  {
+    title: 'An assistant that knows scriptc',
+    body: 'Claude reads your project and the compiler’s errors, explains code, fixes builds and writes tests you can apply in one click.',
   },
   {
     title: 'Errors where you type',
-    body: 'scriptc diagnostics — code, location and rewrite hint — are drawn inline in the editor after every build.',
+    body: 'scriptc diagnostics land inline with a rewrite hint. Coverage analysis shows what compiles statically and what blocks the rest.',
   },
   {
-    title: 'Coverage analysis',
-    body: 'See what percentage of a program compiles statically and exactly which constructs block the rest.',
-  },
-  {
-    title: 'GitHub in the loop',
-    body: 'Browse your repositories, open a file, and commit changes back without leaving the studio.',
-  },
-  {
-    title: 'Live collaboration',
-    body: 'Share a link and edit together over WebSockets, with origin checks and server-assigned identities.',
+    title: 'Yours to shape',
+    body: 'Command palette, remappable shortcuts, Prettier on save, version history, zen mode, light and high-contrast themes.',
   },
 ];
 
 const STEPS = [
-  { title: 'Write', body: 'Start from a template or paste a script. The editor speaks TypeScript.' },
-  { title: 'Compile', body: 'Pick native or WASM and press ⌘↵. scriptc builds it on the server in about a second.' },
-  { title: 'Ship', body: 'Download one file. Copy it to a server, a container or a USB stick — it just runs.' },
+  { title: 'Write', body: 'Start from a template or import a repository. IntelliSense resolves imports across your files.' },
+  { title: 'Run', body: 'Type run in the terminal. Your program executes as WASM right here, reading and writing project files.' },
+  { title: 'Ship', body: 'Press ⌘↵ for a native executable. Download one file — it runs with no runtime installed.' },
 ];
 
 const FAQ = [
@@ -68,7 +68,7 @@ const FAQ = [
 
 function CodeWindow() {
   return (
-    <div className="surface overflow-hidden text-left shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_30px_80px_-20px_rgba(59,140,255,0.25)]">
+    <div className="glass overflow-hidden rounded-3xl text-left">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3">
         <span className="h-2.5 w-2.5 rounded-full bg-gray-700" />
         <span className="h-2.5 w-2.5 rounded-full bg-gray-700" />
@@ -76,15 +76,15 @@ function CodeWindow() {
         <span className="ml-3 font-mono text-xs text-gray-500">hello.ts</span>
       </div>
       <pre className="overflow-x-auto px-5 py-4 font-mono text-[13px] leading-6 text-gray-300">
-        <span className="text-[#ff7ab2]">const</span> name = process.argv[<span className="text-[#79c0ff]">2</span>] ?? <span className="text-[#7ee787]">&apos;World&apos;</span>;{'\n'}
-        console.log(<span className="text-[#7ee787]">{'`Hello, ${name}!`'}</span>);
+        <span className="font-semibold text-gray-50">const</span> name = process.argv[<span className="text-gray-200">2</span>] ?? <span className="text-gray-400">&apos;World&apos;</span>;{'\n'}
+        console.log(<span className="text-gray-400">{'`Hello, ${name}!`'}</span>);
       </pre>
-      <div className="border-t border-border bg-black px-5 py-4 font-mono text-[13px] leading-6">
+      <div className="border-t border-border px-5 py-4 font-mono text-[13px] leading-6">
         <div><span className="text-gray-500">$</span> <span className="text-gray-100">scriptc build hello.ts -o hello --strip</span></div>
         <div><span className="text-gray-500">$</span> <span className="text-gray-100">ls -lh hello</span></div>
         <div className="text-gray-400">-rwxr-xr-x  55K  hello</div>
         <div><span className="text-gray-500">$</span> <span className="text-gray-100">./hello Vercel</span></div>
-        <div className="text-success">Hello, Vercel!</div>
+        <div className="text-gray-50">Hello, Vercel!</div>
       </div>
     </div>
   );
@@ -93,30 +93,32 @@ function CodeWindow() {
 export default function LandingPage() {
   return (
     <div className="app-bg min-h-screen">
-      <SiteHeader active="/landing">
+      <SiteHeader active="/landing" byteField="hero">
         <Link href="/" className="btn btn-primary btn-sm">Open editor</Link>
       </SiteHeader>
 
       {/* Hero */}
-      <section className="mx-auto max-w-6xl px-4 pt-20 pb-16 md:pt-28">
-        <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_1fr]">
-          <div className="animate-fade-in">
-            <a href="https://scriptc.dev" className="badge mb-6 hover:text-gray-100 transition-colors">
-              <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-              Powered by scriptc from Vercel Labs
-            </a>
-            <h1 className="text-5xl font-semibold leading-[1.05] tracking-tight md:text-6xl">
-              <span className="text-gradient">TypeScript in.</span>
-              <br />
-              <span className="text-gray-100">Native binary out.</span>
-            </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-gray-400">
-              NanoCLI Studio is a browser IDE for building command-line tools. Write ordinary TypeScript,
-              compile it with scriptc, and download a single executable — no Node.js required to run it.
+      <section id="main" className="relative mx-auto max-w-6xl px-4 pt-20 pb-16 md:pt-28">
+        {/* Soft vignette so the headline reads over the byte field */}
+        <div aria-hidden="true" className="pointer-events-none absolute -inset-x-40 -top-10 bottom-0 -z-10 bg-[radial-gradient(60%_55%_at_35%_40%,var(--color-black)_35%,transparent_100%)] opacity-90" />
+        <a href="https://scriptc.dev" className="badge mb-8 hover:text-gray-100 transition-colors animate-fade-in">
+          <span className="dot" aria-hidden="true" />
+          Compiled by scriptc from Vercel Labs
+        </a>
+        <h1 className="display text-[clamp(2.75rem,8.5vw,6.5rem)] text-gray-100 animate-fade-in">
+          TYPESCRIPT IN.
+          <br />
+          <span className="text-gradient">BINARY OUT.</span>
+        </h1>
+        <div className="mt-10 grid items-start gap-10 lg:grid-cols-[1fr_1.05fr]">
+          <div>
+            <p className="max-w-xl text-lg leading-relaxed text-gray-300">
+              The bytes drifting behind this page are a real program, compiled by scriptc. NanoCLI Studio is the
+              browser workspace that makes them: write TypeScript, run it in the tab, ship one native file.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/" className="btn btn-primary h-11 px-5 text-[15px]">Start building</Link>
-              <Link href="/studio" className="btn btn-secondary h-11 px-5 text-[15px]">Open the studio</Link>
+              <Link href="/" className="btn btn-primary h-11 px-6 text-[15px]">Open the workspace</Link>
+              <Link href="/?template=modular-cli" className="btn btn-secondary h-11 px-6 text-[15px]">Try a multi-file CLI</Link>
             </div>
           </div>
           <CodeWindow />
@@ -125,9 +127,9 @@ export default function LandingPage() {
 
       {/* Stats */}
       <section className="mx-auto max-w-6xl px-4">
-        <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border lg:grid-cols-4">
-          {STATS.map((stat) => (
-            <div key={stat.label} className="bg-black p-6">
+        <dl className="glass grid grid-cols-2 overflow-hidden rounded-3xl lg:grid-cols-4">
+          {STATS.map((stat, i) => (
+            <div key={stat.label} className={`p-6 ${i ? 'border-l border-border' : ''}`}>
               <dt className="text-sm text-gray-400">{stat.label}</dt>
               <dd className="mt-2 font-mono text-3xl tracking-tight text-gray-100">{stat.value}</dd>
               <dd className="mt-1 text-xs text-gray-500">{stat.detail}</dd>
@@ -145,9 +147,9 @@ export default function LandingPage() {
             Everything between an idea and a binary.
           </h2>
         </div>
-        <div className="mt-12 grid gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-12 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {FEATURES.map((feature) => (
-            <div key={feature.title} className="bg-black p-6 transition-colors hover:bg-gray-900">
+            <div key={feature.title} className="surface p-6 transition-colors hover:bg-white/[0.07]">
               <h3 className="font-medium text-gray-100">{feature.title}</h3>
               <p className="mt-2 text-sm leading-relaxed text-gray-400">{feature.body}</p>
             </div>
@@ -216,10 +218,10 @@ export default function LandingPage() {
       {/* CTA */}
       <section className="mx-auto max-w-6xl px-4 pb-24">
         <div className="surface relative overflow-hidden px-6 py-14 text-center">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(40rem_16rem_at_50%_0%,rgba(59,140,255,0.18),transparent)]" />
-          <h2 className="relative text-3xl font-semibold tracking-tight md:text-4xl">Build your first binary in a minute.</h2>
-          <p className="relative mt-3 text-gray-400">No sign-up needed. Open the editor and press ⌘↵.</p>
-          <Link href="/" className="btn btn-primary relative mt-8 h-11 px-6 text-[15px]">Open the editor</Link>
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(40rem_16rem_at_50%_0%,rgba(255,255,255,0.08),transparent)]" />
+          <h2 className="display relative text-4xl text-gray-100 md:text-5xl">YOUR FIRST BINARY, IN A MINUTE.</h2>
+          <p className="relative mt-4 text-gray-400">No sign-up needed. Open the workspace and type run.</p>
+          <Link href="/" className="btn btn-primary relative mt-8 h-11 px-6 text-[15px]">Open the workspace</Link>
         </div>
       </section>
 

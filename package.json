@@ -19,8 +19,12 @@
     "docker:down": "docker-compose down"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@bjorn3/browser_wasi_shim": "^0.4.2",
     "@scriptc/runtime-wasm32-wasi": "^0.2.2",
+    "fflate": "^0.8.3",
     "next": "^16.3.8",
+    "prettier": "^3.9.9",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "scriptc": "^0.2.2",
@@ -52,5 +56,5 @@
     "zero-runtime"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "UNLICENSED"
 }

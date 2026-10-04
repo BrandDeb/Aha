@@ -16,7 +16,7 @@ export async function GET() {
   const githubAuthUrl = new URL('https://github.com/login/oauth/authorize');
   githubAuthUrl.searchParams.set('client_id', process.env.GITHUB_CLIENT_ID);
   githubAuthUrl.searchParams.set('redirect_uri', redirectUri);
-  githubAuthUrl.searchParams.set('scope', 'repo read:user');
+  githubAuthUrl.searchParams.set('scope', 'repo read:user gist');
   githubAuthUrl.searchParams.set('state', state);
   githubAuthUrl.searchParams.set('allow_signup', 'true');
   

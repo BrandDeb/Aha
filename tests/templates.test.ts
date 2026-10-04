@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { DEFAULT_CODE, TEMPLATES } from '../src/lib/templates.ts';
+import { DEFAULT_CODE, TEMPLATES, templateFiles } from '../src/lib/templates.ts';
 
 const SCRIPTC = path.join(process.cwd(), 'node_modules', '.bin', process.platform === 'win32' ? 'scriptc.cmd' : 'scriptc');
 
@@ -42,11 +42,30 @@ test('the default editor program compiles and runs', { skip }, () => {
   assert.equal(run(build('default', DEFAULT_CODE), ['scriptc']), 'Hello, scriptc!\n3 + 5 = 8');
 });
 
+function buildProject(name: string, files: Record<string, string>, entry: string): string {
+  const root = path.join(dir, `${name}-src`);
+  for (const [file, content] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    writeFileSync(path.join(root, file), content);
+  }
+  const binary = path.join(dir, name);
+  execFileSync(SCRIPTC, ['build', path.join(root, entry), '-o', binary], { stdio: 'pipe', timeout: 120_000 });
+  return binary;
+}
+
 for (const template of TEMPLATES) {
   test(`template "${template.name}" compiles with scriptc`, { skip }, () => {
-    build(template.id, template.code);
+    const { files, entry } = templateFiles(template);
+    buildProject(template.id, files, entry);
   });
 }
+
+test('the modular template runs and parses its arguments', { skip }, () => {
+  const out = run(path.join(dir, 'modular-cli'), ['Ada', '--shout', '--repeat', '2']);
+  assert.match(out, /│ HELLO, ADA! │/);
+  assert.match(out, /repeat  2/);
+  assert.match(run(path.join(dir, 'modular-cli'), ['--help']), /^Usage: greet/);
+});
 
 test('compiled templates behave correctly', { skip }, () => {
   const calc = path.join(dir, 'calculator');

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
   MAX_CODE_SIZE,
+  isValidProjectPath,
   TEMP_DIR,
   analyzeCoverage,
   compileTypeScript,
@@ -93,8 +94,8 @@ test('parseDiagnostics extracts location, code and hint', () => {
     'app.ts:8:3 - error SC1090: assignment to non-variables are not supported yet',
   ].join('\n');
   assert.deepEqual(parseDiagnostics(output), [
-    { line: 7, column: 1, severity: 'error', code: 'SC2020', message: "'eval' has no scriptc lowering yet", hint: 'runtime code evaluation cannot be compiled ahead of time' },
-    { line: 8, column: 3, severity: 'error', code: 'SC1090', message: 'assignment to non-variables are not supported yet' },
+    { file: 'app.ts', line: 7, column: 1, severity: 'error', code: 'SC2020', message: "'eval' has no scriptc lowering yet", hint: 'runtime code evaluation cannot be compiled ahead of time' },
+    { file: 'app.ts', line: 8, column: 3, severity: 'error', code: 'SC1090', message: 'assignment to non-variables are not supported yet' },
   ]);
 });
 
@@ -139,7 +140,8 @@ test('compileTypeScript builds native, LLVM and assembly output', { skip: script
 test('compileTypeScript reports diagnostics without leaking server paths', { skip: scriptcMissing }, async () => {
   const result = await compileTypeScript({ code: 'const x = 1;\neval("1");\n', filename: 'bad.ts' });
   assert.equal(result.success, false);
-  assert.match(result.error ?? '', /^SC2020: .* \(line 2\)$/);
+  assert.match(result.error ?? '', /^SC2020: .* \(bad\.ts:2\)$/);
+  assert.equal(result.diagnostics?.[0]?.file, 'bad.ts');
   assert.equal(result.diagnostics?.[0]?.line, 2);
   assert.ok(!(result.stderr ?? '').includes(TEMP_DIR), 'stderr should not contain the temp directory');
   assert.match(result.stderr ?? '', /bad\.ts:2:1/);
@@ -157,4 +159,53 @@ test('concurrent builds all complete under the concurrency cap', { skip: scriptc
     Array.from({ length: 5 }, (_, i) => compileTypeScript({ code: `console.log(${i});\n`, target: 'llvm' }))
   );
   assert.ok(results.every(r => r.success), results.map(r => r.error).join(', '));
+});
+
+test('isValidProjectPath allows nested relative paths only', () => {
+  for (const ok of ['main.ts', 'src/main.ts', 'src/lib/format.ts', 'data_1.json', 'a-b/c.d.ts']) {
+    assert.ok(isValidProjectPath(ok), ok);
+  }
+  for (const bad of ['../x.ts', 'src/../../x.ts', '/etc/passwd', '.env', 'src/.git/config', 'a//b.ts', 'a\\b.ts', '', 'a b.ts', 'src/']) {
+    assert.equal(isValidProjectPath(bad), false, bad);
+  }
+});
+
+test('parseCompileOptions validates multi-file projects', () => {
+  const ok = parseCompileOptions({ files: { 'src/main.ts': 'x', 'src/a.ts': 'y' }, entry: 'src/main.ts' });
+  assert.ok(!('error' in ok) && ok.code === 'x' && ok.entry === 'src/main.ts');
+  assert.ok('error' in parseCompileOptions({ files: { '../evil.ts': 'x' }, entry: '../evil.ts' }));
+  assert.ok('error' in parseCompileOptions({ files: { 'a.ts': 'x' }, entry: 'b.ts' }));
+  assert.ok('error' in parseCompileOptions({ files: { 'a.json': '{}' }, entry: 'a.json' }));
+  assert.ok('error' in parseCompileOptions({ files: { 'a.ts': 5 }, entry: 'a.ts' }));
+  assert.ok('error' in parseCompileOptions({ files: [], entry: 'a.ts' }));
+});
+
+test('compileTypeScript builds a multi-file project with relative imports', { skip: scriptcMissing }, async () => {
+  const result = await compileTypeScript({
+    code: '',
+    entry: 'src/main.ts',
+    files: {
+      'src/main.ts': "import { greet } from './lib/greet';\nconsole.log(greet('multi'));\n",
+      'src/lib/greet.ts': 'export function greet(name: string): string { return `hello ${name}`; }\n',
+      'README.md': 'ignored',
+    },
+  });
+  assert.equal(result.success, true, result.error);
+  assert.match(result.filename ?? '', /^[0-9a-f]{32}-main$/);
+  assert.equal(execFileSync(path.join(TEMP_DIR, result.filename!), { encoding: 'utf8' }), 'hello multi\n');
+  assert.deepEqual(result.phases?.map(p => p.name), ['queue', 'write', 'compile', 'package']);
+});
+
+test('diagnostics point at the file that failed in a project', { skip: scriptcMissing }, async () => {
+  const result = await compileTypeScript({
+    code: '',
+    entry: 'src/main.ts',
+    files: {
+      'src/main.ts': "import { run } from './bad';\nrun();\n",
+      'src/bad.ts': 'export function run(): void {\n  eval("1");\n}\n',
+    },
+  });
+  assert.equal(result.success, false);
+  assert.equal(result.diagnostics?.[0]?.file, 'src/bad.ts');
+  assert.equal(result.diagnostics?.[0]?.line, 2);
 });

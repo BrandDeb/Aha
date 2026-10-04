@@ -11,8 +11,18 @@ export interface Template {
   id: string;
   name: string;
   description: string;
+  /** Entry file */
   filename: string;
+  /** Entry file content */
   code: string;
+  /** Additional project files (path -> content) for multi-file templates */
+  files?: Record<string, string>;
+}
+
+/** All files of a template as a project, entry under src/ */
+export function templateFiles(template: Template): { files: Record<string, string>; entry: string } {
+  const entry = template.filename.includes('/') ? template.filename : `src/${template.filename}`;
+  return { files: { [entry]: template.code, ...template.files }, entry };
 }
 
 export const DEFAULT_CODE = `// NanoCLI Studio — write TypeScript, get a native binary.
@@ -31,6 +41,80 @@ console.log(\`3 + 5 = \${add(3, 5)}\`);
 `;
 
 export const TEMPLATES: Template[] = [
+  {
+    id: 'modular-cli',
+    name: 'Modular CLI',
+    description: 'A multi-file tool: argument parsing, formatting and a help screen',
+    filename: 'src/main.ts',
+    code: `import { parseArgs, HELP } from './args';
+import { banner, table } from './lib/format';
+
+const options = parseArgs(process.argv.slice(2));
+
+if (options.help) {
+  console.log(HELP);
+  process.exit(0);
+}
+
+const greeting = \`Hello, \${options.name}!\`;
+console.log(banner(options.shout ? greeting.toUpperCase() : greeting));
+console.log(table([
+  ['name', options.name],
+  ['shout', String(options.shout)],
+  ['repeat', String(options.repeat)],
+]));
+
+for (let i = 1; i < options.repeat; i++) {
+  console.log(greeting);
+}
+`,
+    files: {
+      'src/args.ts': `export interface Options {
+  name: string;
+  shout: boolean;
+  repeat: number;
+  help: boolean;
+}
+
+export const HELP = \`Usage: greet [name] [--shout] [--repeat N]
+
+Options:
+  --shout       Print the greeting in capitals
+  --repeat N    Print the greeting N times (default 1)
+  --help        Show this help\`;
+
+export function parseArgs(argv: string[]): Options {
+  const options: Options = { name: 'World', shout: false, repeat: 1, help: false };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === '--shout') options.shout = true;
+    else if (arg === '--help' || arg === '-h') options.help = true;
+    else if (arg === '--repeat') options.repeat = Math.max(1, Number(argv[++i] ?? '1') || 1);
+    else if (!arg.startsWith('-')) options.name = arg;
+  }
+  return options;
+}
+`,
+      'src/lib/format.ts': `export function banner(text: string): string {
+  const line = '─'.repeat(text.length + 2);
+  return \`┌\${line}┐\\n│ \${text} │\\n└\${line}┘\`;
+}
+
+export function table(rows: string[][]): string {
+  const width = Math.max(...rows.map((row) => row[0].length));
+  return rows.map(([key, value]) => \`\${key.padEnd(width)}  \${value}\`).join('\\n');
+}
+`,
+      'package.json': `{
+  "name": "greet",
+  "version": "0.1.0",
+  "description": "A multi-file scriptc CLI",
+  "bin": { "greet": "src/main.ts" },
+  "scripts": { "build": "scriptc build src/main.ts -o greet --strip" }
+}
+`,
+    },
+  },
   {
     id: 'hello',
     name: 'Hello World',
