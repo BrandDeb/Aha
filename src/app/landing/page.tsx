@@ -175,9 +175,9 @@ export default function LandingPage() {
               <div className="bg-gray-900 rounded-2xl p-6 font-mono text-sm overflow-x-auto">
                 <pre className="text-gray-300">
 <span className="text-purple-400">const</span> <span className="text-blue-400">args</span> = <span className="text-yellow-400">process.argv.slice</span>(<span className="text-green-400">2</span>);
-<span className="text-purple-400">const</span> <span className="text-blue-400">name</span> = <span className="text-blue-400">args</span>[<span className="text-green-400">0</span>] || <span className="text-green-400">'World'</span>;
+<span className="text-purple-400">const</span> <span className="text-blue-400">name</span> = <span className="text-blue-400">args</span>[<span className="text-green-400">0</span>] || <span className="text-green-400">&apos;World&apos;</span>;
 
-					<span className="text-yellow-400">console.log</span>(<span className="text-green-400">"Hello, "</span><span className="text-orange-400">+ name +</span><span className="text-green-400">"!"</span>);
+					<span className="text-yellow-400">console.log</span>(<span className="text-green-400">&quot;Hello, &quot;</span><span className="text-orange-400">+ name +</span><span className="text-green-400">&quot;!&quot;</span>);
                 </pre>
               </div>
               <button className="mt-6 w-full py-3 bg-purple-600/20 hover:bg-purple-600/30 rounded-xl font-medium transition-colors border border-purple-600/30" onClick={() => {}}>

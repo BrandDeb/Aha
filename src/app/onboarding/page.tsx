@@ -13,7 +13,6 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -192,7 +191,7 @@ export default function OnboardingPage() {
               <button
                 key={index}
                 onClick={() => {
-                  setFormData({ ...formData, template: template.name as any });
+                  setFormData({ ...formData, template: template.name });
                   setCurrentStep(4);
                 }}
                 className="bg-gray-800/50 rounded-xl p-6 border border-gray-700 hover:bg-gray-800 hover:border-gray-600 transition-all text-left"

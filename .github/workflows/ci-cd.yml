@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
   NEXT_PUBLIC_BASE_URL: 'http://localhost:3000'
 
 jobs:
@@ -32,7 +32,7 @@ jobs:
         run: npm run lint
 
       - name: TypeScript type check
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Run Next.js build
         run: npm run build

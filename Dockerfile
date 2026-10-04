@@ -2,7 +2,7 @@
 # Multi-stage build for production deployment
 
 # Stage 1: Build the Next.js application
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -12,8 +12,8 @@ RUN apk add --no-cache python3 make g++ clang llvm musl-dev git
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies (dev deps are needed for the build and for scriptc at runtime)
+RUN npm ci
 
 # Copy source files
 COPY . .
@@ -22,7 +22,7 @@ COPY . .
 RUN npm run build
 
 # Stage 2: Production image
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 

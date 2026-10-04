@@ -34,7 +34,6 @@ export async function compileTypeScriptBrowser(options: CompileOptions): Promise
   try {
     const filename = options.filename || generateSecureId() + '.ts';
     const target = options.target || 'exe';
-    const platform = options.platform || 'linux';
     
     // Simulate compilation delay
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -67,13 +66,14 @@ export async function compileTypeScriptBrowser(options: CompileOptions): Promise
       success: true,
       output: `// Simulated ${target} output for ${filename}\n// This would be actual compiled code in production\n`,
       filename,
-      downloadUrl: `/api/download/${filename.replace('.ts', '')}`,
+      downloadUrl: `/api/download/${encodeURIComponent(filename.replace(/\.ts$/, ''))}`,
     };
-  } catch (error: any) {
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
     return {
       success: false,
-      error: error.message || 'Compilation failed',
-      stderr: error.stack,
+      error: err.message || 'Compilation failed',
+      stderr: err.stack,
     };
   }
 }

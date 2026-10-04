@@ -15,9 +15,26 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
-import { compileTypeScriptBrowser } from '@/lib/compiler-browser';
+import { compileTypeScriptBrowser, type CompileResult } from '@/lib/compiler-browser';
 import { WebSocketManager } from '@/lib/websocket';
+import type {
+  CollaboratorInfo,
+  CompilePlatform,
+  CompileTarget,
+  GitHubRepoInfo,
+  GitHubRepoItem,
+  GitHubUserInfo,
+} from '@/types';
+
+// Load Monaco Editor dynamically
+const Editor = dynamic(
+  () => import('@monaco-editor/react').then((mod) => mod.default),
+  { ssr: false, loading: () => <div className="loading">Loading editor...</div> }
+);
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 // File type for project explorer
 interface FileNode {
@@ -39,8 +56,13 @@ interface Template {
   code: string;
 }
 
+// The GitHub file the editor content was loaded from (or will be saved to)
+interface LinkedRepoFile {
+  path: string;
+  sha?: string;
+}
+
 export default function StudioPage() {
-  const router = useRouter();
   const [code, setCode] = useState<string>(`// NanoCLI Studio - Studio Edition
 // Write TypeScript, Get Native Binaries
 
@@ -61,10 +83,10 @@ console.log(\`3 + 5 = \${result}\`);
 module.exports = { add };`);
 
   const [filename, setFilename] = useState<string>('app.ts');
-  const [target, setTarget] = useState<'exe' | 'c' | 'llvm' | 'wasm'>('exe');
-  const [platform, setPlatform] = useState<'linux' | 'macos' | 'windows'>('linux');
+  const [target, setTarget] = useState<CompileTarget>('exe');
+  const [platform, setPlatform] = useState<CompilePlatform>('linux');
   const [isCompiling, setIsCompiling] = useState<boolean>(false);
-  const [compileResult, setCompileResult] = useState<any>(null);
+  const [compileResult, setCompileResult] = useState<CompileResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [output, setOutput] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'editor' | 'output' | 'console' | 'terminal'>('editor');
@@ -76,13 +98,19 @@ module.exports = { add };`);
   const [shareUrl, setShareUrl] = useState<string>('');
   const [showTemplates, setShowTemplates] = useState<boolean>(false);
   const [showGitHubModal, setShowGitHubModal] = useState<boolean>(false);
-  const [githubUser, setGithubUser] = useState<any>(null);
-  const [githubRepos, setGithubRepos] = useState<any[]>([]);
+  const [githubUser, setGithubUser] = useState<GitHubUserInfo | null>(null);
+  const [githubRepos, setGithubRepos] = useState<GitHubRepoInfo[]>([]);
   const [showRepoBrowser, setShowRepoBrowser] = useState<boolean>(false);
-  const [selectedRepo, setSelectedRepo] = useState<any>(null);
-  const [repoFiles, setRepoFiles] = useState<any[]>([]);
+  const [selectedRepo, setSelectedRepo] = useState<GitHubRepoInfo | null>(null);
+  const [repoPath, setRepoPath] = useState<string>('');
+  const [repoFiles, setRepoFiles] = useState<GitHubRepoItem[]>([]);
+  const [repoLoading, setRepoLoading] = useState<boolean>(false);
+  const [repoError, setRepoError] = useState<string | null>(null);
+  const [linkedFile, setLinkedFile] = useState<LinkedRepoFile | null>(null);
+  const [commitMessage, setCommitMessage] = useState<string>('');
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [showCollaboration, setShowCollaboration] = useState<boolean>(false);
-  const [collaborators, setCollaborators] = useState<any[]>([]);
+  const [collaborators, setCollaborators] = useState<CollaboratorInfo[]>([]);
   const [gitStatus, setGitStatus] = useState<{modified: string[], untracked: string[]}>({ modified: [], untracked: [] });
 
   // Live Terminal Emulator State
@@ -100,15 +128,9 @@ module.exports = { add };`);
   const [newFileType, setNewFileType] = useState<'file' | 'folder'>('file');
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
-  const clientId = useRef<string>(crypto.randomUUID()).current;
-  const projectId = useRef<string>(crypto.randomUUID()).current;
+  const [clientId] = useState(() => crypto.randomUUID());
+  const [projectId] = useState(() => crypto.randomUUID());
   const wsManager = useRef<WebSocketManager | null>(null);
-
-  // Load Monaco Editor dynamically
-  const Editor = dynamic(
-    () => import('@monaco-editor/react').then((mod) => mod.default),
-    { ssr: false, loading: () => <div className="loading">Loading editor...</div> }
-  );
 
   // Initialize WebSocket connection for collaboration
   useEffect(() => {
@@ -138,7 +160,7 @@ module.exports = { add };`);
         wsManager.current?.disconnect();
       };
     }
-  }, [showCollaboration]);
+  }, [showCollaboration, projectId, clientId]);
 
   // Check GitHub authentication status
   useEffect(() => {
@@ -150,51 +172,101 @@ module.exports = { add };`);
           // Load user repos
           fetch('/api/github/repos')
             .then(res => res.json())
-            .then(repos => setGithubRepos(repos || []))
+            .then(data => setGithubRepos(Array.isArray(data.repos) ? data.repos : []))
             .catch(console.error);
         }
       })
       .catch(console.error);
   }, []);
 
-  // Load repo files
+  // Add message to console
   const addConsoleMessage = useCallback((message: string) => {
     setConsoleMessages(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
   }, []);
-  const loadRepoFiles = useCallback(async (repo: any) => {
+
+  // Load a directory listing from a repo
+  const loadRepoFiles = useCallback(async (repo: GitHubRepoInfo, dirPath: string = '') => {
     setSelectedRepo(repo);
+    setRepoPath(dirPath);
+    setRepoLoading(true);
+    setRepoError(null);
+    setShowRepoBrowser(true);
     try {
-      const response = await fetch(`/api/github/repos/${repo.full_name}/contents`);
-      const files = await response.json();
-      setRepoFiles(files || []);
-      setShowRepoBrowser(true);
+      const query = dirPath ? `?path=${encodeURIComponent(dirPath)}` : '';
+      const response = await fetch(`/api/github/repos/${repo.full_name}/contents${query}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load repository');
+      }
+      setRepoFiles(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error('Error loading repo files:', err);
+      setRepoFiles([]);
+      setRepoError(errorMessage(err));
+    } finally {
+      setRepoLoading(false);
     }
   }, []);
 
   // Load file from repo
-  const loadFromRepo = useCallback(async (file: any) => {
+  const loadFromRepo = useCallback(async (file: GitHubRepoItem) => {
+    if (!selectedRepo) return;
     try {
-      const response = await fetch(file.download_url);
-      const content = await response.text();
-      setCode(content);
+      const response = await fetch(
+        `/api/github/repos/${selectedRepo.full_name}/file?path=${encodeURIComponent(file.path)}`
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load file');
+      }
+      setCode(data.content);
       setFilename(file.name);
+      setLinkedFile({ path: file.path, sha: data.sha });
       setShowRepoBrowser(false);
-      addConsoleMessage(`Loaded from GitHub: ${file.name}`);
+      addConsoleMessage(`Loaded from GitHub: ${selectedRepo.full_name}/${file.path}`);
     } catch (err) {
-      console.error('Error loading file:', err);
+      setRepoError(errorMessage(err));
     }
-  }, [addConsoleMessage]);
+  }, [selectedRepo, addConsoleMessage]);
 
-  // Save to GitHub (simplified - would need proper API integration)
+  // Commit the current editor content to the selected repository
   const saveToGitHub = useCallback(async () => {
     if (!githubUser || !selectedRepo) {
       addConsoleMessage('Please select a repository first');
+      setShowRepoBrowser(true);
       return;
     }
-    addConsoleMessage('GitHub integration: Save functionality would require proper GitHub API setup');
-  }, [githubUser, selectedRepo, addConsoleMessage]);
+
+    const targetPath = linkedFile?.path || (repoPath ? `${repoPath}/${filename}` : filename);
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/github/repos/${selectedRepo.full_name}/file`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: targetPath,
+          content: code,
+          message: commitMessage || undefined,
+          sha: linkedFile?.path === targetPath ? linkedFile.sha : undefined,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          response.status === 409 || response.status === 422
+            ? 'File changed on GitHub since it was loaded — reload it and try again'
+            : data.error || 'Failed to save file'
+        );
+      }
+      setLinkedFile({ path: targetPath, sha: data.sha });
+      setCommitMessage('');
+      setGitStatus({ modified: [], untracked: [] });
+      addConsoleMessage(`Committed ${targetPath} to ${selectedRepo.full_name} (${String(data.commit?.sha).slice(0, 7)})`);
+    } catch (err) {
+      addConsoleMessage(`GitHub save failed: ${errorMessage(err)}`);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [githubUser, selectedRepo, linkedFile, repoPath, filename, code, commitMessage, addConsoleMessage]);
 
   // Check git status (simulated)
   const checkGitStatus = useCallback(() => {
@@ -204,16 +276,6 @@ module.exports = { add };`);
       untracked: [],
     });
   }, [files]);
-
-  // Commit to git (simulated)
-  const commitToGit = useCallback(async () => {
-    if (gitStatus.modified.length === 0) {
-      addConsoleMessage('No changes to commit');
-      return;
-    }
-    addConsoleMessage(`Committed ${gitStatus.modified.length} files to git`);
-    setGitStatus({ modified: [], untracked: [] });
-  }, [gitStatus, addConsoleMessage]);
 
   // Terminal cursor blink effect
   useEffect(() => {
@@ -240,7 +302,7 @@ module.exports = { add };`);
   }, [code, files]);
 
   // Handle compilation
-  const handleCompile = useCallback(async () => {
+  const handleCompile = useCallback(async (): Promise<CompileResult | null> => {
     setIsCompiling(true);
     setError(null);
     setOutput('');
@@ -271,22 +333,22 @@ module.exports = { add };`);
           addConsoleMessage(result.stderr);
         }
       }
-    } catch (err: any) {
-      setError(err.message || 'Compilation error');
-      addConsoleMessage(`Error: ${err.message}`);
+      return result;
+    } catch (err) {
+      setError(errorMessage(err) || 'Compilation error');
+      addConsoleMessage(`Error: ${errorMessage(err)}`);
+      return null;
     } finally {
       setIsCompiling(false);
     }
-  }, [code, filename, target, platform]);
-
-  // Add message to console
+  }, [code, filename, target, platform, addConsoleMessage]);
 
   // Download compiled file
   const handleDownload = useCallback(async () => {
     if (!compileResult?.filename) return;
 
     try {
-      const response = await fetch(`/api/download/${compileResult.filename}`);
+      const response = await fetch(`/api/download/${encodeURIComponent(compileResult.filename)}`);
       if (!response.ok) {
         throw new Error('File not found');
       }
@@ -302,15 +364,16 @@ module.exports = { add };`);
       window.URL.revokeObjectURL(url);
 
       addConsoleMessage(`Downloaded: ${compileResult.filename}`);
-    } catch (err: any) {
-      setError(err.message);
-      addConsoleMessage(`Download error: ${err.message}`);
+    } catch (err) {
+      setError(errorMessage(err));
+      addConsoleMessage(`Download error: ${errorMessage(err)}`);
     }
   }, [compileResult, addConsoleMessage]);
 
   // Login with GitHub
   const handleGitHubLogin = useCallback(() => {
-    window.location.href = '/api/github/auth';
+    // Full-page navigation: the OAuth flow is a server redirect, not a client route
+    window.location.assign('/api/github/auth');
   }, []);
 
   // Logout from GitHub
@@ -343,24 +406,24 @@ module.exports = { add };`);
     setShowShareModal(true);
   }, [code, filename, target, platform, projectName]);
 
-  // Load from share URL
+  // Load from share URL (once, on mount — re-running would clobber edits)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const shareData = params.get('share');
     if (shareData) {
       try {
         const decoded = JSON.parse(decodeURIComponent(atob(shareData)));
-        setCode(decoded.code || code);
-        setFilename(decoded.filename || filename);
-        setTarget(decoded.target || target);
-        setPlatform(decoded.platform || platform);
-        setProjectName(decoded.projectName || projectName);
+        if (typeof decoded.code === 'string') setCode(decoded.code);
+        if (typeof decoded.filename === 'string') setFilename(decoded.filename);
+        if (['exe', 'c', 'llvm', 'wasm'].includes(decoded.target)) setTarget(decoded.target);
+        if (['linux', 'macos', 'windows'].includes(decoded.platform)) setPlatform(decoded.platform);
+        if (typeof decoded.projectName === 'string') setProjectName(decoded.projectName);
         addConsoleMessage('Loaded shared project');
       } catch (err) {
         console.error('Error loading share:', err);
       }
     }
-  }, [code, filename, target, platform, projectName, addConsoleMessage]);
+  }, [addConsoleMessage]);
 
   // Toggle dark mode
   const toggleDarkMode = useCallback(() => {
@@ -430,8 +493,8 @@ module.exports = { add };`);
       }
 
       if (command.toLowerCase() === 'compile') {
-        await handleCompile();
-        const result = compileResult?.success ? 'Compilation successful!' : compileResult?.error || 'Compilation failed';
+        const compiled = await handleCompile();
+        const result = compiled?.success ? 'Compilation successful!' : compiled?.error || 'Compilation failed';
         setTerminalHistory(prev => [
           ...prev.slice(0, -1),
           { input: `$ ${command}`, output: result },
@@ -460,10 +523,10 @@ module.exports = { add };`);
         ...prev.slice(0, -1),
         { input: `$ ${command}`, output: `Command not found: ${command.split(' ')[0]}\nTry 'help' for available commands` },
       ]);
-    } catch (err: any) {
+    } catch (err) {
       setTerminalHistory(prev => [
         ...prev.slice(0, -1),
-        { input: `$ ${command}`, output: `Error: ${err.message}` },
+        { input: `$ ${command}`, output: `Error: ${errorMessage(err)}` },
       ]);
     }
   }, [files, githubUser, compileResult, handleCompile]);
@@ -727,7 +790,7 @@ setTimeout(() => {
               onClick={toggleDarkMode}
               className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
             >
-              {isDarkMode ? '\u2600\ufe0f' : '\ud83c\udf19'}
+              {isDarkMode ? '☀️' : '🌙'}
             </button>
 
             {githubUser ? (
@@ -757,7 +820,7 @@ setTimeout(() => {
               onClick={() => setShowSettings(!showSettings)}
               className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition-colors"
             >
-              \u2699\ufe0f
+              ⚙️
             </button>
           </div>
         </div>
@@ -805,13 +868,13 @@ setTimeout(() => {
                 {files.map((file) => (
                   <div key={file.name} className="flex items-center justify-between p-1 rounded hover:bg-gray-700/50">
                     <button
-                      onClick={() => selectFile(file.name)}
+                      onClick={() => file.type === 'folder' ? toggleFolder(file.name) : selectFile(file.name)}
                       className="flex items-center gap-2 flex-1 text-left text-sm"
                     >
                       <span>
                         {file.type === 'folder' ? 
-                          (expandedFolders.has(file.name) ? '\u25bc' : '\u25b6') :
-                          '\u2192'}
+                          (expandedFolders.has(file.name) ? '▼' : '▶') :
+                          '→'}
                       </span>
                       <span className={selectedFile === file.name ? 'text-purple-400' : 'text-gray-300'}>
                         {file.name}
@@ -825,7 +888,7 @@ setTimeout(() => {
                         }}
                         className="p-1 rounded hover:bg-red-600/20 transition-colors"
                       >
-                        <span className="text-xs text-red-400">\u2715</span>
+                        <span className="text-xs text-red-400">✕</span>
                       </button>
                     )}
                   </div>
@@ -840,7 +903,7 @@ setTimeout(() => {
                 className="w-full flex items-center justify-between p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
               >
                 <span>Load Template</span>
-                <span>\u25bc</span>
+                <span>▼</span>
               </button>
 
               {showTemplates && (
@@ -866,7 +929,7 @@ setTimeout(() => {
                   className="w-full flex items-center justify-between p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors mb-2"
                 >
                   <span>Browse Repos</span>
-                  <span>\u25bc</span>
+                  <span>▼</span>
                 </button>
                 <button
                   onClick={checkGitStatus}
@@ -877,12 +940,24 @@ setTimeout(() => {
                     <span className="text-xs text-yellow-400">{gitStatus.modified.length} modified</span>
                   )}
                 </button>
+                <p className="text-xs text-gray-500 mb-2 truncate">
+                  {selectedRepo
+                    ? `${selectedRepo.full_name}/${linkedFile?.path || (repoPath ? `${repoPath}/${filename}` : filename)}`
+                    : 'No repository selected'}
+                </p>
+                <input
+                  type="text"
+                  value={commitMessage}
+                  onChange={(e) => setCommitMessage(e.target.value)}
+                  placeholder="Commit message (optional)"
+                  className="w-full p-2 mb-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white text-sm"
+                />
                 <button
-                  onClick={commitToGit}
-                  disabled={gitStatus.modified.length === 0}
+                  onClick={saveToGitHub}
+                  disabled={!selectedRepo || isSaving}
                   className="w-full p-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 rounded-lg text-sm font-medium transition-colors"
                 >
-                  Commit
+                  {isSaving ? 'Committing...' : 'Commit to GitHub'}
                 </button>
               </div>
             )}
@@ -895,7 +970,7 @@ setTimeout(() => {
                   disabled={isCompiling}
                   className="w-full flex items-center justify-center gap-2 p-3 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 rounded-lg font-medium transition-colors"
                 >
-                  <span>{isCompiling ? '\u23f3 Compiling...' : '\u25b6 Compile'}</span>
+                  <span>{isCompiling ? '⏳ Compiling...' : '▶ Compile'}</span>
                 </button>
 
                 <button
@@ -903,14 +978,14 @@ setTimeout(() => {
                   disabled={!compileResult?.filename}
                   className="w-full flex items-center justify-center gap-2 p-3 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-500 rounded-lg font-medium transition-colors"
                 >
-                  <span>\u2b07 Download</span>
+                  <span>⬇ Download</span>
                 </button>
 
                 <button
                   onClick={generateShareUrl}
                   className="w-full flex items-center justify-center gap-2 p-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
                 >
-                  <span>\ud83d\udd17 Share</span>
+                  <span>🔗 Share</span>
                 </button>
 
                 <button
@@ -921,7 +996,7 @@ setTimeout(() => {
                       : 'bg-gray-700 hover:bg-gray-600'
                   }`}
                 >
-                  <span>{showCollaboration ? '\ud83d\udc65 Collab On' : '\ud83d\udc65 Collab'}</span>
+                  <span>{showCollaboration ? '👥 Collab On' : '👥 Collab'}</span>
                 </button>
               </div>
             </div>
@@ -932,7 +1007,7 @@ setTimeout(() => {
               <div className="space-y-2">
                 <select
                   value={target}
-                  onChange={(e) => setTarget(e.target.value as any)}
+                  onChange={(e) => setTarget(e.target.value as CompileTarget)}
                   className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
                 >
                   <option value="exe">Native Binary</option>
@@ -943,7 +1018,7 @@ setTimeout(() => {
 
                 <select
                   value={platform}
-                  onChange={(e) => setPlatform(e.target.value as any)}
+                  onChange={(e) => setPlatform(e.target.value as CompilePlatform)}
                   className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
                 >
                   <option value="linux">Linux</option>
@@ -1114,7 +1189,7 @@ setTimeout(() => {
             {error && (
               <div className="bg-red-500/10 border border-red-500 rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-red-500">\u274c</span>
+                  <span className="text-red-500">❌</span>
                   <span className="font-semibold text-red-400">Compilation Error</span>
                 </div>
                 <pre className="text-sm text-red-300 whitespace-pre-wrap">{error}</pre>
@@ -1133,7 +1208,7 @@ setTimeout(() => {
               </div>
               <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700 text-center">
                 <div className="text-2xl font-bold text-green-400">
-                  {compileResult?.success ? '\u2713' : '\u2717'}
+                  {compileResult?.success ? '✓' : '✗'}
                 </div>
                 <div className="text-sm text-gray-400">Status</div>
               </div>
@@ -1245,7 +1320,7 @@ setTimeout(() => {
       )}
 
       {/* Repository Browser Modal */}
-      {showRepoBrowser && (
+      {showRepoBrowser && !selectedRepo && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-xl p-6 max-w-2xl w-full mx-4 border border-gray-700 max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
@@ -1254,21 +1329,25 @@ setTimeout(() => {
                 onClick={() => setShowRepoBrowser(false)}
                 className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
               >
-                \u2715
+                ✕
               </button>
             </div>
             
             <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {githubRepos.length === 0 && (
+                <p className="text-sm text-gray-500">No repositories found.</p>
+              )}
               {githubRepos.map((repo) => (
                 <div key={repo.id} className="p-3 bg-gray-700/50 rounded-lg hover:bg-gray-700 transition-colors">
                   <div className="flex items-center gap-3">
-                    <span className="text-yellow-400">\u25cf</span>
+                    <span className="text-yellow-400">●</span>
                     <button
                       onClick={() => loadRepoFiles(repo)}
                       className="flex-1 text-left font-medium"
                     >
                       {repo.name}
                     </button>
+                    {repo.private && <span className="text-xs text-gray-400">Private</span>}
                     <span className="text-xs text-gray-500">{repo.language}</span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1 pl-6">{repo.description || 'No description'}</p>
@@ -1280,39 +1359,73 @@ setTimeout(() => {
       )}
 
       {/* Repository Files Modal */}
-      {selectedRepo && showRepoBrowser && repoFiles.length > 0 && (
+      {showRepoBrowser && selectedRepo && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-xl p-6 max-w-2xl w-full mx-4 border border-gray-700 max-h-[80vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Files in {selectedRepo.name}</h3>
-              <button
-                onClick={() => {
-                  setSelectedRepo(null);
-                  setRepoFiles([]);
-                  setShowRepoBrowser(false);
-                }}
-                className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-              >
-                \u2715
-              </button>
+            <div className="flex justify-between items-center mb-4 gap-2">
+              <h3 className="text-lg font-semibold truncate">
+                {selectedRepo.full_name}{repoPath ? `/${repoPath}` : ''}
+              </h3>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={() => {
+                    setSelectedRepo(null);
+                    setRepoFiles([]);
+                    setRepoPath('');
+                    setRepoError(null);
+                  }}
+                  className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
+                >
+                  All repos
+                </button>
+                <button
+                  onClick={() => setShowRepoBrowser(false)}
+                  className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
+
+            {repoError && (
+              <p className="mb-3 text-sm text-red-400">{repoError}</p>
+            )}
             
             <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-              {repoFiles.map((file) => (
-                <div key={file.name} className="p-3 bg-gray-700/50 rounded-lg hover:bg-gray-700 transition-colors">
+              {repoPath && (
+                <button
+                  onClick={() => loadRepoFiles(selectedRepo, repoPath.split('/').slice(0, -1).join('/'))}
+                  className="w-full p-3 bg-gray-700/50 rounded-lg hover:bg-gray-700 transition-colors text-left text-gray-300"
+                >
+                  ↑ ..
+                </button>
+              )}
+              {repoLoading && <p className="text-sm text-gray-500">Loading...</p>}
+              {!repoLoading && !repoError && repoFiles.length === 0 && (
+                <p className="text-sm text-gray-500">This directory is empty. Commit the current file to create it here.</p>
+              )}
+              {!repoLoading && repoFiles.map((file) => (
+                <div key={file.path} className="p-3 bg-gray-700/50 rounded-lg hover:bg-gray-700 transition-colors">
                   <div className="flex items-center gap-3">
-                    <span className="text-blue-400">\u25cf</span>
+                    <span className={file.type === 'dir' ? 'text-yellow-400' : 'text-blue-400'}>
+                      {file.type === 'dir' ? '📁' : '📄'}
+                    </span>
                     <button
-                      onClick={() => loadFromRepo(file)}
-                      className="flex-1 text-left"
+                      onClick={() => file.type === 'dir' ? loadRepoFiles(selectedRepo, file.path) : loadFromRepo(file)}
+                      disabled={file.type !== 'dir' && file.type !== 'file'}
+                      className="flex-1 text-left disabled:text-gray-500"
                     >
                       {file.name}
                     </button>
-                    <span className="text-xs text-gray-500">{file.type === 'file' ? 'File' : 'Dir'}</span>
+                    <span className="text-xs text-gray-500">{file.type === 'dir' ? 'Dir' : 'File'}</span>
                   </div>
                 </div>
               ))}
             </div>
+
+            <p className="mt-4 text-xs text-gray-500">
+              Pick a file to open it, or close this dialog to commit the current file into this folder.
+            </p>
           </div>
         </div>
       )}
@@ -1320,7 +1433,7 @@ setTimeout(() => {
       {/* Footer */}
       <footer className="max-w-7xl mx-auto px-4 py-8 text-center text-sm text-gray-500">
         <p>
-          Built with \u2764\ufe0f using <a href="https://scriptc.dev" className="text-purple-400 hover:underline">scriptc</a> \u2022 
+          Built with ❤️ using <a href="https://scriptc.dev" className="text-purple-400 hover:underline">scriptc</a> • 
           <a href="https://github.com/BrandDeb/Aha" className="text-purple-400 hover:underline">GitHub</a>
         </p>
         <p className="mt-2">

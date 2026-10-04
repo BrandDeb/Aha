@@ -5,7 +5,7 @@
  * Comprehensive FAQ with search and filtering
  */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 
 interface FAQItem {

@@ -3,21 +3,26 @@
  * This file uses Node.js-specific modules and should only be imported on the server
  */
 
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+type Target = 'exe' | 'c' | 'llvm' | 'wasm';
+type Platform = 'linux' | 'macos' | 'windows';
+type Arch = 'x64' | 'arm64';
+type Optimization = 'none' | 'O1' | 'O2' | 'O3';
 
 interface CompileOptions {
   code: string;
   filename?: string;
-  target?: 'exe' | 'c' | 'llvm' | 'wasm';
-  platform?: 'linux' | 'macos' | 'windows';
-  arch?: 'x64' | 'arm64';
-  optimization?: 'none' | 'O1' | 'O2' | 'O3';
+  target?: Target;
+  platform?: Platform;
+  arch?: Arch;
+  optimization?: Optimization;
 }
 
 interface CompileResult {
@@ -31,235 +36,276 @@ interface CompileResult {
   downloadUrl?: string;
 }
 
-const TEMP_DIR = path.join(process.cwd(), 'temp');
+interface ExecError extends Error {
+  stdout?: string;
+  stderr?: string;
+}
+
+export const TEMP_DIR = path.join(process.cwd(), 'temp');
+
+/** Maximum accepted source size (bytes) */
+export const MAX_CODE_SIZE = 512 * 1024;
+
+/** Maximum time a single toolchain invocation may run */
+const EXEC_TIMEOUT_MS = 60_000;
+const EXEC_MAX_BUFFER = 10 * 1024 * 1024;
+
+const TARGETS: readonly Target[] = ['exe', 'c', 'llvm', 'wasm'];
+const PLATFORMS: readonly Platform[] = ['linux', 'macos', 'windows'];
+const ARCHES: readonly Arch[] = ['x64', 'arm64'];
+const OPTIMIZATIONS: readonly Optimization[] = ['none', 'O1', 'O2', 'O3'];
+
+function oneOf<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : undefined;
+}
 
 /**
- * Ensure temp directory exists
+ * Validate untrusted compile input. Unknown enum values are rejected rather
+ * than passed through to the toolchain.
  */
-async function ensureTempDir(): Promise<void> {
-  try {
-    await fs.access(TEMP_DIR);
-  } catch {
-    await fs.mkdir(TEMP_DIR, { recursive: true });
+export function parseCompileOptions(body: unknown): CompileOptions | { error: string } {
+  if (!body || typeof body !== 'object') {
+    return { error: 'Invalid request body' };
   }
+  const input = body as Record<string, unknown>;
+
+  if (typeof input.code !== 'string' || input.code.length === 0) {
+    return { error: 'Code is required' };
+  }
+  if (Buffer.byteLength(input.code, 'utf8') > MAX_CODE_SIZE) {
+    return { error: `Code exceeds maximum size of ${MAX_CODE_SIZE} bytes` };
+  }
+
+  const fields = [
+    ['target', TARGETS],
+    ['platform', PLATFORMS],
+    ['arch', ARCHES],
+    ['optimization', OPTIMIZATIONS],
+  ] as const;
+  for (const [key, allowed] of fields) {
+    if (input[key] !== undefined && !oneOf(input[key], allowed)) {
+      return { error: `Invalid ${key}` };
+    }
+  }
+
+  return {
+    code: input.code,
+    filename: typeof input.filename === 'string' ? input.filename : undefined,
+    target: oneOf(input.target, TARGETS),
+    platform: oneOf(input.platform, PLATFORMS),
+    arch: oneOf(input.arch, ARCHES),
+    optimization: oneOf(input.optimization, OPTIMIZATIONS),
+  };
 }
 
 /**
- * Generate a unique filename
+ * Build a unique, filesystem-safe source filename. The user-supplied name is
+ * only used as a readable suffix; directory components and unusual
+ * characters are stripped so it can never escape TEMP_DIR or collide with
+ * another user's build.
  */
-function generateFilename(extension: string = 'ts'): string {
-  return `${randomUUID().replace(/-/g, '')}.${extension}`;
+export function makeSourceFilename(requested?: string): string {
+  const id = randomUUID().replace(/-/g, '');
+  const base = path.basename(requested || '')
+    .replace(/\.ts$/i, '')
+    .replace(/[^A-Za-z0-9_-]/g, '')
+    .slice(0, 48);
+  return base ? `${id}-${base}.ts` : `${id}.ts`;
 }
 
 /**
- * Write code to a temporary file
+ * Resolve a filename inside TEMP_DIR, rejecting anything that is not a plain
+ * file name (no separators, no traversal, no hidden files).
  */
+export function resolveTempPath(filename: string): string | null {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(filename) || filename.includes('..')) {
+    return null;
+  }
+  const resolved = path.resolve(TEMP_DIR, filename);
+  if (path.dirname(resolved) !== path.resolve(TEMP_DIR)) {
+    return null;
+  }
+  return resolved;
+}
+
+function downloadUrlFor(filename: string): string {
+  return `/api/download/${encodeURIComponent(filename)}`;
+}
+
+function withExtension(filename: string, extension: string): string {
+  return filename.replace(/\.ts$/, extension);
+}
+
 async function writeTempFile(code: string, filename: string): Promise<string> {
-  await ensureTempDir();
+  await fs.mkdir(TEMP_DIR, { recursive: true });
   const filePath = path.join(TEMP_DIR, filename);
   await fs.writeFile(filePath, code, 'utf8');
   return filePath;
+}
+
+/** Run a toolchain binary with an argument vector (never through a shell). */
+function run(command: string, args: string[], env?: Record<string, string>) {
+  return execFileAsync(command, args, {
+    timeout: EXEC_TIMEOUT_MS,
+    maxBuffer: EXEC_MAX_BUFFER,
+    cwd: TEMP_DIR,
+    env: env ? { ...process.env, ...env } : process.env,
+  });
+}
+
+function scriptc(args: string[], env?: Record<string, string>) {
+  return run('npx', ['scriptc', ...args], env);
+}
+
+function failure(error: unknown): CompileResult {
+  const err = error as ExecError;
+  return {
+    success: false,
+    error: err?.message || 'Compilation failed',
+    stderr: err?.stderr,
+    stdout: err?.stdout,
+  };
+}
+
+function hostPlatform(): Platform {
+  if (process.platform === 'win32') return 'windows';
+  if (process.platform === 'darwin') return 'macos';
+  return 'linux';
+}
+
+function hostArch(): Arch {
+  return process.arch === 'arm64' ? 'arm64' : 'x64';
+}
+
+/**
+ * scriptc only produces executables for the machine it runs on, so a request
+ * for another platform/arch is reported instead of silently ignored.
+ */
+function unsupportedCrossCompile(options: CompileOptions): CompileResult | null {
+  const platform = hostPlatform();
+  const arch = hostArch();
+  if ((options.platform && options.platform !== platform) || (options.arch && options.arch !== arch)) {
+    return {
+      success: false,
+      error: `Cross-compilation is not supported: this server builds ${platform}-${arch} executables. ` +
+        'Choose the C or LLVM IR target to build for other platforms locally.',
+    };
+  }
+  return null;
+}
+
+/**
+ * Write the source and run `scriptc build` (optionally with extra flags).
+ * Returns paths of the executable and the generated translation unit.
+ */
+async function scriptcBuild(options: CompileOptions, extraArgs: string[] = [], env?: Record<string, string>) {
+  const filename = makeSourceFilename(options.filename);
+  const filePath = await writeTempFile(options.code, filename);
+  const outputFilename = withExtension(filename, hostPlatform() === 'windows' ? '.exe' : '');
+  const outputPath = path.join(TEMP_DIR, outputFilename);
+
+  const { stdout, stderr } = await scriptc(['build', filePath, '-o', outputPath, ...extraArgs], env);
+  return { filename, outputFilename, outputPath, stdout, stderr };
 }
 
 /**
  * Compile TypeScript to native binary using scriptc
  */
 export async function compileToNative(options: CompileOptions): Promise<CompileResult> {
+  const unsupported = unsupportedCrossCompile(options);
+  if (unsupported) return unsupported;
+
   try {
-    const filename = options.filename || generateFilename('ts');
-    const filePath = await writeTempFile(options.code, filename);
-    
-    const platform = options.platform || process.platform === 'win32' ? 'windows' : 
-                     process.platform === 'darwin' ? 'macos' : 'linux';
-    const arch = options.arch || process.arch === 'arm64' ? 'arm64' : 'x64';
-    const optimization = options.optimization || 'O2';
-    
-    const outputFilename = filename.replace('.ts', platform === 'windows' ? '.exe' : '');
-    const outputPath = path.join(TEMP_DIR, outputFilename);
-    
-    const scriptcArgs = [
-      'build',
-      filePath,
-      '--target', 'binary',
-      '--out', outputPath,
-      '--platform', platform,
-      '--arch', arch,
-      '--opt', optimization,
-    ];
-    
-    if (process.env.SCRIPTC_LINKER) {
-      scriptcArgs.push('--linker', process.env.SCRIPTC_LINKER);
-    }
-    
-    const { stdout, stderr } = await execAsync(`npx scriptc ${scriptcArgs.join(' ')}`);
-    
-    try {
-      const compiledCode = await fs.readFile(outputPath, 'utf8');
-      return {
-        success: true,
-        output: compiledCode,
-        filename: outputFilename,
-        downloadUrl: `/api/download/${outputFilename}`,
-      };
-    } catch {
-      // File might be binary, try base64
-      try {
-        const binary = await fs.readFile(outputPath);
-        return {
-          success: true,
-          output: binary.toString('base64'),
-          filename: outputFilename,
-          downloadUrl: `/api/download/${outputFilename}`,
-        };
-      } catch {
-        return {
-          success: true,
-          output: '',
-          filename: outputFilename,
-          downloadUrl: `/api/download/${outputFilename}`,
-          stdout,
-          stderr,
-        };
-      }
-    }
-  } catch (error: any) {
+    const { outputFilename, outputPath, stdout, stderr } = await scriptcBuild(options);
+    const binary = await fs.readFile(outputPath);
     return {
-      success: false,
-      error: error.message,
-      stderr: error.stderr,
-      stdout: error.stdout,
+      success: true,
+      output: binary.toString('base64'),
+      filename: outputFilename,
+      downloadUrl: downloadUrlFor(outputFilename),
+      stdout,
+      stderr,
     };
+  } catch (error) {
+    return failure(error);
   }
 }
 
 /**
- * Compile TypeScript to C code using scriptc
+ * Compile TypeScript to C code using scriptc's C backend
  */
 export async function compileToC(options: CompileOptions): Promise<CompileResult> {
   try {
-    const filename = options.filename || generateFilename('ts');
-    const filePath = await writeTempFile(options.code, filename);
-    
-    const outputFilename = filename.replace('.ts', '.c');
-    const outputPath = path.join(TEMP_DIR, outputFilename);
-    
-    const { stdout, stderr } = await execAsync(
-      `npx scriptc build ${filePath} --target c --out ${outputPath}`
-    );
-    
-    const compiledCode = await fs.readFile(outputPath, 'utf8');
-    
+    const { filename } = await scriptcBuild(options, ['--backend', 'c', '--keep-c']);
+    const outputFilename = withExtension(filename, '.c');
+    const compiledCode = await fs.readFile(path.join(TEMP_DIR, outputFilename), 'utf8');
+
     return {
       success: true,
       output: compiledCode,
       filename: outputFilename,
-      downloadUrl: `/api/download/${outputFilename}`,
+      downloadUrl: downloadUrlFor(outputFilename),
     };
-  } catch (error: any) {
-    return {
-      success: false,
-      error: error.message,
-      stderr: error.stderr,
-      stdout: error.stdout,
-    };
+  } catch (error) {
+    return failure(error);
   }
 }
 
 /**
- * Compile TypeScript to LLVM IR using scriptc
+ * Compile TypeScript to LLVM IR using scriptc (the default backend keeps the .ll)
  */
 export async function compileToLLVM(options: CompileOptions): Promise<CompileResult> {
   try {
-    const filename = options.filename || generateFilename('ts');
-    const filePath = await writeTempFile(options.code, filename);
-    
-    const outputFilename = filename.replace('.ts', '.ll');
-    const outputPath = path.join(TEMP_DIR, outputFilename);
-    
-    const { stdout, stderr } = await execAsync(
-      `npx scriptc build ${filePath} --emit llvm --out ${outputPath}`
-    );
-    
-    const compiledCode = await fs.readFile(outputPath, 'utf8');
-    
+    const { filename } = await scriptcBuild(options, ['--backend', 'llvm', '--keep-c']);
+    const outputFilename = withExtension(filename, '.ll');
+    const compiledCode = await fs.readFile(path.join(TEMP_DIR, outputFilename), 'utf8');
+
     return {
       success: true,
       output: compiledCode,
       filename: outputFilename,
-      downloadUrl: `/api/download/${outputFilename}`,
+      downloadUrl: downloadUrlFor(outputFilename),
     };
-  } catch (error: any) {
-    return {
-      success: false,
-      error: error.message,
-      stderr: error.stderr,
-      stdout: error.stdout,
-    };
+  } catch (error) {
+    return failure(error);
   }
 }
 
 /**
- * Compile TypeScript to WASM using scriptc
+ * Compile TypeScript to WASM (WASI Preview 1) using scriptc's wasm32-wasi
+ * target. That target needs a wasm-capable C toolchain (e.g. SCRIPTC_CC=zigcc);
+ * when it is unavailable the LLVM IR is returned as a fallback.
  */
 export async function compileToWASM(options: CompileOptions): Promise<CompileResult> {
   try {
-    const filename = options.filename || generateFilename('ts');
+    const filename = makeSourceFilename(options.filename);
     const filePath = await writeTempFile(options.code, filename);
-    
-    const llvmOutput = filename.replace('.ts', '.ll');
-    const llvmPath = path.join(TEMP_DIR, llvmOutput);
-    const wasmOutput = filename.replace('.ts', '.wasm');
+    const wasmOutput = withExtension(filename, '.wasm');
     const wasmPath = path.join(TEMP_DIR, wasmOutput);
-    
-    // First, compile to LLVM IR
-    await execAsync(`npx scriptc build ${filePath} --emit llvm --out ${llvmPath}`);
-    
-    // Try to compile LLVM IR to WASM using available tools
-    let result;
-    
-    // Try clang with WASM target
+
     try {
-      await execAsync(`clang --target=wasm32-wasi -O2 ${llvmPath} -o ${wasmPath}`);
-      result = await fs.readFile(wasmPath);
+      await scriptc(['build', filePath, '-o', wasmPath], { SCRIPTC_TARGET: 'wasm32-wasi' });
+      const result = await fs.readFile(wasmPath);
+      return {
+        success: true,
+        output: result.toString('base64'),
+        filename: wasmOutput,
+        downloadUrl: downloadUrlFor(wasmOutput),
+      };
     } catch {
-      // Try llc + wasm-ld
-      try {
-        const wasmObj = llvmOutput.replace('.ll', '.o');
-        await execAsync(`llc -O2 ${llvmPath} -o ${path.join(TEMP_DIR, wasmObj)}`);
-        await execAsync(`wasm-ld ${path.join(TEMP_DIR, wasmObj)} -o ${wasmPath}`);
-        result = await fs.readFile(wasmPath);
-      } catch {
-        // Try emcc (Emscripten)
-        try {
-          await execAsync(`emcc ${llvmPath} -o ${wasmPath}`);
-          result = await fs.readFile(wasmPath);
-        } catch {
-          // Return LLVM IR as fallback
-          const llvmCode = await fs.readFile(llvmPath, 'utf8');
-          return {
-            success: true,
-            output: llvmCode,
-            filename: llvmOutput,
-            downloadUrl: `/api/download/${llvmOutput}`,
-            error: 'WASM compilation requires LLVM WASM backend. LLVM IR provided as fallback.',
-          };
-        }
-      }
+      // Fall back to LLVM IR below
     }
-    
+
+    const llvm = await compileToLLVM(options);
+    if (!llvm.success) return llvm;
     return {
-      success: true,
-      output: result?.toString('base64'),
-      filename: wasmOutput,
-      downloadUrl: `/api/download/${wasmOutput}`,
+      ...llvm,
+      error: 'WASM compilation requires a wasm32-wasi toolchain (set SCRIPTC_CC=zigcc). LLVM IR provided as fallback.',
     };
-  } catch (error: any) {
-    return {
-      success: false,
-      error: error.message,
-      stderr: error.stderr,
-      stdout: error.stdout,
-    };
+  } catch (error) {
+    return failure(error);
   }
 }
 
@@ -268,7 +314,7 @@ export async function compileToWASM(options: CompileOptions): Promise<CompileRes
  */
 export async function compileTypeScript(options: CompileOptions): Promise<CompileResult> {
   const target = options.target || 'exe';
-  
+
   switch (target) {
     case 'c':
       return compileToC(options);
@@ -283,27 +329,29 @@ export async function compileTypeScript(options: CompileOptions): Promise<Compil
 }
 
 /**
- * Clean up temporary files
+ * Delete build artifacts older than maxAgeMs so TEMP_DIR doesn't grow forever.
  */
-export async function cleanupTempFiles(filename: string): Promise<void> {
+export async function cleanupOldTempFiles(maxAgeMs: number = 60 * 60 * 1000): Promise<void> {
   try {
-    const files = [
-      path.join(TEMP_DIR, filename),
-      path.join(TEMP_DIR, filename.replace('.ts', '.exe')),
-      path.join(TEMP_DIR, filename.replace('.ts', '.c')),
-      path.join(TEMP_DIR, filename.replace('.ts', '.ll')),
-      path.join(TEMP_DIR, filename.replace('.ts', '.wasm')),
-    ];
-    
-    for (const file of files) {
-      try {
-        await fs.unlink(file);
-      } catch {
-        // File doesn't exist, ignore
-      }
-    }
-  } catch (error) {
-    console.error('Error cleaning up temp files:', error);
+    const now = Date.now();
+    const entries = await fs.readdir(TEMP_DIR, { withFileTypes: true });
+    await Promise.all(
+      entries
+        .filter(entry => entry.isFile())
+        .map(async entry => {
+          const filePath = path.join(TEMP_DIR, entry.name);
+          try {
+            const stats = await fs.stat(filePath);
+            if (now - stats.mtimeMs > maxAgeMs) {
+              await fs.unlink(filePath);
+            }
+          } catch {
+            // File removed concurrently, ignore
+          }
+        })
+    );
+  } catch {
+    // TEMP_DIR doesn't exist yet, nothing to clean
   }
 }
 

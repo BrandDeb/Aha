@@ -1,44 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { timingSafeEqual } from 'crypto';
 import { exchangeCodeForToken, getGitHubUser } from '@/lib/github';
+import { GITHUB_COOKIE_OPTIONS, getBaseUrl } from '@/lib/github-session';
+
+function redirectWithError(message: string): NextResponse {
+  const response = NextResponse.redirect(`${getBaseUrl()}?error=${encodeURIComponent(message)}`);
+  response.cookies.delete('github_oauth_state');
+  return response;
+}
+
+function statesMatch(a: string, b: string | undefined): boolean {
+  if (!b || a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
 export async function GET(request: NextRequest) {
+  const { searchParams } = request.nextUrl;
+  const code = searchParams.get('code');
+  const state = searchParams.get('state');
+  const error = searchParams.get('error');
+  
+  if (error) {
+    return redirectWithError(error);
+  }
+  
+  if (!code || !state) {
+    return redirectWithError('Missing authorization code');
+  }
+  
+  if (!statesMatch(state, request.cookies.get('github_oauth_state')?.value)) {
+    return redirectWithError('Invalid state');
+  }
+  
   try {
-    const { searchParams } = new URL(request.url);
-    const code = searchParams.get('code');
-    const state = searchParams.get('state');
-    const error = searchParams.get('error');
-    
-    if (error) {
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}?error=${encodeURIComponent(error)}`
-      );
-    }
-    
-    if (!code || !state) {
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}?error=${encodeURIComponent('Missing authorization code')}`
-      );
-    }
-    
-    const storedState = request.cookies.get('github_oauth_state')?.value;
-    if (state !== storedState) {
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}?error=${encodeURIComponent('Invalid state')}`
-      );
-    }
-    
     const token = await exchangeCodeForToken(code);
     const user = await getGitHubUser(token.access_token);
     
-    const response = NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}`
-    );
+    const response = NextResponse.redirect(getBaseUrl());
+    // State is single-use
+    response.cookies.delete('github_oauth_state');
     
     response.cookies.set('github_token', token.access_token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      ...GITHUB_COOKIE_OPTIONS,
       maxAge: 60 * 60 * 24 * 30, // 30 days
-      path: '/',
     });
     
     response.cookies.set('github_user', JSON.stringify({
@@ -47,17 +51,13 @@ export async function GET(request: NextRequest) {
       avatar_url: user.avatar_url,
       name: user.name,
     }), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      ...GITHUB_COOKIE_OPTIONS,
       maxAge: 60 * 60 * 24 * 30,
-      path: '/',
     });
     
     return response;
-  } catch (error: any) {
-    console.error('GitHub OAuth callback error:', error);
-    return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}?error=${encodeURIComponent(error.message || 'Authentication failed')}`
-    );
+  } catch (err) {
+    console.error('GitHub OAuth callback error:', err);
+    return redirectWithError('Authentication failed');
   }
 }

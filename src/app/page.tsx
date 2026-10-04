@@ -10,12 +10,21 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
-import { compileTypeScriptBrowser } from '@/lib/compiler-browser';
+import { compileTypeScriptBrowser, type CompileResult } from '@/lib/compiler-browser';
 import { WebSocketManager } from '@/lib/websocket';
+import type { CollaboratorInfo, CompilePlatform, CompileTarget, GitHubUserInfo } from '@/types';
+
+// Load Monaco Editor dynamically to reduce bundle size
+const Editor = dynamic(
+  () => import('@monaco-editor/react').then((mod) => mod.default),
+  { ssr: false, loading: () => <div className="loading">Loading editor...</div> }
+);
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
 
 export default function HomePage() {
-  const router = useRouter();
   const [code, setCode] = useState<string>(`// NanoCLI Studio - Write TypeScript, Get Native Binaries
 // Try it: Click "Compile" to generate a native binary
 
@@ -36,13 +45,12 @@ console.log(\`3 + 5 = \${result}\`);
 module.exports = { add };`);
   
   const [filename, setFilename] = useState<string>('app.ts');
-  const [target, setTarget] = useState<'exe' | 'c' | 'llvm' | 'wasm'>('exe');
-  const [platform, setPlatform] = useState<'linux' | 'macos' | 'windows'>('linux');
+  const [target, setTarget] = useState<CompileTarget>('exe');
+  const [platform, setPlatform] = useState<CompilePlatform>('linux');
   const [isCompiling, setIsCompiling] = useState<boolean>(false);
-  const [compileResult, setCompileResult] = useState<any>(null);
+  const [compileResult, setCompileResult] = useState<CompileResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [output, setOutput] = useState<string>('');
-  const [showOutput, setShowOutput] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<'editor' | 'output' | 'console'>('editor');
   const [consoleMessages, setConsoleMessages] = useState<string[]>([]);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
@@ -52,19 +60,13 @@ module.exports = { add };`);
   const [shareUrl, setShareUrl] = useState<string>('');
   const [showTemplates, setShowTemplates] = useState<boolean>(false);
   const [showGitHubModal, setShowGitHubModal] = useState<boolean>(false);
-  const [githubUser, setGithubUser] = useState<any>(null);
+  const [githubUser, setGithubUser] = useState<GitHubUserInfo | null>(null);
   const [showCollaboration, setShowCollaboration] = useState<boolean>(false);
-  const [collaborators, setCollaborators] = useState<any[]>([]);
+  const [collaborators, setCollaborators] = useState<CollaboratorInfo[]>([]);
   
-  const clientId = useRef<string>(crypto.randomUUID()).current;
-  const projectId = useRef<string>(crypto.randomUUID()).current;
+  const [clientId] = useState(() => crypto.randomUUID());
+  const [projectId] = useState(() => crypto.randomUUID());
   const wsManager = useRef<WebSocketManager | null>(null);
-  
-  // Load Monaco Editor dynamically to reduce bundle size
-  const Editor = dynamic(
-    () => import('@monaco-editor/react').then((mod) => mod.default),
-    { ssr: false, loading: () => <div className="loading">Loading editor...</div> }
-  );
   
   // Initialize WebSocket connection for collaboration
   useEffect(() => {
@@ -94,7 +96,7 @@ module.exports = { add };`);
         wsManager.current?.disconnect();
       };
     }
-  }, [showCollaboration]);
+  }, [showCollaboration, projectId, clientId]);
   
   // Check GitHub authentication status
   useEffect(() => {
@@ -106,6 +108,11 @@ module.exports = { add };`);
         }
       })
       .catch(console.error);
+  }, []);
+  
+  // Add message to console
+  const addConsoleMessage = useCallback((message: string) => {
+    setConsoleMessages(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
   }, []);
   
   // Handle compilation
@@ -140,25 +147,20 @@ module.exports = { add };`);
           addConsoleMessage(result.stderr);
         }
       }
-    } catch (err: any) {
-      setError(err.message || 'Compilation error');
-      addConsoleMessage(`Error: ${err.message}`);
+    } catch (err) {
+      setError(errorMessage(err) || 'Compilation error');
+      addConsoleMessage(`Error: ${errorMessage(err)}`);
     } finally {
       setIsCompiling(false);
     }
-  }, [code, filename, target, platform]);
-  
-  // Add message to console
-  const addConsoleMessage = useCallback((message: string) => {
-    setConsoleMessages(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
-  }, []);
+  }, [code, filename, target, platform, addConsoleMessage]);
   
   // Download compiled file
   const handleDownload = useCallback(async () => {
     if (!compileResult?.filename) return;
     
     try {
-      const response = await fetch(`/api/download/${compileResult.filename}`);
+      const response = await fetch(`/api/download/${encodeURIComponent(compileResult.filename)}`);
       if (!response.ok) {
         throw new Error('File not found');
       }
@@ -174,15 +176,16 @@ module.exports = { add };`);
       window.URL.revokeObjectURL(url);
       
       addConsoleMessage(`Downloaded: ${compileResult.filename}`);
-    } catch (err: any) {
-      setError(err.message);
-      addConsoleMessage(`Download error: ${err.message}`);
+    } catch (err) {
+      setError(errorMessage(err));
+      addConsoleMessage(`Download error: ${errorMessage(err)}`);
     }
   }, [compileResult, addConsoleMessage]);
   
   // Login with GitHub
   const handleGitHubLogin = useCallback(() => {
-    window.location.href = '/api/github/auth';
+    // Full-page navigation: the OAuth flow is a server redirect, not a client route
+    window.location.assign('/api/github/auth');
   }, []);
   
   // Logout from GitHub
@@ -215,24 +218,26 @@ module.exports = { add };`);
     setShowShareModal(true);
   }, [code, filename, target, platform, projectName]);
   
-  // Load from share URL
+  // Load from share URL (once, on mount — re-running would clobber edits)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const shareData = params.get('share');
     if (shareData) {
       try {
         const decoded = JSON.parse(decodeURIComponent(atob(shareData)));
-        setCode(decoded.code || code);
-        setFilename(decoded.filename || filename);
-        setTarget(decoded.target || target);
-        setPlatform(decoded.platform || platform);
-        setProjectName(decoded.projectName || projectName);
+        /* eslint-disable react-hooks/set-state-in-effect -- window.location is only readable after hydration */
+        if (typeof decoded.code === 'string') setCode(decoded.code);
+        if (typeof decoded.filename === 'string') setFilename(decoded.filename);
+        if (['exe', 'c', 'llvm', 'wasm'].includes(decoded.target)) setTarget(decoded.target);
+        if (['linux', 'macos', 'windows'].includes(decoded.platform)) setPlatform(decoded.platform);
+        if (typeof decoded.projectName === 'string') setProjectName(decoded.projectName);
+        /* eslint-enable react-hooks/set-state-in-effect */
         addConsoleMessage('Loaded shared project');
       } catch (err) {
         console.error('Error loading share:', err);
       }
     }
-  }, [code, filename, target, platform, projectName, addConsoleMessage]);
+  }, [addConsoleMessage]);
   
   // Toggle dark mode
   const toggleDarkMode = useCallback(() => {
@@ -574,7 +579,7 @@ setTimeout(() => {
               <div className="space-y-2">
                 <select
                   value={target}
-                  onChange={(e) => setTarget(e.target.value as any)}
+                  onChange={(e) => setTarget(e.target.value as CompileTarget)}
                   className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
                 >
                   <option value="exe">Native Binary</option>
@@ -585,7 +590,7 @@ setTimeout(() => {
                 
                 <select
                   value={platform}
-                  onChange={(e) => setPlatform(e.target.value as any)}
+                  onChange={(e) => setPlatform(e.target.value as CompilePlatform)}
                   className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
                 >
                   <option value="linux">Linux</option>

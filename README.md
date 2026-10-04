@@ -237,9 +237,12 @@ GITHUB_REDIRECT_URI=http://localhost:3000/api/github/callback
 
 # WebSocket
 NEXT_PUBLIC_WS_URL=ws://localhost:3000
+# Origins allowed to open collaboration sockets (comma separated).
+# Defaults to NEXT_PUBLIC_BASE_URL; same-origin connections are always allowed.
+WS_ALLOWED_ORIGINS=http://localhost:3000
 
-# scriptc
-SCRIPTC_LINKER=./clang-wrapper.sh
+# scriptc (C compiler used by scriptc; SCRIPTC_CC=zigcc enables the WASM target)
+SCRIPTC_CC=clang
 ```
 
 ### GitHub OAuth Setup
@@ -334,10 +337,16 @@ Response:
 {
   "success": true,
   "output": "...",
-  "filename": "app",
-  "downloadUrl": "/api/download/app"
+  "filename": "3f2a…-app",
+  "downloadUrl": "/api/download/3f2a…-app"
 }
 ```
+
+- `target`: `exe` | `c` | `llvm` | `wasm`; `platform`: `linux` | `macos` | `windows`; `arch`: `x64` | `arm64`.
+  Unknown values are rejected with `400`.
+- `exe` builds for the server's own platform/arch (scriptc does not cross-compile); use `c` or `llvm` to build elsewhere.
+- `wasm` needs a wasm32-wasi C toolchain (`SCRIPTC_CC=zigcc`); otherwise LLVM IR is returned as a fallback.
+- Source is limited to 512 KB, each toolchain step to 60 s. Build artifacts older than an hour are pruned.
 
 ### GitHub OAuth
 
@@ -345,12 +354,23 @@ Response:
 GET /api/github/auth      # Initiate OAuth flow
 GET /api/github/callback  # OAuth callback
 GET /api/github/user      # Get user info
+DELETE /api/github/user   # Log out
 GET /api/github/repos     # Get user repositories
+
+GET /api/github/repos/:owner/:repo/contents?path=<dir>   # List a directory
+GET /api/github/repos/:owner/:repo/file?path=<file>      # Read a file -> { content, sha }
+PUT /api/github/repos/:owner/:repo/file                  # Commit a file
+    { "path": "src/app.ts", "content": "...", "message": "optional", "sha": "required when updating" }
 ```
+
+In `/studio`, **Browse Repos** opens a repository/directory browser; picking a file loads it into the
+editor, and **Commit to GitHub** writes the editor contents back (to the loaded file, or to the current
+filename inside the folder you browsed to).
 
 ### File Download
 
 ```
+GET /api/download/<filename>
 GET /api/download?filename=<filename>
 ```
 
@@ -408,6 +428,8 @@ docker-compose logs -f
 | `npm run start` | Start production server |
 | `npm run start:next` | Start Next.js server |
 | `npm run lint` | Run ESLint |
+| `npm run typecheck` | Generate route types and run `tsc` |
+| `npm test` | Run unit tests (Node.js 22+ test runner) |
 | `npm run scriptc:build` | Build with scriptc |
 | `npm run scriptc:wasm` | Build WASM target |
 | `npm run scriptc:native` | Build native target |

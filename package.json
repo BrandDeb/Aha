@@ -9,6 +9,8 @@
     "start": "node server.js",
     "start:next": "next start",
     "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "test": "node --test --experimental-strip-types 'tests/**/*.test.ts'",
     "scriptc:build": "scriptc build",
     "scriptc:dev": "scriptc dev",
     "scriptc:wasm": "scriptc build --target wasm",
@@ -53,7 +55,7 @@
     "typescript": "^5"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "keywords": [
     "typescript",

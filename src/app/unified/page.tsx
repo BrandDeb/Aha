@@ -18,10 +18,10 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { compileTypeScriptBrowser } from '@/lib/compiler-browser';
+import { compileTypeScriptBrowser, type CompileResult } from '@/lib/compiler-browser';
 import { WebSocketManager } from '@/lib/websocket';
 import { generateSecureId, formatMs, debounce, formatBytes } from '@/lib/utils';
-import type { AIRequest, AIResponse, AuthRequest, ShortenRequest } from '@/types';
+import type { AIRequest, AIResponse, CompilePlatform, CompileTarget } from '@/types';
 
 // Load Monaco Editor dynamically
 const Editor = dynamic(
@@ -114,7 +114,7 @@ console.log(\`3 + 5 = \${result}\`);`);
   const [filename, setFilename] = useState('app.ts');
   const [target, setTarget] = useState<'exe' | 'c' | 'llvm' | 'wasm'>('exe');
   const [platform, setPlatform] = useState<'linux' | 'macos' | 'windows'>('linux');
-  const [compileResult, setCompileResult] = useState<any>(null);
+  const [compileResult, setCompileResult] = useState<CompileResult | null>(null);
   
   // Project Explorer state
   const [projects, setProjects] = useState<Project[]>([
@@ -306,8 +306,8 @@ console.log(\`3 + 5 = \${result}\`);`);
       } else {
         addConsoleMessage(`Compilation failed: ${result.error}`);
       }
-    } catch (err: any) {
-      addConsoleMessage(`Error: ${err.message}`);
+    } catch (err) {
+      addConsoleMessage(`Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsLoading(false);
     }
@@ -612,7 +612,7 @@ console.log(\`3 + 5 = \${result}\`);`);
         
         <select
           value={target}
-          onChange={(e) => setTarget(e.target.value as any)}
+          onChange={(e) => setTarget(e.target.value as CompileTarget)}
           className="p-3 bg-gray-800 border border-gray-700 rounded-lg text-white"
         >
           <option value="exe">Native</option>
@@ -623,7 +623,7 @@ console.log(\`3 + 5 = \${result}\`);`);
         
         <select
           value={platform}
-          onChange={(e) => setPlatform(e.target.value as any)}
+          onChange={(e) => setPlatform(e.target.value as CompilePlatform)}
           className="p-3 bg-gray-800 border border-gray-700 rounded-lg text-white"
         >
           <option value="linux">Linux</option>
@@ -836,7 +836,7 @@ console.log(\`3 + 5 = \${result}\`);`);
         <div className="space-y-4">
           <select
             value={aiRequest.provider}
-            onChange={(e) => setAiRequest({ ...aiRequest, provider: e.target.value as any })}
+            onChange={(e) => setAiRequest({ ...aiRequest, provider: e.target.value as AIRequest['provider'] })}
             className="w-full p-3 rounded-lg border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
           >
             {providers.map(provider => (
