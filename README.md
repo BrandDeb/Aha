@@ -24,6 +24,20 @@ npm install
 npm run dev          # http://localhost:3000 (Next.js + collaboration server)
 ```
 
+Nothing needs configuring: the assistant runs on a model each user picks (see [Assistant](#assistant)).
+Copy `.env.example` to `.env.local` only for GitHub sign-in or a hosted default model.
+
+### VS Code
+
+1. Install [Node.js 24](https://nodejs.org) and clang (macOS: `xcode-select --install`; Ubuntu/WSL:
+   `sudo apt install clang lld`; Windows: use WSL). Optional: [zig](https://ziglang.org/download/) for WASM and
+   the terminal's `run`.
+2. **File → Open Folder…** and pick the cloned `Aha` folder; accept the recommended extensions.
+3. Open the terminal (<kbd>Ctrl</kbd>+<kbd>`</kbd>) and run `npm install`.
+4. Press <kbd>F5</kbd> (**NanoCLI Studio: dev server**) — the browser opens at http://localhost:3000 with
+   breakpoints working in `server.js` and the API routes. Or run the **Dev server** task
+   (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>), or `npm run dev`.
+
 ### Docker
 
 ```bash
@@ -57,7 +71,7 @@ The workspace at `/` is a monochrome glass IDE built around scriptc.
 | **Build** | Native, WASM, LLVM IR or assembly; pipeline timings (queue → write → compile → package), artifact size and download, scriptc coverage, run profile (exit code, time, memory) |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
-| **Assistant** | Claude (`claude-opus-5-5`): explain, fix build errors, generate tests, chat — with one-click Apply that versions the previous file first |
+| **Assistant** | Any model you choose — free tiers (Gemini, Groq, OpenRouter, Cerebras, Mistral), local (Ollama, LM Studio) or your own Anthropic/OpenAI key: explain, fix build errors, generate tests, chat — with one-click Apply that versions the previous file first |
 | **Formatting** | Prettier in the browser, format on save, configurable rules |
 | **History** | Versions on save, on successful builds and before pulls/restores/assistant edits; compare and restore |
 | **Graph** | Import graph from the entry, cycle detection, unused files, unresolved imports, external modules |
@@ -68,6 +82,31 @@ The workspace at `/` is a monochrome glass IDE built around scriptc.
 
 Native executables are linked for the machine the server runs on. Use the WASM target (or `run`) for a
 portable artifact.
+
+---
+
+## Assistant
+
+The assistant costs the studio's operator nothing. Each user picks a provider and model in the assistant
+panel (or **Settings → AI models**); the key is kept in their browser and requests go straight from the tab to
+the provider, never through the studio server.
+
+| Provider | Cost | Setup |
+|---|---|---|
+| Google Gemini | Free tier | Key from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| Groq | Free tier | Key from [console.groq.com/keys](https://console.groq.com/keys) |
+| OpenRouter | Free models (`:free`) | Key from [openrouter.ai/keys](https://openrouter.ai/keys) |
+| Cerebras | Free tier | Key from [cloud.cerebras.ai](https://cloud.cerebras.ai) |
+| Mistral | Free “Experiment” plan | Key from [console.mistral.ai](https://console.mistral.ai/api-keys) |
+| Ollama | Free, local, offline | Install [ollama.com](https://ollama.com), `ollama pull qwen2.5-coder:7b` |
+| LM Studio | Free, local | Start the local server with “Enable CORS” on |
+| Anthropic / OpenAI | Your account | Your API key |
+| Custom | — | Any OpenAI-compatible server that allows browser requests |
+| Studio server | Operator pays | Shown only when `ANTHROPIC_API_KEY` is set on the server |
+
+**Fetch models** lists what your key can use (OpenRouter's free models first); **Test connection** sends a
+one-word prompt and reports latency. Ollama accepts requests from `localhost` pages by default; when the
+studio is hosted elsewhere, start it with `OLLAMA_ORIGINS=https://your-studio.example ollama serve`.
 
 ---
 
@@ -131,10 +170,11 @@ Successful builds include `phases` (`queue`, `write`, `compile`, `package` with 
 the first one. A single file is limited to 512 KB, a project to 200 files / 2 MB, builds to 60 s and
 `MAX_CONCURRENT_BUILDS` (default 2) at a time.
 
-### `POST /api/ai`
+### `/api/ai` (hosted model, optional)
 
-`{ action: "chat" | "explain" | "fix" | "tests", prompt, history, files, activeFile, selection?, diagnostics }`
-→ streamed plain text. Requires `ANTHROPIC_API_KEY`; returns 503 with an explanation otherwise.
+`GET` → `{ configured }`. `POST { action: "chat" | "explain" | "fix" | "tests", prompt, history, files, activeFile, selection?, diagnostics }`
+→ streamed plain text using the server's `ANTHROPIC_API_KEY`; 503 when it isn't set. Bring-your-own-key
+requests never touch this route.
 
 ### `POST /api/coverage`
 
@@ -185,7 +225,7 @@ GITHUB_REDIRECT_URI=http://localhost:3000/api/github/callback
 # same-origin connections are always allowed)
 WS_ALLOWED_ORIGINS=http://localhost:3000
 
-# Assistant (Claude)
+# Assistant: optional hosted default (users can always bring their own key)
 ANTHROPIC_API_KEY=
 AI_REQUESTS_PER_10_MIN=30   # per client (first X-Forwarded-For hop)
 
@@ -225,7 +265,7 @@ src/
 │   ├── wasi.worker.ts           Runs WASI modules off the main thread
 │   ├── components/              FileTree, Terminal, CommandPalette, SettingsDialog, dialogs
 │   └── panels/                  Build, Git, Assistant, History, Graph, Package
-└── lib/                         compiler (server), compiler-browser, github, ai, templates
+└── lib/                         compiler (server), compiler-browser, github, ai, ai-providers, templates
 scripts/build-templates.ts       Builds every template with scriptc
 tests/                           node:test suites (unit + scriptc integration)
 server.js                        Custom server + WebSocket relay

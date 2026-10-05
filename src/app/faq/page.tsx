@@ -114,7 +114,7 @@ const FAQS: FAQItem[] = [
     id: 'assistant',
     category: 'Assistant',
     question: 'What can the assistant do?',
-    answer: 'It explains the active file, fixes scriptc compile errors and writes test programs, and answers questions about your project. It sees every project file, your selection and the latest diagnostics. Code blocks come with Apply, which writes the file and saves the previous version to History first. It runs on Claude and needs ANTHROPIC_API_KEY on the server.',
+    answer: 'It explains the active file, fixes scriptc compile errors and writes test programs, and answers questions about your project. It sees every project file, your selection and the latest diagnostics. Code blocks come with Apply, which writes the file and saves the previous version to History first. It runs on the model you choose: free tiers from Google Gemini, Groq, OpenRouter, Cerebras and Mistral, local models through Ollama or LM Studio, or your own Anthropic or OpenAI key. Keys stay in your browser and requests go straight to the provider, so the assistant costs nothing to host.',
   },
   {
     id: 'assistant-data',
@@ -132,7 +132,7 @@ const FAQS: FAQItem[] = [
     id: 'self-host',
     category: 'Self-hosting',
     question: 'How do I run my own instance?',
-    answer: 'Licensed deployments run with `docker compose up -d`: the image contains the Next.js app, the collaboration server, scriptc and its clang/lld/zig toolchain. For GitHub sign-in, create an OAuth app and set GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET and NEXT_PUBLIC_BASE_URL; for the assistant, set ANTHROPIC_API_KEY.',
+    answer: 'Licensed deployments run with `docker compose up -d`: the image contains the Next.js app, the collaboration server, scriptc and its clang/lld/zig toolchain. For GitHub sign-in, create an OAuth app and set GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET and NEXT_PUBLIC_BASE_URL; optionally set ANTHROPIC_API_KEY to offer a hosted default model (users can always bring their own).',
   },
   {
     id: 'node',

@@ -8,7 +8,15 @@ import { clientKey, createRateLimiter } from '@/lib/rate-limit';
 const limiter = createRateLimiter(Number(process.env.AI_REQUESTS_PER_10_MIN) || 30, 10 * 60 * 1000);
 
 /**
- * Claude-powered assistant. Streams the answer back as plain text.
+ * Whether this server has its own model configured. Users without it bring
+ * their own key, which the browser sends straight to the provider.
+ */
+export function GET() {
+  return NextResponse.json({ configured: !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) });
+}
+
+/**
+ * Hosted assistant (the operator's Anthropic key). Streams the answer back as plain text.
  * POST { action, prompt, history, files, activeFile, selection?, diagnostics }
  */
 export async function POST(request: NextRequest) {
@@ -17,7 +25,7 @@ export async function POST(request: NextRequest) {
   }
   if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
     return NextResponse.json(
-      { error: 'The AI assistant is not configured on this server. Set ANTHROPIC_API_KEY to enable it.' },
+      { error: 'This studio has no hosted model. Choose a free provider or add your own key in the assistant settings.' },
       { status: 503 }
     );
   }

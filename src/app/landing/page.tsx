@@ -28,8 +28,8 @@ const FEATURES = [
     body: 'Pull a branch, review every change as a side-by-side diff, create branches and push multi-file commits that never overwrite a teammate.',
   },
   {
-    title: 'An assistant that knows scriptc',
-    body: 'Claude reads your project and the compiler’s errors, explains code, fixes builds and writes tests you can apply in one click.',
+    title: 'Free AI, any model',
+    body: 'Bring a free Gemini, Groq or OpenRouter key — or run Ollama locally. The assistant reads your project and the compiler’s errors, explains code, fixes builds and writes tests you can apply in one click.',
   },
   {
     title: 'Errors where you type',

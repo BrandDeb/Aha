@@ -1,8 +1,12 @@
 /**
- * Prompt construction for the studio's Claude-powered assistant - server only.
+ * Prompt construction for the studio's assistant. Shared by the server route
+ * and by the browser, which calls bring-your-own-key providers directly.
  */
 
-import type Anthropic from '@anthropic-ai/sdk';
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 export const AI_MODEL = 'claude-opus-5-5';
 
@@ -118,7 +122,7 @@ export function parseAiRequest(body: unknown): AiRequest | { error: string } {
  * Build the message list: earlier chat turns, then one user turn carrying
  * the project context and the request.
  */
-export function buildMessages(request: AiRequest): Anthropic.Beta.BetaMessageParam[] {
+export function buildMessages(request: AiRequest): ChatMessage[] {
   const context = Object.entries(request.files)
     .map(([path, content]) => `<file path="${path}"${path === request.activeFile ? ' active="true"' : ''}>\n${content}\n</file>`)
     .join('\n');
@@ -136,6 +140,6 @@ export function buildMessages(request: AiRequest): Anthropic.Beta.BetaMessagePar
   // Prior turns are text-only, so each history message stays a plain string
   return [
     ...request.history.map(m => ({ role: m.role, content: m.content })),
-    { role: 'user' as const, content: parts.join('\n\n') },
+    { role: 'user', content: parts.join('\n\n') },
   ];
 }

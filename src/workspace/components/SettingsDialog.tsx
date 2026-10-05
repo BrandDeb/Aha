@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { comboFromEvent, formatCombo } from '../project';
 import { DEFAULT_SETTINGS, useWorkspace, type Settings } from '../store';
 import { useToast } from '../toasts';
+import { AiModelSettings } from './AiModelSettings';
 import type { Command } from './CommandPalette';
 import { Dialog } from './Dialog';
 
@@ -16,7 +17,7 @@ export const EXTENSIONS: { id: keyof Settings['extensions'] | string; name: stri
   { id: 'todoHighlights', name: 'TODO highlights', description: 'Underline TODO, FIXME, HACK and NOTE comments.' },
 ];
 
-type Tab = 'general' | 'keys' | 'extensions';
+type Tab = 'general' | 'ai' | 'keys' | 'extensions';
 
 export function SettingsDialog({ commands, isMac, onClose }: { commands: Command[]; isMac: boolean; onClose: () => void }) {
   const { settings, updateSettings } = useWorkspace();
@@ -82,9 +83,9 @@ export function SettingsDialog({ commands, isMac, onClose }: { commands: Command
   return (
     <Dialog title="Settings" onClose={onClose} width="max-w-2xl" tall>
       <div className="segmented mb-4 self-start" role="tablist" aria-label="Settings sections">
-        {(['general', 'keys', 'extensions'] as Tab[]).map((t) => (
+        {(['general', 'ai', 'keys', 'extensions'] as Tab[]).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-            {t === 'general' ? 'General' : t === 'keys' ? 'Keyboard shortcuts' : 'Extensions'}
+            {t === 'general' ? 'General' : t === 'ai' ? 'AI models' : t === 'keys' ? 'Keyboard shortcuts' : 'Extensions'}
           </button>
         ))}
       </div>
@@ -126,6 +127,8 @@ export function SettingsDialog({ commands, isMac, onClose }: { commands: Command
             </div>
           </div>
         )}
+
+        {tab === 'ai' && <AiModelSettings />}
 
         {tab === 'keys' && (
           <div>

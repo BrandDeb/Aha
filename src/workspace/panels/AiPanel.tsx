@@ -1,7 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { SYSTEM_PROMPT, buildMessages, parseAiRequest } from '@/lib/ai';
+import { getProvider, resolveProvider, streamChat } from '@/lib/ai-providers';
 import type { Diagnostic } from '@/lib/compiler-browser';
+import { useAiConfig } from '../ai-config';
+import { AiModelSettings, useServerAi } from '../components/AiModelSettings';
 import { isValidPath } from '../project';
 import { useWorkspace } from '../store';
 import { useToast } from '../toasts';
@@ -63,7 +67,12 @@ export function AiPanel({ diagnostics, getSelection }: AiPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
-  const [unavailable, setUnavailable] = useState<string | null>(null);
+  const [configuring, setConfiguring] = useState(false);
+  const stored = useAiConfig();
+  const serverAi = useServerAi();
+  // With nothing chosen yet, use the studio's hosted model when it has one
+  const config = stored.provider || !serverAi ? stored : { ...stored, provider: 'server' };
+  const provider = getProvider(config.provider);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -80,26 +89,51 @@ export function AiPanel({ diagnostics, getSelection }: AiPanelProps) {
     setStreaming(true);
     const controller = new AbortController();
     abortRef.current = controller;
+    const append = (chunk: string) =>
+      setMessages((prev) => {
+        const next = [...prev];
+        next[next.length - 1] = { role: 'assistant', content: next[next.length - 1].content + chunk };
+        return next;
+      });
+    const fail = (message: string) => setMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: message }]);
+    const payload = {
+      action,
+      prompt,
+      history,
+      files: project.files,
+      activeFile: active,
+      selection: getSelection() || undefined,
+      diagnostics: diagnostics.map((d) => ({ ...d, file: d.file ?? project.entry })),
+    };
     try {
+      const target = resolveProvider(config);
+      if ('error' in target) {
+        fail(target.error);
+        setConfiguring(true);
+        return;
+      }
+
+      // Bring-your-own-key: straight from this tab to the provider
+      if (target.provider.kind !== 'server') {
+        const request = parseAiRequest(payload);
+        if ('error' in request) {
+          fail(request.error);
+          return;
+        }
+        for await (const chunk of streamChat(target, SYSTEM_PROMPT, buildMessages(request), controller.signal)) append(chunk);
+        return;
+      }
+
       const response = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
-        body: JSON.stringify({
-          action,
-          prompt,
-          history,
-          files: project.files,
-          activeFile: active,
-          selection: getSelection() || undefined,
-          diagnostics: diagnostics.map((d) => ({ ...d, file: d.file ?? project.entry })),
-        }),
+        body: JSON.stringify(payload),
       });
       if (!response.ok || !response.body) {
         const data = await response.json().catch(() => ({}));
-        const message = data.error || `The assistant returned ${response.status}`;
-        if (response.status === 503) setUnavailable(message);
-        setMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: message }]);
+        fail(data.error || `The assistant returned ${response.status}`);
+        if (response.status === 503) setConfiguring(true);
         return;
       }
       const reader = response.body.getReader();
@@ -107,16 +141,17 @@ export function AiPanel({ diagnostics, getSelection }: AiPanelProps) {
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        setMessages((prev) => {
-          const next = [...prev];
-          next[next.length - 1] = { role: 'assistant', content: next[next.length - 1].content + chunk };
-          return next;
-        });
+        append(decoder.decode(value, { stream: true }));
       }
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
-        setMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: 'Could not reach the assistant. Check your connection and try again.' }]);
+        const message = (error as Error).message || 'Could not reach the assistant. Check your connection and try again.';
+        setMessages((prev) => {
+          const last = prev[prev.length - 1];
+          // Keep what already streamed and add the error under it
+          const content = last?.content ? `${last.content}\n\n${message}` : message;
+          return [...prev.slice(0, -1), { role: 'assistant', content }];
+        });
       }
     } finally {
       setStreaming(false);
@@ -140,7 +175,14 @@ export function AiPanel({ diagnostics, getSelection }: AiPanelProps) {
       <div className="space-y-2 border-b border-border p-4">
         <div className="flex items-center justify-between">
           <h3 className="eyebrow">Assistant</h3>
-          <span className="font-mono text-[11px] text-gray-500">Claude</span>
+          <button
+            onClick={() => setConfiguring((v) => !v)}
+            aria-expanded={configuring}
+            className="max-w-[60%] truncate rounded-md px-1.5 py-0.5 font-mono text-[11px] text-gray-400 hover:bg-white/[0.07] hover:text-gray-100"
+            title="Choose provider and model"
+          >
+            {provider ? (provider.kind === 'server' ? 'Studio server' : `${provider.name} · ${config.models[provider.id] ?? provider.models[0] ?? '—'}`) : 'Choose a model'} ▾
+          </button>
         </div>
         <div className="flex flex-wrap gap-1.5">
           <button onClick={() => ask('explain')} disabled={streaming || !active} className="btn btn-secondary btn-sm">Explain</button>
@@ -149,8 +191,22 @@ export function AiPanel({ diagnostics, getSelection }: AiPanelProps) {
           </button>
           <button onClick={() => ask('tests')} disabled={streaming || !active} className="btn btn-secondary btn-sm">Generate tests</button>
         </div>
-        {unavailable && <p className="text-xs text-gray-400">{unavailable}</p>}
       </div>
+
+      {(configuring || !provider) && (
+        <div className="max-h-[70%] shrink-0 overflow-y-auto border-b border-border p-4">
+          {!provider && (
+            <p className="mb-3 text-sm text-gray-300">
+              Pick a model to power the assistant. The free options cost nothing — Gemini, Groq and OpenRouter need only a
+              free account, and Ollama runs entirely on your machine.
+            </p>
+          )}
+          <AiModelSettings compact onSelect={() => setConfiguring(true)} />
+          {provider && (
+            <button onClick={() => setConfiguring(false)} className="btn btn-secondary btn-sm mt-3 w-full">Done</button>
+          )}
+        </div>
+      )}
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4" aria-live="polite">
         {messages.length === 0 && (
