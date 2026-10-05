@@ -2,7 +2,7 @@
 # Multi-stage build for production deployment
 
 # Stage 1: Build the Next.js application
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -22,7 +22,7 @@ COPY . .
 RUN npm run build && npm prune --omit=dev
 
 # Stage 2: Production image
-FROM node:24-alpine AS runner
+FROM node:26-alpine AS runner
 
 WORKDIR /app
 
