@@ -1,32 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { compileTypeScript } from '@/lib/compiler';
+import { cleanupOldTempFiles, compileTypeScript, parseCompileOptions } from '@/lib/compiler';
 
 export async function POST(request: NextRequest) {
+  let body: unknown;
   try {
-    const body = await request.json();
-    const { code, filename, target, platform } = body;
-    
-    if (!code) {
-      return NextResponse.json(
-        { error: 'Code is required' },
-        { status: 400 }
-      );
-    }
-    
-    const result = await compileTypeScript({
-      code,
-      filename,
-      target,
-      platform,
-      optimization: 'O2',
-    });
-    
-    return NextResponse.json(result);
-  } catch (error: any) {
+    body = await request.json();
+  } catch {
     return NextResponse.json(
-      { 
-        error: error.message || 'Compilation failed',
-        success: false 
+      { error: 'Invalid JSON body', success: false },
+      { status: 400 }
+    );
+  }
+
+  const options = parseCompileOptions(body);
+  if ('error' in options) {
+    return NextResponse.json(
+      { error: options.error, success: false },
+      { status: 400 }
+    );
+  }
+
+  try {
+    // Opportunistically prune stale build artifacts
+    void cleanupOldTempFiles();
+
+    const result = await compileTypeScript(options);
+
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Compilation failed',
+        success: false
       },
       { status: 500 }
     );

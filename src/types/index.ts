@@ -120,3 +120,43 @@ export interface AnalyticsSummary {
   requestsByProvider: Record<string, number>;
   errorRate: number;
 }
+
+// Studio Types
+export type CompileTarget = 'exe' | 'wasm' | 'llvm' | 'asm';
+export type CompilePlatform = 'linux' | 'macos' | 'windows';
+
+export interface GitHubUserInfo {
+  id: number;
+  login: string;
+  avatar_url: string;
+  name?: string;
+}
+
+export interface GitHubRepoInfo {
+  id: number;
+  name: string;
+  full_name: string;
+  private: boolean;
+  description: string | null;
+  html_url: string;
+  language: string | null;
+  stargazers_count: number;
+  updated_at: string;
+  default_branch?: string;
+}
+
+export interface GitHubRepoItem {
+  name: string;
+  path: string;
+  sha: string;
+  size: number;
+  type: 'file' | 'dir' | 'symlink' | 'submodule';
+  download_url: string | null;
+  html_url: string;
+}
+
+export interface CollaboratorInfo {
+  id: string | undefined;
+  name: string;
+  color: string;
+}

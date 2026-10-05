@@ -1,18 +1,31 @@
 /**
- * Browser-compatible compiler utilities
- * This file provides a browser-safe version of the compiler functions
- * that don't use Node.js-specific modules like fs, path, child_process
+ * Browser-side client for the scriptc compile API.
+ * Safe to import from client components (no Node.js modules).
  */
 
-import { generateSecureId } from './utils';
+import type { CompilePlatform, CompileTarget } from '@/types';
 
 interface CompileOptions {
-  code: string;
+  code?: string;
   filename?: string;
-  target?: 'exe' | 'c' | 'llvm' | 'wasm';
-  platform?: 'linux' | 'macos' | 'windows';
+  /** Multi-file project (path -> source) with the file to build */
+  files?: Record<string, string>;
+  entry?: string;
+  target?: CompileTarget;
+  platform?: CompilePlatform;
   arch?: 'x64' | 'arm64';
-  optimization?: 'none' | 'O1' | 'O2' | 'O3';
+  optimization?: 'release' | 'dev';
+}
+
+/** A scriptc diagnostic, located in the submitted source */
+interface Diagnostic {
+  file?: string;
+  line: number;
+  column: number;
+  severity: 'error' | 'warning';
+  code: string;
+  message: string;
+  hint?: string;
 }
 
 interface CompileResult {
@@ -21,89 +34,70 @@ interface CompileResult {
   error?: string;
   stdout?: string;
   stderr?: string;
-  files?: Record<string, string>;
   filename?: string;
   downloadUrl?: string;
+  size?: number;
+  durationMs?: number;
+  diagnostics?: Diagnostic[];
+  phases?: { name: 'queue' | 'write' | 'compile' | 'package'; ms: number }[];
 }
 
-/**
- * Simulate compilation in the browser
- * In production, this would call the server-side API
- */
-export async function compileTypeScriptBrowser(options: CompileOptions): Promise<CompileResult> {
+interface CoverageResult {
+  success: boolean;
+  error?: string;
+  statements?: number;
+  static?: number;
+  percent?: number;
+  blockers?: { count: number; message: string; code: string }[];
+}
+
+async function postJson<T extends { success: boolean; error?: string }>(url: string, body: unknown): Promise<T> {
   try {
-    const filename = options.filename || generateSecureId() + '.ts';
-    const target = options.target || 'exe';
-    const platform = options.platform || 'linux';
-    
-    // Simulate compilation delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // In production, call the actual API
-    if (typeof window !== 'undefined') {
-      const response = await fetch('/api/compile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(options),
-      });
-      
-      if (response.ok) {
-        return await response.json();
-      } else {
-        const error = await response.json();
-        return {
-          success: false,
-          error: error.error || 'Compilation failed',
-          stderr: error.stderr,
-          stdout: error.stdout,
-        };
-      }
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok && data.success === undefined) {
+      return { success: false, error: data.error || `Request failed (${response.status})` } as T;
     }
-    
-    // Fallback: Return simulated success
-    return {
-      success: true,
-      output: `// Simulated ${target} output for ${filename}\n// This would be actual compiled code in production\n`,
-      filename,
-      downloadUrl: `/api/download/${filename.replace('.ts', '')}`,
-    };
-  } catch (error: any) {
+    return data as T;
+  } catch (error) {
     return {
       success: false,
-      error: error.message || 'Compilation failed',
-      stderr: error.stack,
-    };
+      error: error instanceof Error ? error.message : 'Network error',
+    } as T;
   }
 }
 
 /**
- * Compile to native binary (browser version)
+ * Compile TypeScript with scriptc on the server
  */
-export async function compileToNativeBrowser(options: CompileOptions): Promise<CompileResult> {
-  return compileTypeScriptBrowser({ ...options, target: 'exe' });
+export function compileTypeScriptBrowser(options: CompileOptions): Promise<CompileResult> {
+  return postJson<CompileResult>('/api/compile', options);
 }
 
 /**
- * Compile to C code (browser version)
+ * Ask scriptc how much of the program compiles statically
  */
-export async function compileToCBrowser(options: CompileOptions): Promise<CompileResult> {
-  return compileTypeScriptBrowser({ ...options, target: 'c' });
+export function analyzeCoverageBrowser(code: string, filename?: string): Promise<CoverageResult>;
+export function analyzeCoverageBrowser(project: { files: Record<string, string>; entry: string }): Promise<CoverageResult>;
+export function analyzeCoverageBrowser(
+  input: string | { files: Record<string, string>; entry: string },
+  filename?: string
+): Promise<CoverageResult> {
+  return postJson<CoverageResult>('/api/coverage', typeof input === 'string' ? { code: input, filename } : input);
 }
 
 /**
- * Compile to LLVM IR (browser version)
+ * Human-readable byte size
  */
-export async function compileToLLVMBrowser(options: CompileOptions): Promise<CompileResult> {
-  return compileTypeScriptBrowser({ ...options, target: 'llvm' });
+export function formatSize(bytes: number | undefined): string {
+  if (bytes === undefined) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
 }
 
-/**
- * Compile to WASM (browser version)
- */
-export async function compileToWASMBrowser(options: CompileOptions): Promise<CompileResult> {
-  return compileTypeScriptBrowser({ ...options, target: 'wasm' });
-}
-
-export type { CompileOptions, CompileResult };
+export type { CompileOptions, CompileResult, CoverageResult, Diagnostic };

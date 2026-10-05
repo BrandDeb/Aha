@@ -17,17 +17,13 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import dynamic from 'next/dynamic';
-import { compileTypeScriptBrowser } from '@/lib/compiler-browser';
+import { CodeEditor } from '@/components/CodeEditor';
+import { SiteFooter, SiteHeader } from '@/components/SiteHeader';
+import { compileTypeScriptBrowser, type CompileResult } from '@/lib/compiler-browser';
 import { WebSocketManager } from '@/lib/websocket';
 import { generateSecureId, formatMs, debounce, formatBytes } from '@/lib/utils';
-import type { AIRequest, AIResponse, AuthRequest, ShortenRequest } from '@/types';
+import type { AIRequest, AIResponse, CompilePlatform, CompileTarget } from '@/types';
 
-// Load Monaco Editor dynamically
-const Editor = dynamic(
-  () => import('@monaco-editor/react').then((mod) => mod.default),
-  { ssr: false, loading: () => <div className="loading">Loading editor...</div> }
-);
 
 // Feature types
 type ActiveFeature = 'editor' | 'ai' | 'auth' | 'shorten' | 'markdown' | 'analytics' | 'terminal' | 'projects';
@@ -93,7 +89,6 @@ export default function UnifiedStudioPage() {
   const wsManager = useRef<WebSocketManager | null>(null);
   
   // Global state
-  const [isDarkMode, setIsDarkMode] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [activeFeature, setActiveFeature] = useState<ActiveFeature>('editor');
   const [consoleMessages, setConsoleMessages] = useState<string[]>([]);
@@ -112,9 +107,9 @@ function add(a: number, b: number): number {
 const result = add(3, 5);
 console.log(\`3 + 5 = \${result}\`);`);
   const [filename, setFilename] = useState('app.ts');
-  const [target, setTarget] = useState<'exe' | 'c' | 'llvm' | 'wasm'>('exe');
-  const [platform, setPlatform] = useState<'linux' | 'macos' | 'windows'>('linux');
-  const [compileResult, setCompileResult] = useState<any>(null);
+  const [target, setTarget] = useState<CompileTarget>('exe');
+  const [platform, setPlatform] = useState<CompilePlatform>('linux');
+  const [compileResult, setCompileResult] = useState<CompileResult | null>(null);
   
   // Project Explorer state
   const [projects, setProjects] = useState<Project[]>([
@@ -293,7 +288,6 @@ console.log(\`3 + 5 = \${result}\`);`);
         filename: activeFile?.name || filename,
         target,
         platform,
-        optimization: 'O2',
       });
       
       setCompileResult(result);
@@ -306,8 +300,8 @@ console.log(\`3 + 5 = \${result}\`);`);
       } else {
         addConsoleMessage(`Compilation failed: ${result.error}`);
       }
-    } catch (err: any) {
-      addConsoleMessage(`Error: ${err.message}`);
+    } catch (err) {
+      addConsoleMessage(`Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsLoading(false);
     }
@@ -532,10 +526,6 @@ console.log(\`3 + 5 = \${result}\`);`);
   };
   
   // Toggle dark mode
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
-  };
   
   // Get provider status color
   const getStatusColor = (status: string) => {
@@ -574,28 +564,19 @@ console.log(\`3 + 5 = \${result}\`);`);
   // Editor Panel
   const renderEditor = () => (
     <div className="space-y-4">
-      <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-4 rounded-xl text-white">
-        <h2 className="text-xl font-bold">Monaco Editor</h2>
-        <p className="text-purple-100 text-sm">Full-featured TypeScript editor with IntelliSense</p>
+      <div>
+        <h2 className="text-lg font-semibold text-gray-100">Editor</h2>
+        <p className="text-sm text-gray-500">TypeScript with IntelliSense; scriptc errors appear inline after a build.</p>
       </div>
       
-      <div className="bg-gray-800/50 rounded-xl border border-gray-700 overflow-hidden h-[500px]">
+      <div className="surface overflow-hidden h-[500px]">
         {activeFileId && (
-          <Editor
-            height="100%"
-            defaultLanguage="typescript"
+          <CodeEditor
             value={getActiveFile()?.content || code}
-            onChange={(value = '') => {
+            diagnostics={compileResult?.diagnostics}
+            onChange={(value) => {
               setCode(value);
               setActiveFileContent(value);
-            }}
-            theme={isDarkMode ? 'vs-dark' : 'vs-light'}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              wordWrap: 'on',
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
             }}
           />
         )}
@@ -605,25 +586,25 @@ console.log(\`3 + 5 = \${result}\`);`);
         <button
           onClick={handleCompile}
           disabled={isLoading}
-          className="flex-1 bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+          className="flex-1 bg-gray-100 text-black hover:bg-white p-3 rounded-lg font-medium transition-colors disabled:opacity-50"
         >
-          {isLoading ? '⏳ Compiling...' : '▶ Compile'}
+          {isLoading ? 'Compiling…' : 'Compile'}
         </button>
         
         <select
           value={target}
-          onChange={(e) => setTarget(e.target.value as any)}
+          onChange={(e) => setTarget(e.target.value as CompileTarget)}
           className="p-3 bg-gray-800 border border-gray-700 rounded-lg text-white"
         >
           <option value="exe">Native</option>
-          <option value="c">C Code</option>
+          <option value="asm">Assembly</option>
           <option value="llvm">LLVM IR</option>
           <option value="wasm">WASM</option>
         </select>
         
         <select
           value={platform}
-          onChange={(e) => setPlatform(e.target.value as any)}
+          onChange={(e) => setPlatform(e.target.value as CompilePlatform)}
           className="p-3 bg-gray-800 border border-gray-700 rounded-lg text-white"
         >
           <option value="linux">Linux</option>
@@ -656,18 +637,18 @@ console.log(\`3 + 5 = \${result}\`);`);
   // Project Explorer Panel
   const renderProjectExplorer = () => (
     <div className="space-y-4">
-      <div className="bg-gradient-to-r from-blue-500 to-cyan-500 p-4 rounded-xl text-white">
-        <h2 className="text-xl font-bold">Project Explorer</h2>
-        <p className="text-blue-100 text-sm">Manage multiple files and projects</p>
+      <div>
+        <h2 className="text-lg font-semibold text-gray-100">Project Explorer</h2>
+        <p className="text-sm text-gray-500">Manage multiple files and projects</p>
       </div>
       
       <div className="grid md:grid-cols-3 gap-4">
-        <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+        <div className="surface p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold">Projects</h3>
             <button
               onClick={() => setShowNewProjectModal(true)}
-              className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-sm transition-colors"
+              className="px-3 py-1 bg-gray-100 text-black hover:bg-white rounded text-sm transition-colors"
             >
               + New
             </button>
@@ -706,12 +687,12 @@ console.log(\`3 + 5 = \${result}\`);`);
           </div>
         </div>
         
-        <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+        <div className="surface p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold">Files</h3>
             <button
               onClick={() => setShowNewFileModal(true)}
-              className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded text-sm transition-colors"
+              className="px-3 py-1 bg-gray-100 text-black hover:bg-white rounded text-sm transition-colors"
             >
               + New
             </button>
@@ -747,7 +728,7 @@ console.log(\`3 + 5 = \${result}\`);`);
           </div>
         </div>
         
-        <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+        <div className="surface p-4">
           <h3 className="font-semibold mb-2">File Info</h3>
           {activeFileId && (
             <div className="space-y-2 text-sm">
@@ -766,9 +747,9 @@ console.log(\`3 + 5 = \${result}\`);`);
   // Terminal Panel
   const renderTerminal = () => (
     <div className="space-y-4">
-      <div className="bg-gradient-to-r from-green-500 to-emerald-500 p-4 rounded-xl text-white">
-        <h2 className="text-xl font-bold">Live Terminal</h2>
-        <p className="text-green-100 text-sm">Run commands and test your binaries</p>
+      <div>
+        <h2 className="text-lg font-semibold text-gray-100">Live Terminal</h2>
+        <p className="text-sm text-gray-500">Run commands and test your binaries</p>
       </div>
       
       <div 
@@ -804,7 +785,7 @@ console.log(\`3 + 5 = \${result}\`);`);
         </div>
       </div>
       
-      <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700">
+      <div className="surface p-4">
         <h3 className="font-semibold mb-2">Available Commands</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
           {['help', 'clear', 'ls', 'pwd', 'echo', 'compile', 'date', 'time'].map(cmd => (
@@ -827,16 +808,19 @@ console.log(\`3 + 5 = \${result}\`);`);
   // AI Gateway Panel
   const renderAIGateway = () => (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-6 rounded-xl text-white">
-        <h2 className="text-2xl font-bold mb-2">Zero-Latency AI Gateway</h2>
-        <p className="text-purple-100">Route LLM requests to the fastest/cheapest provider with ~2ms cold starts</p>
+      <div>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-100">Zero-Latency AI Gateway</h2>
+          <span className="badge">Demo · simulated data</span>
+        </div>
+        <p className="mt-1 text-sm text-gray-500">Route LLM requests to the fastest/cheapest provider</p>
       </div>
       
       <div className="grid md:grid-cols-2 gap-6">
         <div className="space-y-4">
           <select
             value={aiRequest.provider}
-            onChange={(e) => setAiRequest({ ...aiRequest, provider: e.target.value as any })}
+            onChange={(e) => setAiRequest({ ...aiRequest, provider: e.target.value as AIRequest['provider'] })}
             className="w-full p-3 rounded-lg border bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
           >
             {providers.map(provider => (
@@ -877,7 +861,7 @@ console.log(\`3 + 5 = \${result}\`);`);
           <button
             onClick={handleAiRequest}
             disabled={isLoading || !aiRequest.prompt.trim()}
-            className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white p-4 rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50"
+            className="btn btn-primary w-full h-11"
           >
             {isLoading ? 'Processing...' : 'Send Request'}
           </button>
@@ -920,9 +904,12 @@ console.log(\`3 + 5 = \${result}\`);`);
   // Auth Middleware Panel
   const renderAuthMiddleware = () => (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-blue-500 to-cyan-500 p-6 rounded-xl text-white">
-        <h2 className="text-2xl font-bold mb-2">Instant Auth Middleware</h2>
-        <p className="text-blue-100">Validate JWTs, API keys, and OAuth tokens at the edge with ~1ms checks</p>
+      <div>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-100">Instant Auth Middleware</h2>
+          <span className="badge">Demo · simulated data</span>
+        </div>
+        <p className="mt-1 text-sm text-gray-500">Validate JWTs, API keys, and OAuth tokens at the edge</p>
       </div>
       
       <div className="grid md:grid-cols-2 gap-6">
@@ -938,7 +925,7 @@ console.log(\`3 + 5 = \${result}\`);`);
           <button
             onClick={handleAuthValidation}
             disabled={isLoading || !authToken.trim()}
-            className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 text-white p-4 rounded-lg font-semibold hover:from-blue-700 hover:to-cyan-700 transition-all disabled:opacity-50"
+            className="btn btn-primary w-full h-11"
           >
             {isLoading ? 'Validating...' : 'Validate Token'}
           </button>
@@ -987,9 +974,12 @@ console.log(\`3 + 5 = \${result}\`);`);
   // URL Shortener Panel
   const renderUrlShortener = () => (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-orange-500 to-yellow-500 p-6 rounded-xl text-white">
-        <h2 className="text-2xl font-bold mb-2">No-BS URL Shortener</h2>
-        <p className="text-orange-100">Zero-database URL shortener with KV storage and ~1ms latency</p>
+      <div>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-100">No-BS URL Shortener</h2>
+          <span className="badge">Demo · simulated data</span>
+        </div>
+        <p className="mt-1 text-sm text-gray-500">Zero-database URL shortener with KV storage and ~1ms latency</p>
       </div>
       
       <div className="grid md:grid-cols-2 gap-6">
@@ -1012,7 +1002,7 @@ console.log(\`3 + 5 = \${result}\`);`);
           <button
             onClick={handleShortenUrl}
             disabled={isLoading || !urlToShorten.trim()}
-            className="w-full bg-gradient-to-r from-orange-600 to-yellow-600 text-white p-4 rounded-lg font-semibold hover:from-orange-700 hover:to-yellow-700 transition-all disabled:opacity-50"
+            className="btn btn-primary w-full h-11"
           >
             {isLoading ? 'Shortening...' : 'Shorten URL'}
           </button>
@@ -1065,9 +1055,12 @@ console.log(\`3 + 5 = \${result}\`);`);
   // Markdown Editor Panel
   const renderMarkdownEditor = () => (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-teal-500 to-emerald-500 p-6 rounded-xl text-white">
-        <h2 className="text-2xl font-bold mb-2">Notion-like Markdown Editor</h2>
-        <p className="text-teal-100">Offline-first markdown editor with live preview</p>
+      <div>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-100">Notion-like Markdown Editor</h2>
+          <span className="badge">Demo · simulated data</span>
+        </div>
+        <p className="mt-1 text-sm text-gray-500">Offline-first markdown editor with live preview</p>
       </div>
       
       <div className="grid md:grid-cols-2 gap-6">
@@ -1104,9 +1097,12 @@ console.log(\`3 + 5 = \${result}\`);`);
   // Analytics Dashboard Panel
   const renderAnalyticsDashboard = () => (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-indigo-500 to-purple-500 p-6 rounded-xl text-white">
-        <h2 className="text-2xl font-bold mb-2">Real-Time Analytics</h2>
-        <p className="text-indigo-100">Live monitoring of your scriptc-powered edge functions</p>
+      <div>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-gray-100">Real-Time Analytics</h2>
+          <span className="badge">Demo · simulated data</span>
+        </div>
+        <p className="mt-1 text-sm text-gray-500">Live monitoring of your scriptc-powered edge functions</p>
       </div>
       
       <div className="grid md:grid-cols-2 gap-6">
@@ -1193,54 +1189,32 @@ console.log(\`3 + 5 = \${result}\`);`);
   const [error, setError] = useState<string | null>(null);
   
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-black font-sans">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border-b border-gray-200 dark:border-gray-800">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-              NanoCLI Studio
-            </h1>
-            <span className="text-sm text-gray-500 dark:text-gray-400 hidden md:block">
-              Complete TypeScript Development Environment
-            </span>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            <button
-              onClick={toggleDarkMode}
-              className="p-2 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-            >
-              {isDarkMode ? '☀️' : '🌙'}
-            </button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen app-bg">
+      <SiteHeader active="/unified" />
       
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div id="main" className="max-w-6xl mx-auto px-4 py-8">
         {/* Navigation */}
         <nav className="mb-8">
           <div className="flex gap-2 overflow-x-auto pb-2 -mb-2">
             {[
-              { id: 'editor', label: 'Editor', icon: '💻' },
-              { id: 'projects', label: 'Projects', icon: '📁' },
-              { id: 'terminal', label: 'Terminal', icon: '🖥️' },
-              { id: 'ai', label: 'AI Gateway', icon: '🤖' },
-              { id: 'auth', label: 'Auth', icon: '🔐' },
-              { id: 'shorten', label: 'URL Shortener', icon: '🔗' },
-              { id: 'markdown', label: 'Markdown', icon: '📝' },
-              { id: 'analytics', label: 'Analytics', icon: '📊' },
+              { id: 'editor', label: 'Editor' },
+              { id: 'projects', label: 'Projects' },
+              { id: 'terminal', label: 'Terminal' },
+              { id: 'ai', label: 'AI Gateway' },
+              { id: 'auth', label: 'Auth' },
+              { id: 'shorten', label: 'URL Shortener' },
+              { id: 'markdown', label: 'Markdown' },
+              { id: 'analytics', label: 'Analytics' },
             ].map(feature => (
               <button
                 key={feature.id}
                 onClick={() => setActiveFeature(feature.id as ActiveFeature)}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 whitespace-nowrap transition-all ${
+                className={`h-9 px-3.5 rounded-lg text-sm flex items-center gap-2 whitespace-nowrap transition-colors ${
                   activeFeature === feature.id
-                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
-                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    ? 'bg-gray-100 text-black'
+                    : 'text-gray-400 hover:text-gray-100 hover:bg-white/[0.06]'
                 }`}
               >
-                <span>{feature.icon}</span>
                 <span>{feature.label}</span>
               </button>
             ))}
@@ -1257,7 +1231,7 @@ console.log(\`3 + 5 = \${result}\`);`);
       
       {/* New File Modal */}
       {showNewFileModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full mx-4 border border-gray-700">
             <h3 className="text-lg font-semibold mb-4">New File</h3>
             <div className="space-y-4">
@@ -1267,7 +1241,7 @@ console.log(\`3 + 5 = \${result}\`);`);
                   value={newFileName}
                   onChange={(e) => setNewFileName(e.target.value)}
                   placeholder="main.ts"
-                  className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
+                  className="input"
                 />
               </div>
               <div>
@@ -1275,7 +1249,7 @@ console.log(\`3 + 5 = \${result}\`);`);
                 <select
                   value={newFileLanguage}
                   onChange={(e) => setNewFileLanguage(e.target.value)}
-                  className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
+                  className="input"
                 >
                   <option value="typescript">TypeScript</option>
                   <option value="javascript">JavaScript</option>
@@ -1288,7 +1262,7 @@ console.log(\`3 + 5 = \${result}\`);`);
               <div className="flex gap-2">
                 <button
                   onClick={createNewFile}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-lg transition-colors"
+                  className="flex-1 bg-gray-100 text-black hover:bg-white p-2 rounded-lg transition-colors"
                 >
                   Create
                 </button>
@@ -1306,7 +1280,7 @@ console.log(\`3 + 5 = \${result}\`);`);
       
       {/* New Project Modal */}
       {showNewProjectModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-xl p-6 max-w-sm w-full mx-4 border border-gray-700">
             <h3 className="text-lg font-semibold mb-4">New Project</h3>
             <div className="space-y-4">
@@ -1316,13 +1290,13 @@ console.log(\`3 + 5 = \${result}\`);`);
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
                   placeholder="My Project"
-                  className="w-full p-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 focus:outline-none text-white"
+                  className="input"
                 />
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={createNewProject}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white p-2 rounded-lg transition-colors"
+                  className="flex-1 bg-gray-100 text-black hover:bg-white p-2 rounded-lg transition-colors"
                 >
                   Create
                 </button>
@@ -1337,17 +1311,7 @@ console.log(\`3 + 5 = \${result}\`);`);
           </div>
         </div>
       )}
-      
-      {/* Footer */}
-      <footer className="max-w-7xl mx-auto px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-        <p>
-          Built with ❤️ using <a href="https://scriptc.dev" className="text-purple-600 dark:text-purple-400 hover:underline">scriptc</a> • 
-          <a href="https://github.com/BrandDeb/Aha" className="text-purple-600 dark:text-purple-400 hover:underline">GitHub</a>
-        </p>
-        <p className="mt-2">
-          NanoCLI Studio - Complete TypeScript Development Environment
-        </p>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

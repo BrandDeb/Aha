@@ -33,10 +33,3 @@ export async function GET(request: NextRequest) {
     },
   });
 }
-
-// For use with server.js
-// This setup function can be imported and used with a proper HTTP server
-export function setupWebSocketServer(server: any) {
-  // This is a placeholder - actual WebSocket server is in server.js
-  return server;
-}

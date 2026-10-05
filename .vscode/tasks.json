@@ -1,0 +1,8 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "Install", "type": "shell", "command": "npm install", "problemMatcher": [] },
+    { "label": "Dev server", "type": "shell", "command": "npm run dev", "isBackground": true, "problemMatcher": [], "group": { "kind": "build", "isDefault": true } },
+    { "label": "Check (lint, types, tests)", "type": "shell", "command": "npm run lint && npm run typecheck && npm test", "problemMatcher": ["$tsc"], "group": "test" }
+  ]
+}

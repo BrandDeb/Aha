@@ -49,8 +49,8 @@ export default async function handleRequest(
 // AI Gateway Handler
 async function handleAIGateway(
   request: Request,
-  env: Env,
-  ctx: RequestContext
+  _env: Env,
+  _ctx: RequestContext
 ): Promise<Response> {
   try {
     if (request.method !== 'POST') {
@@ -80,7 +80,7 @@ async function handleAIGateway(
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
-  } catch (error) {
+  } catch {
     return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -92,7 +92,7 @@ async function handleAIGateway(
 async function handleAuthValidation(
   request: Request,
   env: Env,
-  ctx: RequestContext
+  _ctx: RequestContext
 ): Promise<Response> {
   try {
     if (request.method !== 'POST') {
@@ -105,15 +105,15 @@ async function handleAuthValidation(
     const body = await request.json();
     const { token } = body;
 
-    // Simplified JWT validation
+    // Shared-secret validation (constant time). Fails closed when no secret is configured.
     // TODO: Use jose library for actual JWT verification
-    const isValid = token === env.AUTH_SECRET || token?.startsWith('valid_');
+    const isValid = typeof token === 'string' && !!env.AUTH_SECRET && timingSafeEqual(token, env.AUTH_SECRET);
 
     return new Response(JSON.stringify({ valid: isValid, latency: '1ms' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
-  } catch (error) {
+  } catch {
     return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -125,7 +125,7 @@ async function handleAuthValidation(
 async function handleUrlShortener(
   request: Request,
   env: Env,
-  ctx: RequestContext
+  _ctx: RequestContext
 ): Promise<Response> {
   try {
     if (request.method !== 'POST') {
@@ -138,20 +138,37 @@ async function handleUrlShortener(
     const body = await request.json();
     const { url, customId } = body;
 
+    let target: URL;
+    try {
+      target = new URL(url);
+    } catch {
+      return jsonError('A valid absolute URL is required', 400);
+    }
+    if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+      return jsonError('Only http and https URLs can be shortened', 400);
+    }
+
+    if (customId !== undefined && (typeof customId !== 'string' || !/^[A-Za-z0-9_-]{3,32}$/.test(customId))) {
+      return jsonError('customId must be 3-32 characters of A-Z, a-z, 0-9, _ or -', 400);
+    }
+
     // Generate short ID
     const shortId = customId || generateShortId();
-    const shortUrl = `${url.pathname}/${shortId}`;
+    const shortUrl = `${new URL(request.url).origin}/s/${shortId}`;
 
-    // Store in KV (simplified)
+    // Store in KV (simplified); never overwrite an existing mapping
     if (env.KV) {
-      await env.KV.put(shortId, url);
+      if (customId && (await env.KV.get(shortId)) !== null) {
+        return jsonError('customId is already taken', 409);
+      }
+      await env.KV.put(shortId, target.toString());
     }
 
     return new Response(JSON.stringify({ shortId, shortUrl, latency: '1ms' }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
-  } catch (error) {
+  } catch {
     return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -162,11 +179,32 @@ async function handleUrlShortener(
 // Helper function to generate short IDs
 function generateShortId(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const values = new Uint8Array(8);
+  crypto.getRandomValues(values);
   let result = '';
-  for (let i = 0; i < 8; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (let i = 0; i < values.length; i++) {
+    result += chars.charAt(values[i] % chars.length);
   }
   return result;
+}
+
+// Constant-time string comparison to avoid leaking the secret via timing
+export function timingSafeEqual(a: string, b: string): boolean {
+  const encoder = new TextEncoder();
+  const aBytes = encoder.encode(a);
+  const bBytes = encoder.encode(b);
+  let diff = aBytes.length ^ bBytes.length;
+  for (let i = 0; i < bBytes.length; i++) {
+    diff |= (aBytes[i] ?? 0) ^ bBytes[i];
+  }
+  return diff === 0;
+}
+
+function jsonError(error: string, status: number): Response {
+  return new Response(JSON.stringify({ error }), {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  });
 }
 
 // Type definitions for Cloudflare Workers

@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "NanoCLI Studio: dev server",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/server.js",
+      "env": { "NODE_ENV": "development" },
+      "console": "integratedTerminal",
+      "serverReadyAction": {
+        "pattern": "Ready on (https?://\\S+)",
+        "uriFormat": "%s",
+        "action": "openExternally"
+      }
+    },
+    {
+      "name": "Tests",
+      "type": "node",
+      "request": "launch",
+      "runtimeArgs": ["--test", "--experimental-strip-types", "tests/**/*.test.ts"],
+      "console": "integratedTerminal"
+    }
+  ]
+}
