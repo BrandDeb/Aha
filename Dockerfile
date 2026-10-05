@@ -9,6 +9,9 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
+# Toolchain for native modules without prebuilt binaries (e.g. bufferutil on arm64 musl)
+RUN apk add --no-cache python3 make g++
+
 # Install dependencies (dev deps are needed for the build)
 RUN npm ci
 

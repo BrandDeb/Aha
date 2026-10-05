@@ -2,7 +2,8 @@
  * Compile every studio template with scriptc.
  *
  *   npm run templates:build            # native executables in dist/templates
- *   npm run templates:build -- --wasm  # also WASI modules (needs zig on PATH)
+ *   npm run templates:build -- --wasm  # also WASI modules (needs zig on PATH);
+ *                                      # templates that use sockets are native-only
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, statSync } from 'node:fs';
@@ -28,7 +29,9 @@ for (const template of TEMPLATES) {
   const targets: { label: string; out: string; env?: Record<string, string> }[] = [
     { label: 'native', out: path.join(outDir, template.id) },
   ];
-  if (wasm) {
+  if (wasm && template.network) {
+    console.log(`- ${template.name.padEnd(22)} wasm   skipped: uses sockets, which WASI Preview 1 lacks`);
+  } else if (wasm) {
     targets.push({ label: 'wasm', out: path.join(outDir, `${template.id}.wasm`), env: { SCRIPTC_TARGET: 'wasm32-wasi' } });
   }
 

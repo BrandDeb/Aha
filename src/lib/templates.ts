@@ -17,6 +17,8 @@ export interface Template {
   code: string;
   /** Additional project files (path -> content) for multi-file templates */
   files?: Record<string, string>;
+  /** Uses sockets (http, fetch): native only, since WASI Preview 1 has no socket API */
+  network?: boolean;
 }
 
 /** All files of a template as a project, entry under src/ */
@@ -319,6 +321,7 @@ console.log(\`fib(\${n}) = \${result} in \${elapsed.toFixed(1)}ms\`);
     name: 'HTTP Server',
     description: 'A native web server with no runtime attached',
     filename: 'server.ts',
+    network: true,
     code: `import { createServer } from 'node:http';
 
 const port = Number(process.argv[2] ?? '3000');
@@ -338,6 +341,7 @@ server.listen(port, () => {
     name: 'API Client',
     description: 'Fetches a URL and prints the JSON response',
     filename: 'fetch.ts',
+    network: true,
     code: `async function main(): Promise<void> {
   const url = process.argv[2];
   if (!url) {

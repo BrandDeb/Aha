@@ -124,14 +124,29 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Snyk token missing
+        if: env.SNYK_TOKEN == ''
+        run: echo "::notice::SNYK_TOKEN is not set; add it under Settings > Secrets > Actions to enable the Snyk scan. Running npm audit instead."
+
+      - name: Setup Node.js
+        if: env.SNYK_TOKEN == ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: npm audit (production dependencies)
+        if: env.SNYK_TOKEN == ''
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Run Snyk to check for vulnerabilities
+        if: env.SNYK_TOKEN != ''
         uses: snyk/actions/node@v1
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           command: test
 
