@@ -9,7 +9,6 @@ import type { Command } from './CommandPalette';
 import { Dialog } from './Dialog';
 
 export const EXTENSIONS: { id: keyof Settings['extensions'] | string; name: string; description: string }[] = [
-  { id: 'byteField', name: 'Byte field', description: 'The compiled binary drifting behind the glass.' },
   { id: 'wordWrap', name: 'Word wrap', description: 'Wrap long lines in the editor.' },
   { id: 'minimap', name: 'Minimap', description: 'Code overview along the editor’s right edge.' },
   { id: 'bracketPairs', name: 'Bracket pairs', description: 'Colourise matching brackets and draw pair guides.' },
@@ -53,7 +52,7 @@ export function SettingsDialog({ commands, isMac, onClose }: { commands: Command
         {hint && <span className="block text-xs text-gray-500">{hint}</span>}
       </span>
       <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} className="peer sr-only" />
-      <span aria-hidden="true" className="relative h-5 w-9 shrink-0 rounded-full border border-border-strong bg-white/[0.06] transition-colors peer-checked:bg-gray-100 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-gray-100 after:absolute after:top-0.5 after:left-0.5 after:h-3.5 after:w-3.5 after:rounded-full after:bg-gray-400 after:transition-all peer-checked:after:left-[18px] peer-checked:after:bg-black" />
+      <span aria-hidden="true" className="relative h-5 w-9 shrink-0 rounded-full border border-border-strong bg-white/[0.06] transition-colors peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-accent after:absolute after:top-0.5 after:left-0.5 after:h-3.5 after:w-3.5 after:rounded-full after:bg-gray-400 after:transition-all peer-checked:after:left-[18px] peer-checked:after:bg-[var(--color-accent-fg)]" />
     </label>
   );
 
@@ -155,7 +154,7 @@ export function SettingsDialog({ commands, isMac, onClose }: { commands: Command
                       <td className="py-2 text-right">
                         <button
                           onClick={() => setRecording(c.id)}
-                          className={`kbd h-7 min-w-[5rem] justify-center px-2 ${recording === c.id ? 'border-gray-100 text-gray-100' : ''}`}
+                          className={`kbd h-7 min-w-[5rem] justify-center px-2 ${recording === c.id ? 'border-accent text-accent' : ''}`}
                           aria-label={`Change shortcut for ${c.title}${current ? `, currently ${formatCombo(current, isMac)}` : ''}`}
                         >
                           {recording === c.id ? 'Press keys…' : current ? formatCombo(current, isMac) : '—'}

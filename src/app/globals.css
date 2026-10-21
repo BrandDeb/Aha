@@ -4,35 +4,40 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * NanoCLI — monochrome glass.
+ * NanoCLI — dark editor, one accent.
  *
- * Palette (dark):  Ink #000 · Graphite #0b0b0c · Smoke (glass) rgba(255,255,255,.06)
- *                  Frost (edges) rgba(255,255,255,.14) · Ash #8a8a8a · Paper #f5f5f4
- * Light mode is an exact inversion: every utility reads these variables, so
- * html.light swaps the scale instead of restyling components.
+ * Solid panels with hairline borders on a near-black canvas, high-contrast
+ * text and a single electric-green accent for actions and status. Light mode
+ * inverts the neutral scale and darkens the accent; every utility reads these
+ * variables, so html.light swaps values instead of restyling components.
  *
- * Tailwind's chromatic scales (purple/blue/pink/…) are folded into the
- * neutral scale so legacy utilities stay inside the black-and-white system.
+ * Tailwind's other chromatic scales (purple/blue/pink/…) are folded into the
+ * neutral scale so legacy utilities stay inside the palette.
  */
 @theme {
   --font-sans: 'Hanken Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-display: 'Doto Variable', 'IBM Plex Mono', monospace;
 
-  --color-black: #000000;
+  --color-black: #09090b;
   --color-white: #ffffff;
 
   --color-gray-50: #fafafa;
-  --color-gray-100: #f5f5f4;
-  --color-gray-200: #dcdcdb;
-  --color-gray-300: #bdbdbc;
-  --color-gray-400: #9b9b9a;
-  --color-gray-500: #8a8a8a;
-  --color-gray-600: #4a4a4a;
-  --color-gray-700: #2a2a2b;
-  --color-gray-800: #161617;
-  --color-gray-900: #0b0b0c;
-  --color-gray-950: #050505;
+  --color-gray-100: #ededf0;
+  --color-gray-200: #d4d4d9;
+  --color-gray-300: #b9b9c0;
+  --color-gray-400: #a1a1aa;
+  --color-gray-500: #8a8a93;
+  --color-gray-600: #52525b;
+  --color-gray-700: #2e2e35;
+  --color-gray-800: #1b1b20;
+  --color-gray-900: #111114;
+  --color-gray-950: #0a0a0c;
+
+  /* The accent */
+  --color-accent: #34e88a;
+  --color-accent-hover: #6af2a8;
+  --color-accent-fg: #03140b;
 
   --color-zinc-50: var(--color-gray-50);
   --color-zinc-900: var(--color-gray-900);
@@ -76,75 +81,82 @@
   --color-foreground: var(--color-gray-100);
   --color-muted: var(--color-gray-400);
   --color-subtle: var(--color-gray-500);
-  --color-accent: var(--color-gray-100);
   --color-border: var(--frost-weak);
   --color-border-strong: var(--frost);
-  /* Status stays readable without colour: always paired with a glyph */
-  --color-success: var(--color-gray-100);
+  /* Status is never colour alone: always paired with a glyph or text */
+  --color-success: var(--color-accent);
   --color-warning: var(--color-gray-300);
   --color-danger: #ff6b6b;
-  --color-green-400: var(--color-gray-100);
-  --color-green-500: var(--color-gray-100);
-  --color-green-600: var(--color-gray-200);
+  --color-green-400: var(--color-accent);
+  --color-green-500: var(--color-accent);
+  --color-green-600: var(--color-accent);
   --color-red-300: #ff9b9b;
   --color-red-400: #ff8080;
   --color-red-500: #ff6b6b;
 
-  --radius-xl: 0.875rem;
-  --radius-2xl: 1rem;
-  --radius-3xl: 1.25rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 1rem;
 }
 
 :root {
-  --smoke: rgb(255 255 255 / 0.055);
-  --smoke-strong: rgb(255 255 255 / 0.09);
-  --frost-weak: rgb(255 255 255 / 0.09);
-  --frost: rgb(255 255 255 / 0.16);
-  --glint: rgb(255 255 255 / 0.22);
-  --glass-blur: 22px;
-  --pane: rgb(11 11 12 / 0.72);
-  --pane-solid: rgb(11 11 12 / 0.92);
-  --byte-ink: 255 255 255;
+  --bar: #0c0c0f;
+  --panel: #0f0f12;
+  --raised: #141418;
+  --smoke: rgb(255 255 255 / 0.04);
+  --smoke-strong: rgb(255 255 255 / 0.075);
+  --frost-weak: rgb(255 255 255 / 0.08);
+  --frost: rgb(255 255 255 / 0.15);
+  --glint: transparent;
+  --glass-blur: 0px;
+  --pane: var(--panel);
+  --pane-solid: var(--panel);
+  --accent-soft: rgb(52 232 138 / 0.12);
+  --accent-line: rgb(52 232 138 / 0.4);
+  --byte-ink: 52 232 138;
 }
 
-/* Light: invert the scale */
+/* Light: invert the scale, darken the accent */
 html.light {
   color-scheme: light;
-  --color-black: #f4f4f3;
+  --color-black: #f6f6f5;
   --color-white: #000000;
   --color-gray-50: #050505;
-  --color-gray-100: #0b0b0c;
-  --color-gray-200: #262627;
-  --color-gray-300: #444445;
-  --color-gray-400: #5e5e5e;
-  --color-gray-500: #737373;
-  --color-gray-600: #a8a8a8;
-  --color-gray-700: #cfcfce;
-  --color-gray-800: #e4e4e3;
-  --color-gray-900: #ececeb;
-  --color-gray-950: #f7f7f6;
+  --color-gray-100: #0e0e10;
+  --color-gray-200: #26262a;
+  --color-gray-300: #43434a;
+  --color-gray-400: #5a5a63;
+  --color-gray-500: #6e6e78;
+  --color-gray-600: #a8a8b0;
+  --color-gray-700: #d2d2d6;
+  --color-gray-800: #e6e6e8;
+  --color-gray-900: #efeff0;
+  --color-gray-950: #f8f8f8;
+  --color-accent: #0a8a4a;
+  --color-accent-hover: #077a41;
+  --color-accent-fg: #ffffff;
   --color-danger: #c62828;
   --color-red-300: #c62828;
   --color-red-400: #c62828;
   --color-red-500: #c62828;
-  --smoke: rgb(255 255 255 / 0.5);
-  --smoke-strong: rgb(255 255 255 / 0.7);
-  --frost-weak: rgb(0 0 0 / 0.08);
-  --frost: rgb(0 0 0 / 0.14);
-  --glint: rgb(255 255 255 / 0.9);
-  --pane: rgb(250 250 249 / 0.72);
-  --pane-solid: rgb(250 250 249 / 0.94);
-  --byte-ink: 0 0 0;
+  --bar: #fbfbfa;
+  --panel: #ffffff;
+  --raised: #fafafa;
+  --smoke: rgb(0 0 0 / 0.035);
+  --smoke-strong: rgb(0 0 0 / 0.07);
+  --frost-weak: rgb(0 0 0 / 0.09);
+  --frost: rgb(0 0 0 / 0.16);
+  --accent-soft: rgb(10 138 74 / 0.1);
+  --accent-line: rgb(10 138 74 / 0.4);
+  --byte-ink: 10 138 74;
 }
 
 /* High contrast: solid surfaces, stronger edges, no translucency */
 html.hc {
-  --smoke: var(--pane-solid);
-  --smoke-strong: var(--pane-solid);
+  --smoke: var(--panel);
+  --smoke-strong: var(--panel);
   --frost-weak: rgb(255 255 255 / 0.45);
   --frost: rgb(255 255 255 / 0.75);
-  --glass-blur: 0px;
-  --pane: var(--pane-solid);
   --color-gray-400: #d6d6d6;
   --color-gray-500: #c4c4c4;
 }
@@ -161,9 +173,8 @@ html.light.hc {
     background: var(--color-background);
   }
 
-  /* <html> carries the base colour so the fixed byte field (z -10) shows through */
   body {
-    background: transparent;
+    background: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -182,12 +193,12 @@ html.light.hc {
   }
 
   ::selection {
-    background: var(--color-gray-100);
-    color: var(--color-black);
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-gray-100);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
     border-radius: 6px;
   }
@@ -210,8 +221,8 @@ html.light.hc {
     z-index: 100;
     padding: 0.5rem 0.875rem;
     border-radius: 0.5rem;
-    background: var(--color-gray-100);
-    color: var(--color-black);
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
     font-size: 0.875rem;
     transition: top 150ms;
   }
@@ -219,36 +230,21 @@ html.light.hc {
     top: 1rem;
   }
 
-  /* Page backdrop for content pages (the byte field sits on top of this) */
-  .app-bg {
-    background-color: transparent;
-  }
-
-  /* Glass: translucent fill, frosted backdrop, hairline edge with a top glint */
+  /* Surfaces: solid fills and hairline borders, no blur */
   .glass {
-    background: var(--smoke);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(120%);
-    backdrop-filter: blur(var(--glass-blur)) saturate(120%);
+    background: var(--bar);
     border: 1px solid var(--frost-weak);
-    box-shadow: inset 0 1px 0 var(--glint), 0 20px 50px -30px rgb(0 0 0 / 0.6);
+    box-shadow: 0 24px 60px -24px rgb(0 0 0 / 0.7);
   }
 
   .pane {
     background: var(--pane);
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    backdrop-filter: blur(var(--glass-blur));
-    border: 1px solid var(--frost-weak);
-    border-radius: 0.875rem;
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04);
   }
 
   .surface {
-    background: var(--smoke);
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    backdrop-filter: blur(var(--glass-blur));
+    background: var(--raised);
     border: 1px solid var(--frost-weak);
-    border-radius: 0.875rem;
-    box-shadow: inset 0 1px 0 var(--glint);
+    border-radius: 0.75rem;
   }
 
   .btn {
@@ -258,7 +254,7 @@ html.light.hc {
     gap: 0.5rem;
     height: 2.25rem;
     padding: 0 0.875rem;
-    border-radius: 9999px;
+    border-radius: 0.5rem;
     font-size: 0.875rem;
     font-weight: 500;
     white-space: nowrap;
@@ -273,25 +269,21 @@ html.light.hc {
     cursor: not-allowed;
   }
 
-  .btn-primary {
-    background: var(--color-gray-100);
-    color: var(--color-black);
-  }
-  .btn-primary:not(:disabled):hover {
-    background: var(--color-white);
-  }
-
+  .btn-primary,
   .btn-accent {
-    background: var(--color-gray-100);
-    color: var(--color-black);
+    background: var(--color-accent);
+    color: var(--color-accent-fg);
+    font-weight: 600;
+  }
+  .btn-primary:not(:disabled):hover,
+  .btn-accent:not(:disabled):hover {
+    background: var(--color-accent-hover);
   }
 
   .btn-secondary {
     background: var(--smoke);
     border-color: var(--frost);
     color: var(--color-foreground);
-    -webkit-backdrop-filter: blur(12px);
-    backdrop-filter: blur(12px);
   }
   .btn-secondary:not(:disabled):hover {
     background: var(--smoke-strong);
@@ -315,14 +307,14 @@ html.light.hc {
     width: 2rem;
     height: 2rem;
     padding: 0;
-    border-radius: 0.625rem;
+    border-radius: 0.5rem;
   }
 
   .input {
     width: 100%;
     height: 2.25rem;
     padding: 0 0.75rem;
-    border-radius: 0.625rem;
+    border-radius: 0.5rem;
     background: var(--smoke);
     border: 1px solid var(--frost);
     color: var(--color-foreground);
@@ -331,8 +323,8 @@ html.light.hc {
   }
   .input:focus {
     outline: none;
-    border-color: var(--color-gray-100);
-    box-shadow: 0 0 0 3px var(--frost-weak);
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }
   textarea.input {
     height: auto;
@@ -364,7 +356,7 @@ html.light.hc {
     border-radius: 9999px;
     font-size: 0.75rem;
     font-weight: 500;
-    border: 1px solid var(--frost);
+    border: 1px solid var(--frost-weak);
     color: var(--color-muted);
     background: var(--smoke);
   }
@@ -385,14 +377,14 @@ html.light.hc {
     display: inline-flex;
     padding: 0.1875rem;
     gap: 0.125rem;
-    border-radius: 9999px;
+    border-radius: 0.625rem;
     background: var(--smoke);
     border: 1px solid var(--frost-weak);
   }
   .segmented > button {
-    height: 1.75rem;
+    height: 1.625rem;
     padding: 0 0.75rem;
-    border-radius: 9999px;
+    border-radius: 0.4375rem;
     font-size: 0.8125rem;
     color: var(--color-muted);
     transition: background-color 150ms, color 150ms;
@@ -402,22 +394,28 @@ html.light.hc {
   }
   .segmented > button[aria-pressed="true"],
   .segmented > button[aria-selected="true"] {
-    background: var(--color-gray-100);
-    color: var(--color-black);
+    background: var(--accent-soft);
+    color: var(--color-accent);
+    box-shadow: inset 0 0 0 1px var(--accent-line);
   }
 
+  /* Headlines */
   .display {
+    font-weight: 700;
+    letter-spacing: -0.045em;
+    line-height: 1;
+  }
+
+  /* The dot-matrix wordmark: logo only */
+  .wordmark {
     font-family: var(--font-display);
     font-weight: 900;
-    letter-spacing: 0.02em;
-    line-height: 0.95;
+    letter-spacing: 0.03em;
+    line-height: 1;
   }
 
   .text-gradient {
-    background: linear-gradient(180deg, var(--color-gray-50) 0%, var(--color-gray-500) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    color: var(--color-accent);
   }
 
   /* Status glyph dot (paired with text, never colour alone) */
@@ -468,7 +466,7 @@ html.zen [data-zen-hide] {
 
 /* Monaco: TODO highlighter extension */
 .todo-highlight {
-  text-decoration: underline wavy var(--color-gray-400);
+  text-decoration: underline wavy var(--color-accent);
   text-underline-offset: 3px;
   font-weight: 600;
 }

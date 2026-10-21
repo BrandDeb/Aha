@@ -46,6 +46,9 @@ export const configureMonaco: BeforeMount = (monaco) => {
     };
     ts.typescriptDefaults.setCompilerOptions(options);
     ts.javascriptDefaults.setCompilerOptions(options);
+    // Without this the worker only sees the open file, so imports between project files can't resolve
+    ts.typescriptDefaults.setEagerModelSync(true);
+    ts.javascriptDefaults.setEagerModelSync(true);
     ts.typescriptDefaults.addExtraLib(NODE_TYPES, 'file:///node_modules/@types/node-lite/index.d.ts');
   }
 
@@ -53,24 +56,24 @@ export const configureMonaco: BeforeMount = (monaco) => {
     ? {
         'editor.background': '#00000000',
         'editor.foreground': '#f5f5f4',
-        'editorLineNumber.foreground': '#3a3a3a',
-        'editorLineNumber.activeForeground': '#bdbdbc',
+        'editorLineNumber.foreground': '#55555f',
+        'editorLineNumber.activeForeground': '#d4d4d9',
         'editor.lineHighlightBackground': '#ffffff08',
         'editor.lineHighlightBorder': '#00000000',
-        'editor.selectionBackground': '#ffffff2e',
+        'editor.selectionBackground': '#34e88a33',
         'editor.inactiveSelectionBackground': '#ffffff14',
-        'editorCursor.foreground': '#ffffff',
+        'editorCursor.foreground': '#34e88a',
         'editorIndentGuide.background1': '#ffffff10',
         'editorIndentGuide.activeBackground1': '#ffffff30',
-        'editorWidget.background': '#0b0b0c',
+        'editorWidget.background': '#141418',
         'editorWidget.border': '#ffffff24',
-        'editorHoverWidget.background': '#0b0b0c',
+        'editorHoverWidget.background': '#141418',
         'editorHoverWidget.border': '#ffffff24',
-        'editorSuggestWidget.background': '#0b0b0c',
+        'editorSuggestWidget.background': '#141418',
         'editorSuggestWidget.selectedBackground': '#ffffff1a',
         'editorBracketMatch.background': '#ffffff14',
         'editorBracketMatch.border': '#ffffff40',
-        'editorStickyScroll.background': '#0b0b0c',
+        'editorStickyScroll.background': '#0c0c0f',
         'scrollbarSlider.background': '#ffffff14',
         'scrollbarSlider.hoverBackground': '#ffffff24',
         'diffEditor.insertedTextBackground': '#ffffff1f',
@@ -86,7 +89,7 @@ export const configureMonaco: BeforeMount = (monaco) => {
         'editor.lineHighlightBackground': '#0000000a',
         'editor.lineHighlightBorder': '#00000000',
         'editor.selectionBackground': '#00000024',
-        'editorCursor.foreground': '#000000',
+        'editorCursor.foreground': '#0a8a4a',
         'editorWidget.background': '#fafaf9',
         'editorWidget.border': '#00000024',
         'editorHoverWidget.background': '#fafaf9',
@@ -96,19 +99,19 @@ export const configureMonaco: BeforeMount = (monaco) => {
         'diffEditor.removedTextBackground': '#c6282826',
       };
 
-  // Monochrome syntax: hierarchy through weight, italics and grey levels
+  // Restrained syntax colours: the accent marks keywords and strings, everything else stays neutral
   monaco.editor.defineTheme('nanocli-dark', {
     base: 'vs-dark',
     inherit: true,
     rules: [
-      { token: '', foreground: 'f5f5f4' },
-      { token: 'comment', foreground: '6e6e6e', fontStyle: 'italic' },
-      { token: 'keyword', foreground: 'ffffff', fontStyle: 'bold' },
-      { token: 'string', foreground: 'bdbdbc' },
-      { token: 'number', foreground: 'dcdcdb' },
-      { token: 'type', foreground: 'f5f5f4', fontStyle: 'italic' },
-      { token: 'delimiter', foreground: '8a8a8a' },
-      { token: 'regexp', foreground: 'bdbdbc', fontStyle: 'underline' },
+      { token: '', foreground: 'ededf0' },
+      { token: 'comment', foreground: '6b6b76', fontStyle: 'italic' },
+      { token: 'keyword', foreground: '34e88a' },
+      { token: 'string', foreground: '9fd9b8' },
+      { token: 'number', foreground: 'f2c879' },
+      { token: 'type', foreground: 'b9b9c0', fontStyle: 'italic' },
+      { token: 'delimiter', foreground: '8a8a93' },
+      { token: 'regexp', foreground: '9fd9b8', fontStyle: 'underline' },
     ],
     colors: colors(true),
   });
@@ -116,13 +119,13 @@ export const configureMonaco: BeforeMount = (monaco) => {
     base: 'vs',
     inherit: true,
     rules: [
-      { token: '', foreground: '0b0b0c' },
-      { token: 'comment', foreground: '8a8a8a', fontStyle: 'italic' },
-      { token: 'keyword', foreground: '000000', fontStyle: 'bold' },
-      { token: 'string', foreground: '444445' },
-      { token: 'number', foreground: '262627' },
-      { token: 'type', foreground: '0b0b0c', fontStyle: 'italic' },
-      { token: 'delimiter', foreground: '737373' },
+      { token: '', foreground: '0e0e10' },
+      { token: 'comment', foreground: '8a8a93', fontStyle: 'italic' },
+      { token: 'keyword', foreground: '0a7a43' },
+      { token: 'string', foreground: '1c6b49' },
+      { token: 'number', foreground: '9a5b00' },
+      { token: 'type', foreground: '43434a', fontStyle: 'italic' },
+      { token: 'delimiter', foreground: '6e6e78' },
     ],
     colors: colors(false),
   });
@@ -239,21 +242,34 @@ export function CodeEditor({
   });
 
   // Keep the other project files registered as models for cross-file IntelliSense
-  useEffect(() => {
+  const syncModels = () => {
     const monaco = monacoRef.current;
     if (!monaco || !files) return;
     const wanted = new Set(Object.keys(files).map(uriFor));
+    let added = false;
     for (const [filePath, content] of Object.entries(files)) {
       if (filePath === path) continue;
       const uri = monaco.Uri.parse(uriFor(filePath));
       const model = monaco.editor.getModel(uri);
-      if (!model) monaco.editor.createModel(content, undefined, uri);
-      else if (model.getValue() !== content) model.setValue(content);
+      if (!model) {
+        monaco.editor.createModel(content, undefined, uri);
+        added = true;
+      } else if (model.getValue() !== content) model.setValue(content);
     }
     for (const model of monaco.editor.getModels()) {
       const uri = model.uri.toString();
       if (uri.startsWith('file:///') && !uri.includes('node_modules') && !wanted.has(uri)) model.dispose();
     }
+    // Files that were already open were checked before their imports existed;
+    // re-applying the diagnostics options makes the TypeScript worker re-validate them
+    if (added) {
+      const defaults = monaco.languages.typescript.typescriptDefaults;
+      defaults.setDiagnosticsOptions({ ...defaults.getDiagnosticsOptions() });
+    }
+  };
+
+  useEffect(() => {
+    syncModels();
   });
 
   useEffect(() => () => onEditor?.(null), [onEditor]);
@@ -264,6 +280,8 @@ export function CodeEditor({
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => onRunRef.current?.());
     editor.onDidFocusEditorText(() => onFocus?.());
     onEditor?.(editor);
+    // The sync effect ran before Monaco mounted, so register the other files now
+    syncModels();
     applyMarkers();
     applyTodoHighlights();
   };

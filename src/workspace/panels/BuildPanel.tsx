@@ -40,15 +40,29 @@ export function BuildPanel({ result, building, coverage, analyzing, onCoverage, 
             Compiling with scriptc…
           </p>
         ) : !result ? (
-          <p className="text-sm text-gray-500">Compile to see the build pipeline, artifact size and problems.</p>
+          <div className="space-y-4">
+            <ol className="space-y-3 text-sm text-gray-300">
+              {[
+                ['Compile', 'builds a native binary and shows the pipeline, size and any scriptc problems.'],
+                ['Run in the terminal', 'type run to execute the project as WASM, right in this tab.'],
+                ['Ask the assistant', 'explain a file, fix build errors or write tests.'],
+              ].map(([title, body], i) => (
+                <li key={title} className="flex gap-3">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] font-mono text-[11px] text-accent">{i + 1}</span>
+                  <span><strong className="font-medium text-gray-100">{title}</strong> — {body}</span>
+                </li>
+              ))}
+            </ol>
+            <button onClick={() => void actions.compile()} className="btn btn-primary w-full">Compile now</button>
+          </div>
         ) : (
           <div className="space-y-4 animate-fade-in">
             <p className="flex items-center gap-2 text-sm text-gray-100" role="status">
-              <span className="font-mono" aria-hidden="true">{result.success ? '✓' : '✕'}</span>
+              <span className={`font-mono ${result.success ? 'text-accent' : 'text-danger'}`} aria-hidden="true">{result.success ? '✓' : '✕'}</span>
               {result.success ? 'Build succeeded' : 'Build failed'}
             </p>
             {result.success && (
-              <dl className="grid grid-cols-2 overflow-hidden rounded-2xl border border-border">
+              <dl className="grid grid-cols-2 overflow-hidden rounded-xl border border-border">
                 <div className="border-r border-border p-3">
                   <dt className="text-xs text-gray-500">Artifact</dt>
                   <dd className="mt-1 font-mono text-lg text-gray-100">{formatSize(result.size)}</dd>
@@ -75,14 +89,14 @@ export function BuildPanel({ result, building, coverage, analyzing, onCoverage, 
           <h3 id="pipeline" className="eyebrow mb-3">Pipeline</h3>
           <div className="flex h-2 overflow-hidden rounded-full bg-gray-800" aria-hidden="true">
             {phases.map((p, i) => (
-              <div key={p.name} style={{ width: `${Math.max(2, (p.ms / total) * 100)}%`, opacity: 1 - i * 0.2 }} className="h-full bg-gray-100" />
+              <div key={p.name} style={{ width: `${Math.max(2, (p.ms / total) * 100)}%`, opacity: 1 - i * 0.2 }} className="h-full bg-accent" />
             ))}
           </div>
           <ol className="mt-3 space-y-1.5 text-sm">
             {phases.map((p, i) => (
               <li key={p.name} className="flex items-center justify-between">
                 <span className="flex items-center gap-2 text-gray-300">
-                  <span className="h-2 w-2 rounded-full bg-gray-100" style={{ opacity: 1 - i * 0.2 }} aria-hidden="true" />
+                  <span className="h-2 w-2 rounded-full bg-accent" style={{ opacity: 1 - i * 0.2 }} aria-hidden="true" />
                   {PHASE_LABELS[p.name] ?? p.name}
                 </span>
                 <span className="font-mono text-xs text-gray-500">{p.ms}ms</span>
@@ -132,7 +146,7 @@ export function BuildPanel({ result, building, coverage, analyzing, onCoverage, 
               <span className="text-xs text-gray-500">{coverage.static}/{coverage.statements} statements</span>
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-gray-800" role="progressbar" aria-valuenow={coverage.percent} aria-valuemin={0} aria-valuemax={100} aria-label="Static coverage">
-              <div className="h-full rounded-full bg-gray-100" style={{ width: `${coverage.percent ?? 0}%` }} />
+              <div className="h-full rounded-full bg-accent" style={{ width: `${coverage.percent ?? 0}%` }} />
             </div>
             {coverage.blockers?.length ? (
               <ul className="space-y-1.5 text-xs">
@@ -159,7 +173,7 @@ export function BuildPanel({ result, building, coverage, analyzing, onCoverage, 
             Type <span className="kbd">run</span> in the terminal to execute the program as WASM in this tab and profile it.
           </p>
         ) : lastRun.ok ? (
-          <dl className="grid grid-cols-3 overflow-hidden rounded-2xl border border-border text-center">
+          <dl className="grid grid-cols-3 overflow-hidden rounded-xl border border-border text-center">
             <div className="border-r border-border p-3">
               <dt className="text-[11px] text-gray-500">Exit</dt>
               <dd className="mt-1 font-mono text-gray-100">{lastRun.code}</dd>

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ByteField } from '@/components/ByteField';
 import { CodeEditor, DiffView, type EditorInstance } from '@/components/CodeEditor';
 import { analyzeCoverageBrowser, compileTypeScriptBrowser, type CompileResult, type CoverageResult, type Diagnostic } from '@/lib/compiler-browser';
 import { TEMPLATES, templateFiles } from '@/lib/templates';
@@ -83,7 +82,7 @@ export function Workspace() {
   const [showExplorer, setShowExplorer] = useState(true);
   const [showPanel, setShowPanel] = useState(true);
   const [showTerminal, setShowTerminal] = useState(true);
-  const [terminalHeight, setTerminalHeight] = useState(260);
+  const [terminalHeight, setTerminalHeight] = useState(220);
   const [zen, setZen] = useState(false);
   const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project'>(null);
   const [diff, setDiff] = useState<{ title: string; path: string; original: string; modified: string } | null>(null);
@@ -449,19 +448,18 @@ export function Workspace() {
 
   return (
     <ActionsContext.Provider value={actions}>
-      {extensions.byteField !== false && <ByteField />}
-      <div className="flex h-dvh flex-col gap-2.5 p-2.5 text-gray-100">
+      <div className="flex h-dvh flex-col bg-background text-gray-100">
         {/* Top bar */}
-        <header className="glass flex h-14 shrink-0 items-center gap-3 rounded-2xl px-3" data-zen-hide>
+        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-[var(--bar)] px-3" data-zen-hide>
           <Link href="/landing" className="flex items-center gap-2 pl-1" aria-label="NanoCLI overview">
-            <span className="display text-[22px] leading-none text-gray-100">NANOCLI</span>
+            <span className="wordmark text-[20px] text-gray-100">NANOCLI</span>
           </Link>
           <span className="h-5 w-px bg-border" aria-hidden="true" />
           <input
             value={project.name}
             onChange={(e) => dispatch({ type: 'rename-project', name: e.target.value })}
             aria-label="Project name"
-            className="w-36 min-w-0 rounded-lg bg-transparent px-2 py-1 font-mono text-sm text-gray-300 outline-none hover:bg-white/[0.05] focus:bg-white/[0.07]"
+            className="w-36 min-w-0 rounded-md bg-transparent px-2 py-1 font-mono text-sm text-gray-300 outline-none hover:bg-white/[0.05] focus:bg-white/[0.07]"
           />
           {git && (
             <button onClick={() => openPanel('git')} className="badge hidden font-mono md:inline-flex" title={`${git.owner}/${git.repo}`}>
@@ -485,7 +483,7 @@ export function Workspace() {
             </button>
             <button onClick={() => void compile()} disabled={building} className="btn btn-primary btn-sm" title={formatCombo(bindings['build.compile'] ?? '', isMac)}>
               {building ? 'Compiling…' : 'Compile'}
-              <span className="kbd border-black/20 text-[10px] text-black/60">{formatCombo(bindings['build.compile'] ?? '', isMac)}</span>
+              <span className="kbd border-black/25 text-[10px] text-[var(--color-accent-fg)]/70">{formatCombo(bindings['build.compile'] ?? '', isMac)}</span>
             </button>
             <button onClick={() => setDialog('palette')} className="btn btn-ghost btn-icon" aria-label="Command palette" title={formatCombo(bindings['view.palette'] ?? '', isMac)}>⌘</button>
             <button onClick={() => setDialog('settings')} className="btn btn-ghost btn-icon" aria-label="Settings">⚙</button>
@@ -505,10 +503,10 @@ export function Workspace() {
           </div>
         </header>
 
-        <div className="flex min-h-0 flex-1 gap-2.5">
+        <div className="flex min-h-0 flex-1">
           {/* Explorer */}
           {showExplorer && (
-            <aside className="pane hidden w-60 shrink-0 flex-col md:flex" aria-label="Explorer" data-zen-hide>
+            <aside className="pane hidden w-60 shrink-0 flex-col border-r border-border md:flex" aria-label="Explorer" data-zen-hide>
               <FileTree errorCounts={errorCounts} />
               <div className="flex items-center gap-1 border-t border-border p-2">
                 <button onClick={() => setDialog('templates')} className="btn btn-ghost btn-sm flex-1">New project</button>
@@ -518,15 +516,15 @@ export function Workspace() {
           )}
 
           {/* Editor + terminal */}
-          <main id="main" className="flex min-w-0 flex-1 flex-col gap-2.5">
-            <section className="pane flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="Editor">
-              <div className="flex h-10 shrink-0 items-center border-b border-border" data-zen-hide>
+          <main id="main" className="flex min-w-0 flex-1 flex-col">
+            <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--color-background)]" aria-label="Editor">
+              <div className="flex h-10 shrink-0 items-center border-b border-border bg-[var(--bar)]" data-zen-hide>
                 <div role="tablist" aria-label="Open files" className="flex min-w-0 flex-1 overflow-x-auto">
                   {tabs.map((tab) => (
                     <div
                       key={tab}
                       className={`group flex h-10 shrink-0 items-center gap-2 border-r border-border pl-3.5 pr-2 font-mono text-xs ${
-                        tab === active ? 'bg-white/[0.06] text-gray-100' : 'text-gray-500 hover:text-gray-200'
+                        tab === active ? 'bg-[var(--color-background)] text-gray-100 shadow-[inset_0_-2px_0_var(--color-accent)]' : 'bg-[var(--bar)] text-gray-400 hover:text-gray-100'
                       }`}
                     >
                       <button role="tab" aria-selected={tab === active} onClick={() => dispatch({ type: 'open', path: tab })} title={tab}>
@@ -560,7 +558,7 @@ export function Workspace() {
             </section>
 
             {showTerminal && (
-              <section className="pane relative flex shrink-0 flex-col overflow-hidden" style={{ height: terminalHeight }} aria-label="Terminal" data-zen-hide>
+              <section className="pane relative flex shrink-0 flex-col overflow-hidden border-t border-border" style={{ height: terminalHeight }} aria-label="Terminal" data-zen-hide>
                 <div
                   role="separator"
                   aria-orientation="horizontal"
@@ -586,24 +584,21 @@ export function Workspace() {
 
           {/* Side panel */}
           {showPanel && (
-            <aside className="pane hidden w-[22rem] shrink-0 flex-col overflow-hidden lg:flex" aria-label="Tools" data-zen-hide>
-              <div role="tablist" aria-label="Tool panels" className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-border p-1.5">
+            <aside className="pane hidden w-[24rem] shrink-0 flex-col overflow-hidden border-l border-border lg:flex" aria-label="Tools" data-zen-hide>
+              <div role="tablist" aria-label="Tool panels" className="flex shrink-0 overflow-x-auto border-b border-border bg-[var(--bar)] px-1">
                 {PANELS.map((p) => (
                   <button
                     key={p.id}
                     role="tab"
                     aria-selected={panel === p.id}
                     onClick={() => setPanel(p.id)}
-                    title={p.label}
-                    aria-label={p.label}
-                    className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs transition-colors ${
-                      panel === p.id ? 'bg-gray-100 text-black' : 'text-gray-400 hover:bg-white/[0.06] hover:text-gray-100'
+                    className={`flex h-10 shrink-0 items-center gap-1.5 px-2.5 text-[13px] transition-colors ${
+                      panel === p.id ? 'text-gray-100 shadow-[inset_0_-2px_0_var(--color-accent)]' : 'text-gray-400 hover:text-gray-100'
                     }`}
                   >
-                    <span aria-hidden="true">{p.glyph}</span>
-                    {panel === p.id && p.label}
-                    {p.id === 'git' && Object.keys(changes).length > 0 && <span className="font-mono">{Object.keys(changes).length}</span>}
-                    {p.id === 'build' && diagnostics.length > 0 && <span className="font-mono">{diagnostics.length}✕</span>}
+                    {p.label}
+                    {p.id === 'git' && Object.keys(changes).length > 0 && <span className="rounded bg-[var(--accent-soft)] px-1 font-mono text-[11px] text-accent">{Object.keys(changes).length}</span>}
+                    {p.id === 'build' && diagnostics.length > 0 && <span className="rounded bg-danger/15 px-1 font-mono text-[11px] text-danger">{diagnostics.length}</span>}
                   </button>
                 ))}
               </div>
@@ -626,12 +621,12 @@ export function Workspace() {
         </div>
 
         {/* Status bar */}
-        <footer className="glass flex h-7 shrink-0 items-center gap-4 rounded-xl px-3 font-mono text-[11px] text-gray-500" data-zen-hide>
-          <span>{project.entry ? `entry ${project.entry}` : 'no entry file'}</span>
+        <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-border bg-[var(--bar)] px-3 font-mono text-[11px] text-gray-400" data-zen-hide>
+          <span className="flex items-center gap-1.5"><span className="dot text-accent" aria-hidden="true" />{project.entry ? project.entry : 'no entry file'}</span>
           <span className="hidden sm:inline">{Object.keys(project.files).length} files</span>
-          {lastBuild && <span>{lastBuild.success ? `✓ built ${lastBuild.durationMs}ms` : `✕ ${diagnostics.length || 1} problem${diagnostics.length > 1 ? 's' : ''}`}</span>}
+          {lastBuild && <span className={lastBuild.success ? 'text-accent' : 'text-danger'}>{lastBuild.success ? `✓ built ${lastBuild.durationMs}ms` : `✕ ${diagnostics.length || 1} problem${diagnostics.length > 1 ? 's' : ''}`}</span>}
           <span className="ml-auto hidden sm:inline">scriptc 0.2 · {formatCombo(bindings['view.palette'] ?? '', isMac)} for commands</span>
-          <span className="hidden md:inline">© 2026 BrandDeb · Proprietary</span>
+          <span className="hidden md:inline">© 2026 BrandDeb</span>
         </footer>
       </div>
 

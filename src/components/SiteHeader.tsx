@@ -1,18 +1,16 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { ByteField } from './ByteField';
 
 const NAV = [
   { href: '/', label: 'Workspace' },
   { href: '/landing', label: 'Overview' },
-  { href: '/unified', label: 'Toolkit' },
   { href: '/faq', label: 'FAQ' },
 ] as const;
 
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
     <Link href="/landing" className="flex shrink-0 items-center" aria-label="NanoCLI home">
-      <span className={`display leading-none text-gray-100 ${compact ? 'text-lg' : 'text-[22px]'}`}>NANOCLI</span>
+      <span className={`wordmark text-gray-100 ${compact ? 'text-lg' : 'text-[22px]'}`}>NANOCLI</span>
     </Link>
   );
 }
@@ -26,16 +24,12 @@ interface SiteHeaderProps {
   center?: ReactNode;
   /** Full-width bar for app layouts, centered container for content pages */
   fluid?: boolean;
-  /** How strongly the byte field shows behind the page */
-  byteField?: 'ambient' | 'hero';
 }
 
-export function SiteHeader({ active, children, center, fluid = false, byteField = 'ambient' }: SiteHeaderProps) {
+export function SiteHeader({ active, children, center, fluid = false }: SiteHeaderProps) {
   return (
-    <>
-    <ByteField intensity={byteField} />
-    <header className="sticky top-3 z-40 px-3">
-      <div className={`glass flex h-14 items-center gap-6 rounded-2xl px-4 ${fluid ? '' : 'mx-auto max-w-6xl'}`}>
+    <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-md">
+      <div className={`flex h-14 items-center gap-6 px-4 ${fluid ? '' : 'mx-auto max-w-6xl'}`}>
         <Logo />
         <nav className="hidden md:flex items-center gap-1 text-sm" aria-label="Main">
           {NAV.map(item => (
@@ -45,7 +39,7 @@ export function SiteHeader({ active, children, center, fluid = false, byteField 
               aria-current={active === item.href ? 'page' : undefined}
               className={`rounded-md px-2.5 py-1.5 transition-colors ${
                 active === item.href
-                  ? 'text-gray-100 bg-white/[0.06]'
+                  ? 'bg-white/[0.07] text-gray-100'
                   : 'text-gray-400 hover:text-gray-100'
               }`}
             >
@@ -62,13 +56,12 @@ export function SiteHeader({ active, children, center, fluid = false, byteField 
             rel="noreferrer"
             className="hidden sm:inline-flex badge hover:text-gray-100 transition-colors"
           >
-            <span className="dot" aria-hidden="true" />
+            <span className="dot text-accent" aria-hidden="true" />
             scriptc 0.2
           </a>
         </div>
       </div>
     </header>
-    </>
   );
 }
 

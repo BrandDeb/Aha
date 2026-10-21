@@ -387,7 +387,7 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
         ))}
       </div>
       <div className="flex items-center gap-2 px-4 pt-1 pb-3">
-        <label htmlFor="terminal-input" className="shrink-0 text-gray-500">{busy ? '…' : prompt}</label>
+        <label htmlFor="terminal-input" className="shrink-0 text-accent">{busy ? '…' : prompt}</label>
         <input
           id="terminal-input"
           ref={inputRef}
@@ -397,7 +397,7 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
           spellCheck={false}
           autoComplete="off"
           aria-label="Terminal command"
-          className="min-w-0 flex-1 bg-transparent text-gray-100 caret-gray-100 outline-none"
+          className="min-w-0 flex-1 bg-transparent text-gray-100 caret-accent outline-none"
           placeholder={busy ? 'running — Ctrl+C to stop' : ''}
         />
       </div>

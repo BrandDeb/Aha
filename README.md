@@ -62,7 +62,7 @@ Reproduce with `npm run templates:build` and the binaries in `dist/templates/`.
 
 ## Features
 
-The workspace at `/` is a monochrome glass IDE built around scriptc.
+The workspace at `/` is a dark editor built around scriptc.
 
 | Area | What it does |
 |---|---|
@@ -116,7 +116,6 @@ studio is hosted elsewhere, start it with `OLLAMA_ORIGINS=https://your-studio.ex
 |---|---|
 | `/` | Workspace |
 | `/landing` | Overview |
-| `/unified` | Toolkit — demo panels (AI gateway, auth, URL shortener, analytics use simulated data) |
 | `/faq` | Searchable FAQ |
 | `/onboarding` | Three-step tour ending in the workspace with a template (`/?template=<id>`) |
 | `/studio` | Redirects to `/` |

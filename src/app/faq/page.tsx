@@ -202,7 +202,7 @@ export default function FAQPage() {
                 aria-pressed={category === c}
                 className={`rounded-full border px-3 py-1 text-sm transition-colors ${
                   category === c
-                    ? 'border-gray-100 bg-gray-100 text-black'
+                    ? 'border-accent bg-accent text-[var(--color-accent-fg)]'
                     : 'border-border text-gray-400 hover:border-border-strong hover:text-gray-100'
                 }`}
               >

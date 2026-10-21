@@ -31,7 +31,7 @@ export function TemplatesDialog({ onClose }: { onClose: () => void }) {
             <li key={template.id}>
               <button
                 onClick={() => create(template)}
-                className="group h-full w-full rounded-2xl border border-border p-4 text-left transition-colors hover:border-border-strong hover:bg-white/[0.04]"
+                className="group h-full w-full rounded-xl border border-border p-4 text-left transition-colors hover:border-border-strong hover:bg-white/[0.04]"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium text-gray-100">{template.name}</span>

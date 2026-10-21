@@ -4,9 +4,10 @@ import { useEffect, useRef } from 'react';
 import { BYTE_SAMPLE_BASE64 } from '@/lib/byte-sample';
 
 /**
- * The bytes of a real scriptc executable, drawn as a full-screen hexdump
- * behind the glass. A scan band sweeps down like a compiler pass,
- * brightening the bytes it crosses. Static when reduced motion is preferred.
+ * The bytes of a real scriptc executable, drawn as a hexdump that fills its
+ * (relatively positioned) parent. A scan band sweeps down like a compiler
+ * pass, brightening the bytes it crosses. Static when reduced motion is
+ * preferred.
  */
 export function ByteField({ intensity = 'ambient' }: { intensity?: 'ambient' | 'hero' }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -20,14 +21,14 @@ export function ByteField({ intensity = 'ambient' }: { intensity?: 'ambient' | '
     const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0'));
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    const base = intensity === 'hero' ? 0.075 : 0.06;
-    const peak = intensity === 'hero' ? 0.38 : 0.26;
+    const base = intensity === 'hero' ? 0.1 : 0.07;
+    const peak = intensity === 'hero' ? 0.55 : 0.3;
     const fontSize = 13;
     const lineHeight = 22;
     const cell = 24; // width of one "xx " byte column
     const gutter = 92; // offset column
 
-    let ink = '255 255 255';
+    let ink = '52 232 138';
     let width = 0;
     let height = 0;
     let frame = 0;
@@ -35,13 +36,14 @@ export function ByteField({ intensity = 'ambient' }: { intensity?: 'ambient' | '
     let scan = -200;
 
     const readInk = () => {
-      ink = getComputedStyle(document.documentElement).getPropertyValue('--byte-ink').trim() || '255 255 255';
+      ink = getComputedStyle(document.documentElement).getPropertyValue('--byte-ink').trim() || '52 232 138';
     };
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      width = window.innerWidth;
-      height = window.innerHeight;
+      const box = canvas.parentElement?.getBoundingClientRect();
+      width = Math.max(1, Math.round(box?.width ?? window.innerWidth));
+      height = Math.max(1, Math.round(box?.height ?? window.innerHeight));
       canvas.width = width * dpr;
       canvas.height = height * dpr;
       canvas.style.width = `${width}px`;
@@ -97,14 +99,15 @@ export function ByteField({ intensity = 'ambient' }: { intensity?: 'ambient' | '
       draw();
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    window.addEventListener('resize', resize);
+    const sizeObserver = new ResizeObserver(resize);
+    if (canvas.parentElement) sizeObserver.observe(canvas.parentElement);
     document.addEventListener('visibilitychange', onVisibility);
     if (!reduceMotion) frame = requestAnimationFrame(tick);
 
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
-      window.removeEventListener('resize', resize);
+      sizeObserver.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [intensity]);
@@ -113,7 +116,7 @@ export function ByteField({ intensity = 'ambient' }: { intensity?: 'ambient' | '
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="pointer-events-none fixed inset-0 -z-10 select-none"
+      className="pointer-events-none absolute inset-0 select-none"
     />
   );
 }

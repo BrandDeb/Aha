@@ -40,7 +40,7 @@ export const DEFAULT_SETTINGS: Settings = {
   printWidth: 100,
   tabWidth: 2,
   keybindings: {},
-  extensions: { minimap: false, wordWrap: true, bracketPairs: true, stickyScroll: true, todoHighlights: true, byteField: true },
+  extensions: { minimap: false, wordWrap: true, bracketPairs: true, stickyScroll: true, todoHighlights: true },
 };
 
 // ---------------------------------------------------------------------------
