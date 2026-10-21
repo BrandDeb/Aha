@@ -47,7 +47,7 @@ export function ByteField({ intensity = 'ambient' }: { intensity?: 'ambient' | '
       canvas.style.width = `${width}px`;
       canvas.style.height = `${height}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.font = `${fontSize}px ${getComputedStyle(document.body).getPropertyValue('--font-plex-mono') || 'monospace'}, monospace`;
+      ctx.font = `${fontSize}px 'IBM Plex Mono', monospace`;
       ctx.textBaseline = 'middle';
       draw();
     };

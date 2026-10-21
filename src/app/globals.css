@@ -15,9 +15,9 @@
  * neutral scale so legacy utilities stay inside the black-and-white system.
  */
 @theme {
-  --font-sans: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-display: var(--font-doto), var(--font-plex-mono), monospace;
+  --font-sans: 'Hanken Grotesk Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: 'Doto Variable', 'IBM Plex Mono', monospace;
 
   --color-black: #000000;
   --color-white: #ffffff;

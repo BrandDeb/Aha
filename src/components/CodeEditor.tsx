@@ -132,7 +132,7 @@ function editorOptions(fontSize: number, extensions: EditorExtensions) {
   return {
     minimap: { enabled: !!extensions.minimap },
     fontSize,
-    fontFamily: 'var(--font-plex-mono), ui-monospace, Menlo, monospace',
+    fontFamily: "'IBM Plex Mono', ui-monospace, Menlo, monospace",
     lineHeight: 1.7,
     padding: { top: 14, bottom: 14 },
     wordWrap: extensions.wordWrap ? ('on' as const) : ('off' as const),

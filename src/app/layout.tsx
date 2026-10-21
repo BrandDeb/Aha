@@ -1,26 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Doto, Hanken_Grotesk, IBM_Plex_Mono } from "next/font/google";
+import "@fontsource-variable/doto";
+import "@fontsource-variable/hanken-grotesk";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "@fontsource/ibm-plex-mono/600.css";
 import "./globals.css";
 
-/* Display: dot-matrix, used sparingly (wordmark, hero) */
-const doto = Doto({
-  variable: "--font-doto",
-  subsets: ["latin"],
-  weight: ["700", "900"],
-});
-
-/* Body */
-const hanken = Hanken_Grotesk({
-  variable: "--font-hanken",
-  subsets: ["latin"],
-});
-
-/* Code, data, captions */
-const plexMono = IBM_Plex_Mono({
-  variable: "--font-plex-mono",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-});
+/* Fonts are bundled with the app (no request to Google at build or run time) */
 
 export const metadata: Metadata = {
   title: "NanoCLI Studio",
@@ -41,7 +27,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`dark ${doto.variable} ${hanken.variable} ${plexMono.variable} h-full antialiased`}
+      className="dark h-full antialiased"
       suppressHydrationWarning
     >
       <head>
