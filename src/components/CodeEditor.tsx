@@ -183,25 +183,51 @@ export function setEditorAccent(hex: string): void {
   monacoInstance.editor.setTheme(document.documentElement.classList.contains('light') ? 'nanocli-light' : 'nanocli-dark');
 }
 
+/**
+ * Web projects (React, Vue, Svelte…) run in a browser, with JSX and npm packages whose types are not
+ * installed here: the editor gets DOM types and JSX, and stops reporting what only a missing package
+ * explains (cannot find module, no JSX types). Errors in your own code still show. null = scriptc's Node setup.
+ */
+let webProject: { jsxImportSource: string } | null = null;
+// Cannot find module (2307, 2792), no declaration file (7016), JSX runtime or JSX types missing (2875, 7026)
+const WEB_IGNORED_DIAGNOSTICS = [2307, 2792, 7016, 2875, 7026];
+
+function applyProjectKind(monaco: Parameters<BeforeMount>[0]) {
+  const ts = monaco.languages.typescript;
+  const base = {
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeJs,
+    strict: true,
+    noEmit: true,
+    allowNonTsExtensions: true,
+    allowJs: true,
+    moduleDetection: 3, // force: treat every file as a module
+  };
+  const options = webProject
+    ? // Without the packages' types, callbacks like setCount((c) => …) can't be typed: implicit any is allowed there
+      { ...base, lib: ['lib.es2023.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'], jsx: ts.JsxEmit.ReactJSX, jsxImportSource: webProject.jsxImportSource, noImplicitAny: false }
+    : { ...base, lib: ['lib.es2023.d.ts'] };
+  for (const defaults of [ts.typescriptDefaults, ts.javascriptDefaults]) {
+    defaults.setCompilerOptions(options);
+    defaults.setDiagnosticsOptions({ ...defaults.getDiagnosticsOptions(), diagnosticCodesToIgnore: webProject ? WEB_IGNORED_DIAGNOSTICS : [] });
+  }
+}
+
+/** Switch the editor's TypeScript setup between scriptc (Node) and a web app */
+export function setEditorProjectKind(web: { jsxImportSource: string } | null): void {
+  if (JSON.stringify(web) === JSON.stringify(webProject)) return;
+  webProject = web;
+  if (monacoInstance) applyProjectKind(monacoInstance);
+}
+
 export const configureMonaco: BeforeMount = (monaco) => {
   // scriptc programs target Node, not the browser: no DOM lib, Node globals,
   // and every file is its own module so top-level names don't collide.
   if (!languageConfigured) {
     languageConfigured = true;
     const ts = monaco.languages.typescript;
-    const options = {
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.NodeJs,
-      lib: ['es2023'],
-      strict: true,
-      noEmit: true,
-      allowNonTsExtensions: true,
-      allowJs: true,
-      moduleDetection: 3, // force: treat every file as a module
-    };
-    ts.typescriptDefaults.setCompilerOptions(options);
-    ts.javascriptDefaults.setCompilerOptions(options);
+    applyProjectKind(monaco);
     // Without this the worker only sees the open file, so imports between project files can't resolve
     ts.typescriptDefaults.setEagerModelSync(true);
     ts.javascriptDefaults.setEagerModelSync(true);

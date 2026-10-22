@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 
 // The editor is served from this server (see src/app/monaco), under its own version in the URL
 const monacoVersion = JSON.parse(readFileSync("node_modules/monaco-editor/package.json", "utf8")).version as string;
+// The in-browser preview's bundler (esbuild-wasm), served the same way under its version
+const esbuildVersion = JSON.parse(readFileSync("node_modules/esbuild-wasm/package.json", "utf8")).version as string;
 const dev = process.env.NODE_ENV !== "production";
 
 /**
@@ -39,12 +41,13 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // The dev-mode route badge sits over the editor chrome; compile and runtime errors still show
   devIndicators: false,
-  env: { NEXT_PUBLIC_MONACO_VERSION: monacoVersion },
+  env: { NEXT_PUBLIC_MONACO_VERSION: monacoVersion, NEXT_PUBLIC_ESBUILD_VERSION: esbuildVersion },
   // No next/image is used: keep the image optimizer (and its attack surface) switched off
   images: { unoptimized: true },
   poweredByHeader: false,
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    // The preview frame sends its own, looser policy (it runs the project's code, on an opaque origin)
+    return [{ source: "/:path((?!preview-frame$).*)", headers: securityHeaders }];
   },
 };
 

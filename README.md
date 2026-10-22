@@ -266,6 +266,14 @@ editor (Ctrl/⌘ + Alt + P toggles it):
 - **Isolated.** The page runs on its own origin (`127.0.0.1` and a free port) in a sandboxed frame, so it cannot reach the
   studio. Each project's files live in `~/.nanocli/dev/<project>`.
 
+**In browser, no install.** Vite apps (React, Preact, Vue, Svelte or plain TypeScript) can also run without any server:
+switch the Preview to **In browser** (it is the default wherever dev servers are off, such as a hosted studio).
+[esbuild](https://esbuild.github.io) compiled to WebAssembly bundles the project in your browser, Vue and Svelte components
+are compiled there too, and npm packages load from [esm.sh](https://esm.sh) at the versions in `package.json`. A rebuild
+after an edit takes milliseconds; the page reloads, and the app's `console` output and errors appear under **Console**.
+It all happens in a frame sandboxed to an opaque origin, so the project's code can't reach the studio, its storage or your
+keys. Next.js, Nuxt, SvelteKit, Astro, React Router, Angular and Solid need their dev server.
+
 Like **Other languages** below, this runs your project's code (and its packages' install scripts) on the machine hosting
 the studio, so it is on only when the studio listens on that machine alone. `NANOCLI_DEV=0` turns it off and `=1` forces
 it on. At most three dev servers run at once (the least recently viewed stops first), a server nobody has looked at for

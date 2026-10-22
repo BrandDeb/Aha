@@ -54,6 +54,11 @@ host runners are not.
 - Time and output limits, a concurrency cap, and the whole process tree killed on stop or timeout.
 - Dev servers bind to `127.0.0.1` on a free port; the preview shows them in a sandboxed frame on their own origin, so the
   page cannot reach the studio. Idle servers stop after 20 minutes and all stop with the studio.
+- The in-browser preview runs the project in `/preview-frame`, framed with `sandbox` but without `allow-same-origin`: an
+  opaque origin with no access to the studio's storage, cookies or pages. That page has its own Content-Security-Policy
+  (scripts from the studio and esm.sh only, framing only by the studio), takes files only from the window that embeds it,
+  and the app inside it runs in a further frame of its own. Only esbuild's two files are served with
+  `Access-Control-Allow-Origin: *`; they are public library code.
 
 **Connectors and the agent**
 - Web fetches resolve DNS first, refuse private and link-local addresses, pin the checked address and re-check

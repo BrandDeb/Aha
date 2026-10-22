@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { CodeEditor, DiffView, type EditorInstance } from '@/components/CodeEditor';
+import { CodeEditor, DiffView, setEditorProjectKind, type EditorInstance } from '@/components/CodeEditor';
 import { analyzeCoverageBrowser, compileTypeScriptBrowser, type CompileResult, type CoverageResult, type Diagnostic } from '@/lib/compiler-browser';
 import { WebSocketManager } from '@/lib/websocket';
 import type { CompileTarget, GitHubUserInfo } from '@/types';
@@ -17,6 +17,7 @@ import { useUpdateStatus } from './maintenance-client';
 import { Terminal } from './components/Terminal';
 import { canFormat, formatSource } from './format';
 import { BuildPanel } from './panels/BuildPanel';
+import { browserPreviewSupport } from '@/lib/browser-preview';
 import { detectFramework } from '@/lib/frameworks';
 import { detectLanguage } from '@/lib/languages';
 import { basename, comboFromEvent, diffStatus, formatCombo, isPython, isValidPath, languageFor } from './project';
@@ -119,6 +120,13 @@ export function Workspace() {
   const usesScriptc = !isPython(project.entry) && !entryLanguage && !web;
   const [showPreview, setShowPreview] = useState(false);
   const devServer = useDevServer(project.name, project.files, !!web);
+  // Vite-style apps can also run entirely in the browser (esbuild-wasm): the only way where dev servers are off
+  const inBrowser = useMemo(() => (web ? browserPreviewSupport(project.files) : null), [web, project.files]);
+  const [previewChoice, setPreviewChoice] = useState<'server' | 'browser' | null>(null);
+  // The editor's TypeScript follows the project: Node for scriptc, DOM and JSX for web apps
+  const jsxSource = web ? (/"preact"/.test(project.files['package.json'] ?? '') ? 'preact' : 'react') : null;
+  useEffect(() => setEditorProjectKind(jsxSource ? { jsxImportSource: jsxSource } : null), [jsxSource]);
+  const previewMode: 'server' | 'browser' = previewChoice ?? (devServer.enabled === false && inBrowser?.ok ? 'browser' : 'server');
   const hasPython = useMemo(() => Object.keys(project.files).some((f) => isPython(f) || f === 'pyproject.toml'), [project.files]);
   const [building, setBuilding] = useState(false);
   const [lastBuild, setLastBuild] = useState<CompileResult | null>(null);
@@ -434,8 +442,8 @@ export function Workspace() {
   const { start: startDevServer, state: devState } = devServer;
   const runPreview = useCallback(() => {
     setShowPreview(true);
-    if (devState.status !== 'ready' && devState.status !== 'installing' && devState.status !== 'starting') startDevServer();
-  }, [devState.status, startDevServer]);
+    if (previewMode === 'server' && devState.status !== 'ready' && devState.status !== 'installing' && devState.status !== 'starting') startDevServer();
+  }, [devState.status, startDevServer, previewMode]);
   const runApp = web ? runPreview : runInTerminal;
 
   // ---------------------------------------------------------------------------
@@ -738,7 +746,17 @@ export function Workspace() {
                     {split && !showPreview && editorPane(split, true)}
                   </div>
                 )}
-                {web && showPreview && <PreviewPane detected={web} server={devServer} onClose={() => setShowPreview(false)} />}
+                {web && showPreview && (
+                  <PreviewPane
+                    detected={web}
+                    server={devServer}
+                    files={project.files}
+                    mode={previewMode}
+                    browserSupport={inBrowser}
+                    onMode={setPreviewChoice}
+                    onClose={() => setShowPreview(false)}
+                  />
+                )}
               </div>
             </section>
 
