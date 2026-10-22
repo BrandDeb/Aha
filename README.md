@@ -134,6 +134,24 @@ your own model (the same keys and local models as the assistant; it needs a mode
   task (a convention, a gotcha, a command that works) as an ordinary change you accept or reject. That is the whole
   "self-improving" loop: supervised, written in plain text, and reversible.
 
+### Try several approaches (Harness²-style)
+
+Tick **Try several approaches** in the Agent tab and the agent improves its own *harness* while the model stays the same, an idea
+from [Harness²](https://github.com/google-research/harness2) (Google Research, Apache-2.0), rebuilt here as a small, supervised loop for
+coding:
+
+1. **Propose.** A model suggests variants of the harness: project instructions (`agent/prompt.md`), tool guidance (`agent/tools.md`),
+   short skills (`agent/skills/*.md`) and notes (`AGENTS.md`), each text only, never code that runs.
+2. **Probe.** The agent runs your task once with the current setup and once per variant, each on its own private copy of the project.
+   Runs are scored by what can be checked without a reference answer: did it finish, did the last build and run pass, how many failed
+   attempts and steps. Probes can build but never run commands or reach outside.
+3. **Compose.** A model reads the outcomes and keeps only edits that beat the baseline, with lessons that cite the evidence
+   (`agent/lessons.md`).
+
+You get the best run's changes plus the harness edits as ordinary proposed changes to review, accept or discard. The panel shows the cost
+up front (runs × steps). If nothing beats the current setup, nothing is proposed. The harness files are part of your project, so they are
+versioned with it and every later run (including normal ones) reads them.
+
 ### Connectors
 
 **Settings → Connectors** gives the agent tools beyond the project. Their settings (and any keys) live in your browser

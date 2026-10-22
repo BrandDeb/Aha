@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { maxModelCalls, runHarnessLoop, type HarnessEvent } from '@/lib/agent/harness';
 import { runAgent } from '@/lib/agent/loop';
 import { callModelFor } from '@/lib/agent/model';
 import { systemPromptFor } from '@/lib/agent/prompt';
@@ -25,6 +26,14 @@ interface Entry {
   risk?: Risk;
   result?: ToolResult;
   approved?: boolean;
+}
+
+interface Approach {
+  id: string;
+  status: 'running' | 'done';
+  score?: number;
+  evidence?: string[];
+  steps: number;
 }
 
 interface ChangeRow {
@@ -86,6 +95,11 @@ export function AgentPanel() {
   const [outcome, setOutcome] = useState<{ reason: StopReason; summary: string } | null>(null);
   const [changes, setChanges] = useState<ChangeRow[]>([]);
   const [pending, setPending] = useState<{ call: ToolCall; risk: Risk } | null>(null);
+  // Try several approaches (Harness²-style): the agent runs the task with variations of its own instructions and keeps what worked
+  const [compare, setCompare] = useState(false);
+  const [variants, setVariants] = useState(2);
+  const [approaches, setApproaches] = useState<Approach[]>([]);
+  const [lessons, setLessons] = useState<string[]>([]);
 
   const stageRef = useRef<Stage | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -113,6 +127,56 @@ export function AgentPanel() {
     } else if (event.type === 'done') setOutcome({ reason: event.reason, summary: event.summary });
   };
 
+  const handleHarnessEvent = (event: HarnessEvent) => {
+    if (event.type === 'notice') setEntries((prev) => [...prev, { id: ++idRef.current, kind: 'notice', text: event.text }]);
+    else if (event.type === 'probe-start') setApproaches((prev) => [...prev, { id: event.id, status: 'running', steps: 0 }]);
+    else if (event.type === 'probe-step' && event.event.type === 'step') setApproaches((prev) => prev.map((a) => (a.id === event.id ? { ...a, steps: event.event.type === 'step' ? event.event.step : a.steps } : a)));
+    else if (event.type === 'probe-done') setApproaches((prev) => prev.map((a) => (a.id === event.id ? { ...a, status: 'done', score: event.score, evidence: event.evidence } : a)));
+  };
+
+  /** Run the task once per harness variant on private copies, then offer the best result and the harness changes that earned it */
+  const startCompare = async (task: string, target: Exclude<ReturnType<typeof resolveProvider>, { error: string }>) => {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setRunning(true);
+    setOutcome(null);
+    setApproaches([]);
+    setLessons([]);
+    setEntries((prev) => [...prev, { id: ++idRef.current, kind: 'text', text: `**You:** ${task}` }]);
+    setGoal('');
+    const files = stageRef.current ? { ...project.files } : project.files;
+    try {
+      const result = await runHarnessLoop({
+        goal: task,
+        files,
+        makeHost: (probeStage) => createAgentHost({ stage: probeStage, projectName: project.name, entry: project.entry, files: probeStage.files(), onPlan: () => {} }),
+        callModel: callModelFor(target),
+        system: systemPromptFor,
+        k: variants,
+        mode: 'parallel',
+        budget: { maxSteps: 12, maxToolCalls: 40, maxMillis: 4 * 60_000, maxFixAttempts: 3 },
+        signal: controller.signal,
+        onEvent: handleHarnessEvent,
+      });
+      stageRef.current = result.stage;
+      setChanges(rowsOf(result.stage));
+      setLessons(result.lessons);
+      const baseline = result.baseline;
+      setOutcome({
+        reason: 'finished',
+        summary:
+          result.best === baseline
+            ? `None of the variants beat the current harness (baseline ${baseline.score}), so its result is shown and no harness changes are proposed.`
+            : `“${result.best.variant.id}” scored ${result.best.score} against ${baseline.score} for the current harness. Its result and the harness changes that earned it are listed below; nothing is applied until you accept.`,
+      });
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') setOutcome({ reason: 'error', summary: (error as Error).message });
+    } finally {
+      setRunning(false);
+      abortRef.current = null;
+    }
+  };
+
   const start = async (text: string) => {
     const task = text.trim();
     if (!task || running) return;
@@ -132,6 +196,10 @@ export function AgentPanel() {
     const stage = stageRef.current ?? new Stage(project.files);
     stage.rebase(project.files);
     stageRef.current = stage;
+    if (compare) {
+      await startCompare(task, target);
+      return;
+    }
     const host = createAgentHost({ stage, projectName: project.name, entry: project.entry, files: stage.files(), onPlan: setPlan });
 
     const controller = new AbortController();
@@ -223,6 +291,8 @@ export function AgentPanel() {
 
   const reset = () => {
     historyRef.current = [];
+    setApproaches([]);
+    setLessons([]);
     setEntries([]);
     setPlan('');
     setOutcome(null);
@@ -339,6 +409,29 @@ export function AgentPanel() {
           </div>
         )}
 
+        {approaches.length > 0 && (
+          <div className="space-y-2 rounded-xl border border-border p-3">
+            <div className="eyebrow">Approaches tried</div>
+            <ul className="space-y-1.5">
+              {approaches.map((a) => (
+                <li key={a.id} className="text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate font-mono text-gray-100">{a.id === 'baseline' ? 'current harness' : a.id}</span>
+                    {a.status === 'running' ? <span className="text-gray-500">step {a.steps}…</span> : <span className="font-mono text-accent">{a.score}/100</span>}
+                  </div>
+                  {a.evidence && <div className="text-[11px] text-gray-500">{a.evidence.join(' · ')}</div>}
+                </li>
+              ))}
+            </ul>
+            {lessons.length > 0 && (
+              <div className="border-t border-border pt-2 text-xs text-gray-300">
+                <div className="eyebrow mb-1">Lessons proposed for agent/lessons.md</div>
+                <ul className="list-disc space-y-0.5 pl-4">{lessons.map((l, i) => <li key={i}>{l}</li>)}</ul>
+              </div>
+            )}
+          </div>
+        )}
+
         {changes.length > 0 && (
           <div className="rounded-xl border border-border">
             <div className="flex items-center justify-between border-b border-border px-3 py-2">
@@ -394,6 +487,18 @@ export function AgentPanel() {
           ) : (
             <button type="submit" disabled={!goal.trim()} className="btn btn-primary">Run agent</button>
           )}
+        </div>
+        <div className="space-y-1.5">
+          <label className="flex items-center gap-1.5 text-xs text-gray-400" title="Run the task with the agent as it is and with variations of its instructions on private copies, score them by whether builds and runs pass, and keep what worked. Costs several runs.">
+            <input type="checkbox" checked={compare} onChange={(e) => setCompare(e.target.checked)} disabled={running} />
+            Try several approaches
+            {compare && (
+              <select value={variants} onChange={(e) => setVariants(Number(e.target.value))} disabled={running} className="input ml-1 h-6 w-auto px-1 text-xs" aria-label="Number of variants">
+                {[1, 2, 3].map((n) => <option key={n} value={n}>{n} variant{n > 1 ? 's' : ''}</option>)}
+              </select>
+            )}
+          </label>
+          {compare && <p className="text-[11px] leading-relaxed text-gray-500">Runs the task {variants + 1} times (the current setup plus {variants}), up to {maxModelCalls(variants, { maxSteps: 12 })} model calls. Probes can build but never run commands.</p>}
         </div>
         <div className="flex items-center justify-between gap-2">
           <label className="flex items-center gap-1.5 text-xs text-gray-400" title="Python and package commands run on this machine. Off means you are asked each time.">
