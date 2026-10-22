@@ -60,7 +60,10 @@ function Plan({ text }: { text: string }) {
 
 function Activity({ log, lane, summary }: { log: LogEntry[]; lane?: string; summary?: string }) {
   const end = useRef<HTMLLIElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ block: 'nearest' }), [log.length]);
+  // A block body: newer browsers return a Promise from scrollIntoView, and an effect may only return its cleanup
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: 'nearest' });
+  }, [log.length]);
   return (
     <ol className="space-y-2" aria-label="What the agent did">
       {log.filter((e) => !(e.kind === 'agent' && summary && e.text === summary)).map((entry) =>

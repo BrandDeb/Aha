@@ -137,7 +137,9 @@ export function Workspace() {
   const [previewChoice, setPreviewChoice] = useState<'server' | 'browser' | null>(null);
   // The editor's TypeScript follows the project: Node for scriptc, DOM and JSX for web apps
   const jsxSource = web ? (/"preact"/.test(project.files['package.json'] ?? '') ? 'preact' : 'react') : null;
-  useEffect(() => setEditorProjectKind(jsxSource ? { jsxImportSource: jsxSource } : null), [jsxSource]);
+  useEffect(() => {
+    setEditorProjectKind(jsxSource ? { jsxImportSource: jsxSource } : null);
+  }, [jsxSource]);
   const previewMode: 'server' | 'browser' = previewChoice ?? (devServer.enabled === false && inBrowser?.ok ? 'browser' : 'server');
   const hasPython = useMemo(() => Object.keys(project.files).some((f) => isPython(f) || f === 'pyproject.toml'), [project.files]);
   const [building, setBuilding] = useState(false);

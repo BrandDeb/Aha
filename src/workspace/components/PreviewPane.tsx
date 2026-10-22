@@ -162,7 +162,9 @@ export function PreviewPane({ detected, server, files, mode, browserSupport, onM
   const width = DEVICES.find((d) => d.id === device)?.width;
   const src = ready ? new URL(route.replace(/^\/*/, '/'), state.url).href : undefined;
 
-  useEffect(() => logEnd.current?.scrollIntoView({ block: 'end' }), [log.length, consoleLines.length, showLog]);
+  useEffect(() => {
+    logEnd.current?.scrollIntoView({ block: 'end' });
+  }, [log.length, consoleLines.length, showLog]);
 
   const consoleView = (
     <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[11px] leading-relaxed text-gray-300">
