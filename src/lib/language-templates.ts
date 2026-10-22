@@ -235,7 +235,7 @@ public class Main {
     filename: 'main.kt',
     code: `fun main(args: Array<String>) {
     val name = args.firstOrNull() ?: "World"
-    println("Hello, $name!")
+    println("Hello, $(name)!")
 
     val primes = (2..30).filter { n -> (2..n).takeWhile { it * it <= n }.none { n % it == 0 } }
     println("Primes up to 30: " + primes.joinToString(" "))

@@ -218,7 +218,7 @@ export const LANGUAGES: Language[] = [
     note: 'Needs a .csproj next to the code; the C# starter has one.',
     plan: ({ paths, args }) =>
       paths.some((p) => p.endsWith('.csproj'))
-        ? [{ label: 'dotnet run', tool: [['dotnet']], args: ['run', '--nologo', '-v', 'q', ...(args.length ? ['--', ...args] : [])], timeoutMs: COMPILE }]
+        ? [{ label: 'dotnet run', tool: [['dotnet']], args: ['run', ...(args.length ? ['--', ...args] : [])], timeoutMs: COMPILE }]
         : { error: 'C# projects need a .csproj file. Start from the C# template, or add one with `dotnet new console`.' },
   },
   {
