@@ -26,19 +26,25 @@ for (const template of TEMPLATES) {
     writeFileSync(path.join(srcDir, template.id, file), content);
   }
   const source = path.join(srcDir, template.id, entry);
+  const profile = path.join(srcDir, template.id, 'src', 'scriptc.profile.json');
 
-  const targets: { label: string; out: string; env?: Record<string, string> }[] = [
+  // Libraries are built from their profile: a static archive, and a WASM reactor
+  const libraryArgs = (out: string) => ['build', '--lib', '--profile', profile, '-o', out];
+  const targets: { label: string; out: string; env?: Record<string, string>; args?: string[] }[] = template.library ? [
+    { label: 'lib', out: path.join(outDir, `${template.id}.a`), args: libraryArgs(path.join(outDir, `${template.id}.a`)) },
+    ...(wasm ? [{ label: 'reactor', out: path.join(outDir, `${template.id}.reactor.wasm`), env: { SCRIPTC_TARGET: 'wasm32-wasi' }, args: libraryArgs(path.join(outDir, `${template.id}.reactor.wasm`)) }] : []),
+  ] : [
     { label: 'native', out: path.join(outDir, template.id) },
   ];
   if (wasm && template.network) {
     console.log(`- ${template.name.padEnd(22)} wasm   skipped: uses sockets, which WASI Preview 1 lacks`);
-  } else if (wasm) {
+  } else if (wasm && !template.library) {
     targets.push({ label: 'wasm', out: path.join(outDir, `${template.id}.wasm`), env: { SCRIPTC_TARGET: 'wasm32-wasi' } });
   }
 
   for (const target of targets) {
     try {
-      execFileSync(scriptc, ['build', source, '-o', target.out, '--strip'], {
+      execFileSync(scriptc, target.args ?? ['build', source, '-o', target.out, '--strip'], {
         stdio: 'pipe',
         env: withBundledZig({ ...process.env, ...target.env }),
       });

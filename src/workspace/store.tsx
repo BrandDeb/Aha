@@ -8,7 +8,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { DEFAULT_CODE } from '@/lib/templates';
+import type { CompileTarget } from '@/types';
 import { deletePath, isRunnable, isValidPath, movePath, type Project } from './project';
+import { DEFAULT_BUILD_OPTIONS, type BuildOptions } from './targets';
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -28,9 +30,14 @@ export interface Settings {
   keybindings: Record<string, string>;
   /** Built-in extensions that are switched on */
   extensions: Record<string, boolean>;
+  /** Output target and compiler options for builds */
+  target: CompileTarget;
+  build: BuildOptions;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  target: 'exe',
+  build: DEFAULT_BUILD_OPTIONS,
   theme: 'dark',
   highContrast: false,
   fontSize: 14,
@@ -248,6 +255,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         ...DEFAULT_SETTINGS,
         ...storedSettings,
         extensions: { ...DEFAULT_SETTINGS.extensions, ...storedSettings.extensions },
+        build: { ...DEFAULT_BUILD_OPTIONS, ...storedSettings.build },
       });
     }
     setSnapshots(load<Snapshot[]>(HISTORY_KEY) ?? []);

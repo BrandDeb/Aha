@@ -53,10 +53,23 @@ function buildProject(name: string, files: Record<string, string>, entry: string
   return binary;
 }
 
+/** Libraries have no main(): build them from their scriptc.profile.json instead of as an executable */
+function buildLibrary(name: string, files: Record<string, string>): string {
+  const root = path.join(dir, `${name}-src`);
+  for (const [file, content] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    writeFileSync(path.join(root, file), content);
+  }
+  const archive = path.join(dir, `${name}.a`);
+  execFileSync(SCRIPTC, ['build', '--lib', '--profile', path.join(root, 'src', 'scriptc.profile.json'), '-o', archive], { stdio: 'pipe', timeout: 120_000 });
+  return archive;
+}
+
 for (const template of TEMPLATES) {
   test(`template "${template.name}" compiles with scriptc`, { skip }, () => {
     const { files, entry } = templateFiles(template);
-    buildProject(template.id, files, entry);
+    if (template.library) buildLibrary(template.id, files);
+    else buildProject(template.id, files, entry);
   });
 }
 

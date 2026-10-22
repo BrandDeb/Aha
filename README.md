@@ -68,7 +68,7 @@ The workspace at `/` is a dark editor built around scriptc.
 |---|---|
 | **Projects** | File tree with folders, create/rename/move/delete, entry file, relative imports between files, autosave to the browser |
 | **Terminal** | A shell over the project (`ls cd cat mv rm tree echo > file …`). `run` compiles to WASM and executes it in a Web Worker in the tab with the project mounted; files it writes appear in the explorer |
-| **Build** | Native, WASM, LLVM IR or assembly; pipeline timings (queue → write → compile → package), artifact size and download, scriptc coverage, run profile (exit code, time, memory) |
+| **Build** | Nine outputs from one menu — native, WASM, LLVM IR, scriptc IR (JSON), assembly, WASM text (WAT), object file, static library, WASM reactor — with an output viewer (highlighted text, or a hexdump for binaries), build options (release/dev, strip, dynamic engine, sanitizers, Windows window), pipeline timings, scriptc coverage and a run profile |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
 | **Assistant** | Any model you choose — free tiers (Gemini, Groq, OpenRouter, Cerebras, Mistral), local (Ollama, LM Studio) or your own Anthropic/OpenAI key: explain, fix build errors, generate tests, chat — with one-click Apply that versions the previous file first |
@@ -149,8 +149,11 @@ collaboration relay and forwards every other upgrade (e.g. dev HMR) to Next.js.
 { "files": { "src/main.ts": "import { x } from './x'", "src/x.ts": "export const x = 1" }, "entry": "src/main.ts", "target": "wasm" }
 ```
 
-- `target`: `exe` | `wasm` | `llvm` | `asm` (C output was removed in scriptc 0.2)
-- `optimization`: `release` | `dev` (legacy `O0`–`O3` values are mapped)
+- `target`: `exe` | `wasm` | `llvm` | `asm` | `obj` | `ir` | `wat` | `lib` | `reactor` (C output was removed in scriptc 0.2).
+  `lib` and `reactor` are library builds driven by a `scriptc.profile.json` in the project (see the Library template)
+- `optimization`: `release` | `dev` (legacy `O0`–`O3` values are mapped); `strip`, `sanitize`, `dynamic`: booleans;
+  `windowsSubsystem`: `console` | `gui`. Options that don't apply to the chosen target are ignored
+- The response includes `format` (`text` or `binary`, which says how to read `output`) and `target`
 - `platform` / `arch`: optional; anything other than the server host is rejected for `exe`
 
 ```json

@@ -31,6 +31,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "scriptc": "^0.2.2",
+    "wabt": "^1.0.39",
     "websocket": "^1.0.34"
   },
   "devDependencies": {

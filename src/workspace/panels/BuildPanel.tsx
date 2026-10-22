@@ -3,6 +3,7 @@
 import { formatSize, type CompileResult, type CoverageResult } from '@/lib/compiler-browser';
 import { useActions, type RunOutcome } from '../actions';
 import { useWorkspace } from '../store';
+import { targetInfo } from '../targets';
 
 const PHASE_LABELS: Record<string, string> = {
   queue: 'Queue',
@@ -59,7 +60,7 @@ export function BuildPanel({ result, building, coverage, analyzing, onCoverage, 
           <div className="space-y-4 animate-fade-in">
             <p className="flex items-center gap-2 text-sm text-gray-100" role="status">
               <span className={`font-mono ${result.success ? 'text-accent' : 'text-danger'}`} aria-hidden="true">{result.success ? '✓' : '✕'}</span>
-              {result.success ? 'Build succeeded' : 'Build failed'}
+              {result.success ? `Build succeeded${result.target ? ` · ${targetInfo(result.target).label}` : ''}` : 'Build failed'}
             </p>
             {result.success && (
               <dl className="grid grid-cols-2 overflow-hidden rounded-xl border border-border">
@@ -76,9 +77,14 @@ export function BuildPanel({ result, building, coverage, analyzing, onCoverage, 
             {result.error && result.success && <p className="text-xs text-gray-400">{result.error}</p>}
             {!result.success && !diagnostics.length && <p className="text-sm text-gray-400">{result.error}</p>}
             {result.success && (
-              <button onClick={() => actions.downloadArtifact(result)} className="btn btn-secondary w-full">
-                Download {result.filename?.replace(/^[0-9a-f]{32}-?/, '')}
-              </button>
+              <div className="flex gap-2">
+                {result.output !== undefined && (
+                  <button onClick={() => actions.inspect(result)} className="btn btn-secondary flex-1">Inspect</button>
+                )}
+                <button onClick={() => actions.downloadArtifact(result)} className="btn btn-secondary min-w-0 flex-[2] truncate">
+                  Download {result.filename?.replace(/^[0-9a-f]{32}-?/, '')}
+                </button>
+              </div>
             )}
           </div>
         )}

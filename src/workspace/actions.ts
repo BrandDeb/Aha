@@ -30,6 +30,8 @@ export interface WorkspaceActions {
   /** Open a panel in the right sidebar */
   openPanel: (panel: PanelId) => void;
   downloadArtifact: (result?: CompileResult | null) => Promise<void>;
+  /** Open a build artifact in the output viewer (defaults to the last build) */
+  inspect: (result?: CompileResult | null) => void;
 }
 
 export type PanelId = 'build' | 'git' | 'ai' | 'history' | 'graph' | 'package';

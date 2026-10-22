@@ -27,6 +27,54 @@ const uriFor = (path: string) => `file:///${path}`;
 
 let languageConfigured = false;
 
+/** Highlighting for what the compiler emits: LLVM IR, assembly and WebAssembly text */
+function registerCompilerOutputLanguages(monaco: Monaco) {
+  const languages = monaco.languages;
+  languages.register({ id: 'llvm' });
+  languages.setMonarchTokensProvider('llvm', {
+    tokenizer: {
+      root: [
+        [/;.*$/, 'comment'],
+        [/"(?:[^"\\]|\\.)*"/, 'string'],
+        [/[%@](?:[-\w$.]+|"[^"]*")/, 'variable'],
+        [/![\w.]*/, 'variable'],
+        [/\b(?:define|declare|global|constant|private|internal|external|linkonce_odr|unnamed_addr|align|ret|br|switch|call|invoke|unreachable|load|store|alloca|getelementptr|inbounds|phi|select|icmp|fcmp|add|sub|mul|sdiv|udiv|srem|urem|fadd|fsub|fmul|fdiv|and|or|xor|shl|lshr|ashr|trunc|zext|sext|fptosi|sitofp|bitcast|ptrtoint|inttoptr|extractvalue|insertvalue|to|label|type|nsw|nuw|tail|noundef|nonnull|attributes|source_filename|target|datalayout|triple|eq|ne|slt|sgt|sle|sge|ult|ugt|ule|uge|oeq|one|olt|ogt|ole|oge|true|false|null|undef|zeroinitializer)\b/, 'keyword'],
+        [/\b(?:void|ptr|i\d+|float|double|half)\b/, 'type'],
+        [/-?\b(?:0x[0-9a-fA-F]+|\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)\b/, 'number'],
+      ],
+    },
+  });
+  languages.register({ id: 'asm' });
+  languages.setMonarchTokensProvider('asm', {
+    tokenizer: {
+      root: [
+        [/(?:#|\/\/|;).*$/, 'comment'],
+        [/"(?:[^"\\]|\\.)*"/, 'string'],
+        [/^\s*[.\w$@]+:/, 'type'],
+        [/\.[a-zA-Z_][\w.]*/, 'keyword'],
+        [/%[a-z][a-z0-9]*|\b(?:[xwvqsdb][0-9]{1,2}|sp|lr|fp|xzr|wzr)\b/, 'variable'],
+        [/\$?-?(?:0x[0-9a-fA-F]+|\d+)\b/, 'number'],
+        [/^\s*[a-z][a-z0-9.]*/, 'keyword'],
+      ],
+    },
+  });
+  languages.register({ id: 'wat' });
+  languages.setMonarchTokensProvider('wat', {
+    tokenizer: {
+      root: [
+        [/;;.*$/, 'comment'],
+        [/\(;[\s\S]*?;\)/, 'comment'],
+        [/"(?:[^"\\]|\\.)*"/, 'string'],
+        [/\$[\w!#$%&'*+\-./:<=>?@\\^_`|~]+/, 'variable'],
+        [/\b(?:i32|i64|f32|f64|v128|funcref|externref)\b(?!\.)/, 'type'],
+        [/\b(?:module|func|param|result|local|global|memory|data|table|elem|type|import|export|start|block|loop|if|else|end|br|br_if|br_table|return|call|call_indirect|drop|select|unreachable|nop|mut)\b/, 'keyword'],
+        [/\b(?:i32|i64|f32|f64|local|global|memory|table)\.[a-z_0-9.]+/, 'keyword'],
+        [/-?\b(?:0x[0-9a-fA-F_]+|\d[\d_]*(?:\.[\d_]*)?(?:[eEpP][-+]?\d+)?)\b/, 'number'],
+      ],
+    },
+  });
+}
+
 export const configureMonaco: BeforeMount = (monaco) => {
   // scriptc programs target Node, not the browser: no DOM lib, Node globals,
   // and every file is its own module so top-level names don't collide.
@@ -50,6 +98,7 @@ export const configureMonaco: BeforeMount = (monaco) => {
     ts.typescriptDefaults.setEagerModelSync(true);
     ts.javascriptDefaults.setEagerModelSync(true);
     ts.typescriptDefaults.addExtraLib(NODE_TYPES, 'file:///node_modules/@types/node-lite/index.d.ts');
+    registerCompilerOutputLanguages(monaco);
   }
 
   const colors = (dark: boolean) => dark
@@ -324,6 +373,43 @@ export function DiffView({ original, modified, language = 'typescript', theme = 
       beforeMount={configureMonaco}
       onMount={handleMount}
       options={{ ...editorOptions(fontSize, { wordWrap: false }), readOnly: true, originalEditable: false, renderOverviewRuler: false }}
+    />
+  );
+}
+
+interface OutputViewProps {
+  value: string;
+  /** monaco language id: llvm, asm, wat, json or plaintext */
+  language: string;
+  /** Names the model, so each artifact keeps its own scroll position */
+  name: string;
+  theme?: 'dark' | 'light';
+  fontSize?: number;
+}
+
+/** Read-only view of a build artifact */
+export function OutputView({ value, language, name, theme = 'dark', fontSize = 13 }: OutputViewProps) {
+  return (
+    <MonacoEditor
+      height="100%"
+      path={`file:///output/${name}`}
+      language={language}
+      value={value}
+      theme={theme === 'light' ? 'nanocli-light' : 'nanocli-dark'}
+      beforeMount={configureMonaco}
+      options={{
+        ...editorOptions(fontSize, { wordWrap: false }),
+        readOnly: true,
+        domReadOnly: true,
+        minimap: { enabled: true },
+        renderLineHighlight: 'none',
+        stickyScroll: { enabled: false },
+        // Hexdumps are full of stray brackets; don't colour or pair them
+        bracketPairColorization: { enabled: false },
+        guides: { bracketPairs: false, indentation: false },
+        matchBrackets: 'never' as const,
+        ariaLabel: 'Build output',
+      }}
     />
   );
 }

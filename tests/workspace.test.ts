@@ -88,3 +88,22 @@ test('keybindings normalise across platforms', () => {
   assert.equal(formatCombo('Mod+Shift+F', true), '⌘⇧F');
   assert.equal(formatCombo('Mod+Shift+F', false), 'Ctrl+Shift+F');
 });
+
+import { base64ToBytes, describeBinary, hexdump } from '../src/workspace/artifact.ts';
+
+test('hexdump lays out offset, hex and ASCII, and says how much was left out', () => {
+  const bytes = Uint8Array.from([0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00, 0x41, 0x42, 0x43, 0x0a]);
+  const [line] = hexdump(bytes).split('\n');
+  assert.equal(line, '00000000  7f 45 4c 46 02 01 01 00  41 42 43 0a              |.ELF....ABC.|');
+  assert.equal(hexdump(new Uint8Array(40), 16).split('\n').length, 2);
+  assert.match(hexdump(new Uint8Array(40), 16).split('\n')[1], /24 more bytes/);
+  assert.equal(hexdump(new Uint8Array(0)), '');
+});
+
+test('describeBinary recognises the artifacts scriptc produces', () => {
+  assert.equal(describeBinary(Uint8Array.from([0x7f, 0x45, 0x4c, 0x46, 2, 1])), 'ELF 64-bit little-endian');
+  assert.equal(describeBinary(Uint8Array.from([0x00, 0x61, 0x73, 0x6d, 1, 0, 0, 0])), 'WebAssembly module (version 1)');
+  assert.equal(describeBinary(new TextEncoder().encode('!<arch>\n')), 'Static library (ar archive)');
+  assert.equal(describeBinary(Uint8Array.from([1, 2, 3])), 'Binary data');
+  assert.deepEqual(Array.from(base64ToBytes('AGFzbQ==')), [0, 0x61, 0x73, 0x6d]);
+});

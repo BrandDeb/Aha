@@ -122,7 +122,7 @@ export interface AnalyticsSummary {
 }
 
 // Studio Types
-export type CompileTarget = 'exe' | 'wasm' | 'llvm' | 'asm';
+export type CompileTarget = 'exe' | 'wasm' | 'llvm' | 'asm' | 'obj' | 'ir' | 'wat' | 'lib' | 'reactor';
 export type CompilePlatform = 'linux' | 'macos' | 'windows';
 
 export interface GitHubUserInfo {

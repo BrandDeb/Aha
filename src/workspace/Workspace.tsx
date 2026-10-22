@@ -24,15 +24,11 @@ import { HistoryPanel } from './panels/HistoryPanel';
 import { PackagePanel } from './panels/PackagePanel';
 import { basename, comboFromEvent, diffStatus, formatCombo, languageFor } from './project';
 import { base64ToArrayBuffer, runWasm } from './runner';
+import { OutputMenu } from './components/OutputMenu';
+import { ArtifactDialog } from './components/ArtifactDialog';
+import { TARGET_GROUPS, targetInfo } from './targets';
 import { useWorkspace } from './store';
 import { useToast } from './toasts';
-
-const TARGETS: { value: CompileTarget; label: string; hint: string }[] = [
-  { value: 'exe', label: 'Native', hint: 'Executable for the build server (Linux x64)' },
-  { value: 'wasm', label: 'WASM', hint: 'Portable WASI Preview 1 module' },
-  { value: 'llvm', label: 'IR', hint: 'Textual LLVM IR' },
-  { value: 'asm', label: 'ASM', hint: 'Target assembly' },
-];
 
 const PANELS: { id: PanelId; label: string; glyph: string }[] = [
   { id: 'build', label: 'Build', glyph: '▶' },
@@ -72,7 +68,9 @@ export function Workspace() {
   const { project, tabs, active, split, git, settings, dispatch, hydrated, updateSettings, saveSnapshot } = ws;
   const { notify } = useToast();
 
-  const [target, setTarget] = useState<CompileTarget>('exe');
+  const target = settings.target;
+  const setTarget = useCallback((next: CompileTarget) => updateSettings({ target: next }), [updateSettings]);
+  const [viewer, setViewer] = useState<CompileResult | null>(null);
   const [building, setBuilding] = useState(false);
   const [lastBuild, setLastBuild] = useState<CompileResult | null>(null);
   const [coverage, setCoverage] = useState<CoverageResult | null>(null);
@@ -196,11 +194,13 @@ export function Workspace() {
     const buildTarget = options.target ?? target;
     setBuilding(true);
     try {
-      const result = await compileTypeScriptBrowser({ files: p.files, entry, target: buildTarget });
+      const result = await compileTypeScriptBrowser({ files: p.files, entry, target: buildTarget, ...settings.build });
       setLastBuild(result);
       if (result.success) {
         saveSnapshot(`Build succeeded (${buildTarget})`);
         if (!options.quiet) notify({ kind: 'success', title: 'Build succeeded', detail: `${result.filename?.replace(/^[0-9a-f]{32}-/, '')} · ${result.durationMs}ms` });
+        // IR, assembly and similar outputs are only useful when you can read them
+        if (!options.quiet && targetInfo(buildTarget).inspect) setViewer(result);
       } else {
         if (!options.quiet) notify({ kind: 'error', title: 'Build failed', detail: result.error });
         setPanel('build');
@@ -213,7 +213,7 @@ export function Workspace() {
     } finally {
       setBuilding(false);
     }
-  }, [target, notify, saveSnapshot]);
+  }, [target, settings.build, notify, saveSnapshot]);
 
   const run = useCallback<WorkspaceActions['run']>(async (args, onOutput, options = {}) => {
     const entry = options.entry ?? projectRef.current.entry;
@@ -316,7 +316,8 @@ export function Workspace() {
     showDiff: setDiff,
     openPanel,
     downloadArtifact,
-  }), [compile, run, format, save, openPanel, downloadArtifact]);
+    inspect: (result) => setViewer(result ?? lastBuild),
+  }), [compile, run, format, save, openPanel, downloadArtifact, lastBuild]);
 
   // Terminal "run" from the toolbar / shortcut
   const terminalRun = useRef<((cmd: string) => void) | null>(null);
@@ -333,6 +334,10 @@ export function Workspace() {
     { id: 'build.compile', category: 'Build', title: 'Compile', keys: DEFAULT_KEYS['build.compile'], run: () => void compile() },
     { id: 'build.run', category: 'Build', title: 'Run in terminal (WASM)', keys: DEFAULT_KEYS['build.run'], run: runInTerminal },
     { id: 'build.coverage', category: 'Build', title: 'Analyze scriptc coverage', run: () => void analyze() },
+    { id: 'build.inspect', category: 'Build', title: 'Inspect last build output', run: () => lastBuild && setViewer(lastBuild), enabled: !!lastBuild?.success && lastBuild.output !== undefined },
+    ...TARGET_GROUPS.flatMap((group) =>
+      group.items.map((item) => ({ id: `output.${item.value}`, category: 'Build', title: `Output: ${item.label}`, run: () => setTarget(item.value) }))
+    ),
     { id: 'build.download', category: 'Build', title: 'Download last artifact', run: () => void downloadArtifact(), enabled: !!lastBuild?.success },
     { id: 'file.save', category: 'File', title: 'Save version', keys: DEFAULT_KEYS['file.save'], run: () => void save() },
     { id: 'file.format', category: 'Editor', title: 'Format document', keys: DEFAULT_KEYS['file.format'], run: () => void format() },
@@ -353,7 +358,7 @@ export function Workspace() {
     { id: 'panel.package', category: 'Package', title: 'Edit package.json', run: () => openPanel('package') },
     { id: 'collab.toggle', category: 'Collaboration', title: collab ? 'Leave live session' : 'Start live session', run: () => setCollab((v) => !v) },
     { id: 'prefs.settings', category: 'Preferences', title: 'Settings', keys: DEFAULT_KEYS['prefs.settings'], run: () => setDialog('settings') },
-  ], [compile, runInTerminal, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, settings.theme, settings.highContrast, openPanel, collab]);
+  ], [compile, runInTerminal, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, collab]);
 
   const bindings = useMemo(() => {
     const map: Record<string, string> = { ...DEFAULT_KEYS, ...settings.keybindings };
@@ -480,11 +485,7 @@ export function Workspace() {
           )}
 
           <div className="ml-auto flex items-center gap-2">
-            <div className="segmented hidden sm:inline-flex" role="group" aria-label="Output target">
-              {TARGETS.map((t) => (
-                <button key={t.value} aria-pressed={target === t.value} title={t.hint} onClick={() => setTarget(t.value)}>{t.label}</button>
-              ))}
-            </div>
+            <OutputMenu target={target} options={settings.build} onTarget={setTarget} onOptions={(patch) => updateSettings({ build: { ...settings.build, ...patch } })} />
             <button onClick={runInTerminal} className="btn btn-secondary btn-sm" title={`Run as WASM in the terminal (${formatCombo(bindings['build.run'] ?? '', isMac)})`}>
               Run
             </button>
@@ -649,6 +650,7 @@ export function Workspace() {
       )}
       {dialog === 'settings' && <SettingsDialog commands={commands} isMac={isMac} onClose={() => setDialog(null)} />}
       {dialog === 'templates' && <TemplatesDialog onClose={() => setDialog(null)} />}
+      {viewer && <ArtifactDialog result={viewer} theme={settings.theme} onClose={() => setViewer(null)} />}
       {dialog === 'project' && <ProjectDialog user={user} onClose={() => setDialog(null)} />}
       {diff && (
         <Dialog title={diff.title} description="Left: before · Right: now" onClose={() => setDiff(null)} width="max-w-6xl" tall>

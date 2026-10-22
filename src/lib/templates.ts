@@ -19,6 +19,8 @@ export interface Template {
   files?: Record<string, string>;
   /** Uses sockets (http, fetch): native only, since WASI Preview 1 has no socket API */
   network?: boolean;
+  /** Built as a library from a scriptc.profile.json (static archive or WASM reactor), not as an executable */
+  library?: boolean;
 }
 
 /** All files of a template as a project, entry under src/ */
@@ -298,6 +300,45 @@ try {
   process.exit(1);
 }
 `,
+  },
+  {
+    id: 'library',
+    name: 'Library (WASM reactor)',
+    description: 'A counter other programs can call: build it as a static library or a WASM reactor',
+    filename: 'counter.ts',
+    library: true,
+    code: `// A library has no main(): it exports functions that a host program calls.
+// scriptc.profile.json lists the exports and the host callbacks this module can call.
+// Build it from the Output menu: "Static library (.a)" or "WASM reactor".
+
+// Provided by the host (declared in the profile's "callbacks")
+declare function changed(value: number): void;
+
+let count = 0;
+
+export function step(delta: number): number {
+  count += delta;
+  changed(count);
+  return count;
+}
+`,
+    files: {
+      'src/scriptc.profile.json': `{
+  "profile_format": 1,
+  "name": "counter",
+  "entry": "counter.ts",
+  "emission": "llvm",
+  "abi": {
+    "prefix": "counter_",
+    "init_symbol": "counter_init",
+    "sink_register_symbol": "counter_sink",
+    "callback_register_symbol": "counter_callback"
+  },
+  "callbacks": [{ "name": "changed", "params": ["f64"], "returns": "void" }],
+  "exports": [{ "export": "step", "symbol": "counter_step", "params": ["f64"], "returns": "f64" }]
+}
+`,
+    },
   },
   {
     id: 'fibonacci',
