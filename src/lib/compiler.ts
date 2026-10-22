@@ -215,7 +215,9 @@ export function parseCompileOptions(body: unknown): CompileOptions | { error: st
  */
 export function isValidProjectPath(filePath: string): boolean {
   return filePath.length <= 200 &&
-    /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(filePath);
+    (/^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(filePath) ||
+      // The studio's own folder (a field kit's manifest), one level deep
+      /^\.nanocli\/[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(filePath));
 }
 
 function parseProject(rawFiles: unknown, rawEntry: unknown): { files: Record<string, string>; entry: string } | { error: string } {

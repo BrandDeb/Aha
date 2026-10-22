@@ -73,6 +73,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
 | **Assistant** | Any model you choose — free tiers (Gemini, Groq, OpenRouter, Cerebras, Mistral), local (Ollama, LM Studio) or your own Anthropic/OpenAI key: explain, fix build errors, generate tests, chat — with one-click Apply that versions the previous file first |
 | **Agent** | Give it a goal; it reads your project, edits a private copy, builds and runs it to check its work, and retries within a budget. You review diffs and accept or discard; see [Agent](#agent) |
+| **Field kits** | A project plus its playbook, setup, checks and agent house rules, shared as one file; three built in for FDE and ISV work; see [Field kits](#field-kits) |
 | **Worker** | An AI teammate that codes alongside you: fixes failures and editor errors, resolves TODOs, adds tests and takes the next step toward your goal, on its own while you pause (Autonomous) or when you say (Suggest); see [the worker](#the-worker-an-ai-teammate-that-codes-alongside-you) |
 | **Connectors** | MCP servers, GitHub, SQLite/PostgreSQL, web pages and search, and your own commands as agent tools, asked about before use |
 | **Formatting** | Prettier in the browser, format on save, configurable rules |
@@ -229,6 +230,36 @@ Safety model, since the agent reads untrusted text (web pages, issues, query res
   environment (never the server's secrets) and a private `HOME`; idle MCP sessions are closed after five minutes.
 
 ---
+
+## Field kits
+
+A **field kit** is a project plus everything that usually lives in someone's head or a wiki page, shared as one file. It
+is made for forward-deployed engineers who start at a new customer every few weeks, for ISVs who want developers productive
+with their API on day one, and for teams that want everyone to start the same way.
+
+| Part | What it is |
+|---|---|
+| **Playbook** | The steps of the engagement, ticked off as you go. A step can be handed to the agent with one click ("Learn their API", "Map the fields", "Write the hand-off") |
+| **Setup** | The environment variables it needs (secrets are masked) and the connectors the agent should have, with `${VARIABLE}` placeholders where a secret goes |
+| **Checks** | Runs with expected output that prove it works here: **Run checks** shows ✓ or the output that failed |
+| **House rules** | `agent/prompt.md` and `agent/skills/`: how the agent should work in this codebase (never log keys, a test for every mapping…) |
+| **Goal** | Where the [worker](#the-worker-an-ai-teammate-that-codes-alongside-you) should head, set with one click |
+
+Three kits are built in (**New project → Field kits**, or a link like `/?kit=product-mcp-server`), and each runs on sample data
+the moment it opens:
+
+- **Customer API integration** (forward-deployed): a sync from a customer's REST API with retries, rate limits, pagination,
+  field mapping with tests, and a dry run on fixtures
+- **MCP server for your product** (ISV): a dependency-free MCP server with two example tools and a self-test, plus the rules
+  for designing tools that agents use well, and a step that writes your customers' install guide
+- **Data pipeline proof of concept** (forward-deployed): a customer's CSV export validated and loaded into a warehouse table
+  with a rejects report (Python standard library; SQLite first, their Postgres when ready)
+
+**Kit → Export kit** writes a `.nanokit.json`; **Open a kit file…** opens one. **Make this project a kit** starts the
+manifest (`.nanocli/kit.json`) for any project. Kits are treated as untrusted input. Paths are checked, and connectors
+that would run a program show the command before you add them; once added, every call still asks you first. Exporting
+never carries secrets: environment values aren't part of a kit, `.env` files stay behind, and any file that looks like it
+holds a key (cloud, model, GitHub, Slack or Stripe keys, private keys, passwords in URLs) is left out and named.
 
 ## Python and uv
 
@@ -398,6 +429,7 @@ Maintenance only works when the studio listens on your own machine (the default)
 | `/landing` | Overview |
 | `/faq` | Searchable FAQ |
 | `/onboarding` | Three-step tour ending in the workspace with a template (`/?template=<id>`) |
+| `/?kit=<id>` | Opens a built-in [field kit](#field-kits) |
 | `/studio` | Redirects to `/` |
 
 ---

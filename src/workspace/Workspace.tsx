@@ -21,6 +21,7 @@ import { BuildPanel } from './panels/BuildPanel';
 import { browserPreviewSupport } from '@/lib/browser-preview';
 import { debugBrief, type SourceLocation } from '@/lib/debug';
 import { detectFramework } from '@/lib/frameworks';
+import { KIT_FILE } from '@/lib/kits';
 import { detectLanguage } from '@/lib/languages';
 import { basename, comboFromEvent, diffStatus, formatCombo, isPython, isValidPath, languageFor } from './project';
 import { getPythonEnv, pythonProjectId, streamPython } from './python-client';
@@ -46,6 +47,7 @@ const HistoryPanel = dynamic(() => import('./panels/HistoryPanel').then((m) => m
 const PackagePanel = dynamic(() => import('./panels/PackagePanel').then((m) => m.PackagePanel), { ssr: false, loading: PanelLoading });
 const LanguagePanel = dynamic(() => import('./panels/LanguagePanel').then((m) => m.LanguagePanel), { ssr: false, loading: PanelLoading });
 const PythonPanel = dynamic(() => import('./panels/PythonPanel').then((m) => m.PythonPanel), { ssr: false, loading: PanelLoading });
+const KitPanel = dynamic(() => import('./panels/KitPanel').then((m) => m.KitPanel), { ssr: false, loading: PanelLoading });
 const WorkerPanel = dynamic(() => import('./panels/WorkerPanel').then((m) => m.WorkerPanel), { ssr: false, loading: PanelLoading });
 const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then((m) => m.SettingsDialog), { ssr: false });
 const TemplatesDialog = dynamic(() => import('./components/TemplatesDialog').then((m) => m.TemplatesDialog), { ssr: false });
@@ -60,6 +62,7 @@ const PANELS: { id: PanelId; label: string; glyph: string }[] = [
   { id: 'ai', label: 'Assistant', glyph: '✦' },
   { id: 'agent', label: 'Agent', glyph: '⚙' },
   { id: 'worker', label: 'Worker', glyph: '◎' },
+  { id: 'kit', label: 'Kit', glyph: '▣' },
   { id: 'python', label: 'Python', glyph: 'Py' },
   { id: 'languages', label: 'Run', glyph: '▷' },
   { id: 'history', label: 'History', glyph: '↺' },
@@ -187,6 +190,19 @@ export function Workspace() {
       window.history.replaceState(null, '', window.location.pathname);
     };
     const fail = () => notify({ kind: 'error', title: 'Could not read the link', detail: 'It may be truncated or from an older version.' });
+    if (params.get('kit')) {
+      // A link to a built-in kit (from the site, docs or onboarding)
+      Promise.all([import('@/lib/kit-library'), import('./kits-client')])
+        .then(([{ KIT_LIBRARY }, { kitProject }]) => {
+          const found = KIT_LIBRARY.find((k) => k.kit.id === params.get('kit'));
+          if (!found) return;
+          const p = kitProject(found.kit, found.files);
+          load(p.files, p.entry, p.name, `Opened kit: ${found.kit.name}`);
+          setPanel('kit');
+        })
+        .catch(fail);
+      return;
+    }
     if (params.get('template')) {
       // The template catalogue is large; load it only when a link asks for it
       import('@/lib/templates')
@@ -679,7 +695,7 @@ export function Workspace() {
   // Web apps have no scriptc build: their side panel opens on the agent instead
   const shownPanel: PanelId = web && panel === 'build' ? 'agent' : panel;
   const panelVisible = (id: PanelId) =>
-    id === 'build' ? !web : id === 'python' ? hasPython || panel === 'python' : id === 'languages' ? !!entryLanguage || panel === 'languages' : id === 'package' ? !hasPython || 'package.json' in project.files || panel === 'package' : true;
+    id === 'build' ? !web : id === 'python' ? hasPython || panel === 'python' : id === 'languages' ? !!entryLanguage || panel === 'languages' : id === 'package' ? !hasPython || 'package.json' in project.files || panel === 'package' : id === 'kit' ? KIT_FILE in project.files || panel === 'kit' : true;
 
   return (
     <ActionsContext.Provider value={actions}>
@@ -932,6 +948,7 @@ export function Workspace() {
                 }} />}
                 {shownPanel === 'agent' && <AgentPanel />}
                 {shownPanel === 'worker' && <WorkerPanel worker={worker} />}
+                {shownPanel === 'kit' && <KitPanel onFocus={(focus) => worker.setSettings({ focus })} />}
                 {shownPanel === 'history' && <HistoryPanel />}
                 {shownPanel === 'graph' && <GraphPanel />}
                 {shownPanel === 'package' && <PackagePanel />}
