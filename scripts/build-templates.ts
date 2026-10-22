@@ -19,7 +19,8 @@ const wasm = process.argv.includes('--wasm');
 mkdirSync(srcDir, { recursive: true });
 
 let failed = 0;
-for (const template of TEMPLATES) {
+// Python templates are run with uv, not compiled
+for (const template of TEMPLATES.filter((t) => t.language !== 'python')) {
   const { files, entry } = templateFiles(template);
   for (const [file, content] of Object.entries(files)) {
     mkdirSync(path.dirname(path.join(srcDir, template.id, file)), { recursive: true });

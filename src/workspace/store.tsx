@@ -83,6 +83,8 @@ interface EditorState {
 
 type Action =
   | { type: 'write'; path: string; content: string }
+  /** Merge files in (and remove some) without opening tabs, e.g. what uv or a program changed */
+  | { type: 'put'; files: Record<string, string>; removed?: string[] }
   | { type: 'create'; path: string; content?: string }
   | { type: 'mkdir'; path: string }
   | { type: 'delete'; path: string }
@@ -115,6 +117,16 @@ function reducer(state: EditorState, action: Action): EditorState {
     case 'write':
       if (!(action.path in project.files) || project.files[action.path] === action.content) return state;
       return { ...state, project: { ...project, files: { ...project.files, [action.path]: action.content } } };
+    case 'put': {
+      let next = project;
+      for (const gone of action.removed ?? []) if (gone in next.files) next = deletePath(next, gone);
+      const files = { ...next.files };
+      for (const [file, content] of Object.entries(action.files)) if (isValidPath(file)) files[file] = content;
+      const entry = next.entry in files ? next.entry : Object.keys(files).find(isRunnable) ?? '';
+      const tabs = state.tabs.filter((t) => t in files);
+      const active = state.active in files ? state.active : tabs[tabs.length - 1] ?? entry;
+      return { ...state, project: { ...next, files, entry }, tabs: tabs.length ? tabs : active ? [active] : [], active };
+    }
     case 'create': {
       if (!isValidPath(action.path) || action.path in project.files) return state;
       const files = { ...project.files, [action.path]: action.content ?? '' };

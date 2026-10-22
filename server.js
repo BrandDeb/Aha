@@ -184,6 +184,9 @@ function broadcastToProject(projectId, message, excludeClientId = null) {
 
 // Start server
 const PORT = process.env.PORT || 3000;
+// Loopback only by default. The studio can run Python and compile code, so it must not be
+// reachable from the rest of the network unless the operator says so (HOST=0.0.0.0).
+const HOST = process.env.HOST || '127.0.0.1';
 
 app.prepare().then(() => {
   server.on('upgrade', (req, socket, head) => {
@@ -198,9 +201,15 @@ app.prepare().then(() => {
     }
   });
 
-  server.listen(PORT, () => {
+  server.listen(PORT, HOST, () => {
     console.log(`> Ready on http://localhost:${PORT}`);
     console.log(`> WebSocket available at ws://localhost:${PORT}${WS_PATH}`);
+    if (process.env.NANOCLI_PYTHON !== '0') {
+      console.log('> Python (uv) is enabled: programs run on this machine. Set NANOCLI_PYTHON=0 to turn it off.');
+      if (!['127.0.0.1', 'localhost', '::1'].includes(HOST)) {
+        console.warn(`> WARNING: listening on ${HOST} with Python enabled. Anyone who can reach this port can run code on this machine.`);
+      }
+    }
   });
 });
 

@@ -21,8 +21,9 @@ export interface TreeNode {
 
 /** Same rules the server enforces (see isValidProjectPath in lib/compiler.ts) */
 export function isValidPath(filePath: string): boolean {
-  return filePath.length > 0 && filePath.length <= 200 &&
-    /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(filePath);
+  // .python-version is the one dotfile: `uv python pin` writes it
+  return filePath === '.python-version' || (filePath.length > 0 && filePath.length <= 200 &&
+    /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(filePath));
 }
 
 /** Resolve `target` against a working directory like a shell would */
@@ -133,13 +134,19 @@ export function deletePath(project: Project, target: string): Project {
   return { ...project, files, folders, entry };
 }
 
+export function isPython(filePath: string): boolean {
+  return /\.py$/.test(filePath);
+}
+
 export function isRunnable(filePath: string): boolean {
-  return /\.(?:ts|mts|cts|js|mjs|cjs)$/.test(filePath) && !filePath.endsWith('.d.ts');
+  return (/\.(?:ts|mts|cts|js|mjs|cjs)$/.test(filePath) && !filePath.endsWith('.d.ts')) || isPython(filePath);
 }
 
 export function languageFor(filePath: string): string {
   if (/\.(?:ts|mts|cts|tsx)$/.test(filePath)) return 'typescript';
   if (/\.(?:js|mjs|cjs|jsx)$/.test(filePath)) return 'javascript';
+  if (isPython(filePath)) return 'python';
+  if (filePath.endsWith('.toml')) return 'ini'; // closest built-in highlighting for TOML
   if (filePath.endsWith('.json')) return 'json';
   if (filePath.endsWith('.md')) return 'markdown';
   if (filePath.endsWith('.css')) return 'css';

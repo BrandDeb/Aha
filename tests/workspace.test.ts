@@ -107,3 +107,53 @@ test('describeBinary recognises the artifacts scriptc produces', () => {
   assert.equal(describeBinary(Uint8Array.from([1, 2, 3])), 'Binary data');
   assert.deepEqual(Array.from(base64ToBytes('AGFzbQ==')), [0, 0x61, 0x73, 0x6d]);
 });
+
+import { normalizeName, parseLockVersions, parsePyproject, requirementName } from '../src/workspace/pyproject.ts';
+import { isPython, isRunnable, isValidPath, languageFor } from '../src/workspace/project.ts';
+
+test('Python files are runnable, highlighted, and .python-version is the one allowed dotfile', () => {
+  assert.ok(isPython('src/app/main.py') && !isPython('main.pyc') && !isPython('main.ts'));
+  assert.ok(isRunnable('main.py') && isRunnable('main.ts') && !isRunnable('notes.md'));
+  assert.equal(languageFor('x.py'), 'python');
+  assert.equal(languageFor('pyproject.toml'), 'ini');
+  assert.ok(isValidPath('.python-version'));
+  assert.ok(!isValidPath('.env') && !isValidPath('.venv/bin/x') && !isValidPath('../x.py'));
+});
+
+test('parsePyproject reads name, version, python and dependencies (multi-line, comments, dev group)', () => {
+  const toml = `[project]
+name = "demo-app"
+version = "0.1.0"
+description = "x"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",   # http client
+    'rich',
+    "uvicorn[standard]>=0.30,<1",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+`;
+  const p = parsePyproject(toml);
+  assert.equal(p.name, 'demo-app');
+  assert.equal(p.version, '0.1.0');
+  assert.equal(p.requiresPython, '>=3.11');
+  assert.deepEqual(p.dependencies, ['httpx>=0.27', 'rich', 'uvicorn[standard]>=0.30,<1']);
+  assert.deepEqual(p.devDependencies, ['pytest>=8']);
+  assert.deepEqual(parsePyproject('[project]\nname = "x"\ndependencies = []\n').dependencies, []);
+  assert.deepEqual(parsePyproject('').dependencies, []);
+});
+
+test('requirementName and parseLockVersions resolve what is installed', () => {
+  assert.equal(requirementName('httpx[http2]>=0.27'), 'httpx');
+  assert.equal(requirementName('My_Pkg.sub == 1'), 'My_Pkg.sub');
+  assert.equal(normalizeName('My_Pkg.sub'), 'my-pkg-sub');
+  const lock = `version = 1\nrequires-python = ">=3.11"\n\n[[package]]\nname = "rich"\nversion = "15.0.0"\nsource = { registry = "https://pypi.org/simple" }\n\n[[package]]\nname = "markdown-it-py"\nversion = "4.2.0"\n`;
+  assert.deepEqual(parseLockVersions(lock), { rich: '15.0.0', 'markdown-it-py': '4.2.0' });
+});

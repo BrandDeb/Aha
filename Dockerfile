@@ -44,6 +44,11 @@ RUN mkdir -p temp
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
+# Inside a container the server must listen on all interfaces; publish the port deliberately
+ENV HOST=0.0.0.0
+# Python (uv) runs users' programs, so it is off in the image until the operator turns it on
+# (NANOCLI_PYTHON=1) and provides a glibc Python environment and isolation
+ENV NANOCLI_PYTHON=0
 ENV NEXT_PUBLIC_BASE_URL=http://localhost:3000
 
 # Expose port

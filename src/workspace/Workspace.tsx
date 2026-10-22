@@ -22,7 +22,9 @@ import { GitPanel } from './panels/GitPanel';
 import { GraphPanel } from './panels/GraphPanel';
 import { HistoryPanel } from './panels/HistoryPanel';
 import { PackagePanel } from './panels/PackagePanel';
-import { basename, comboFromEvent, diffStatus, formatCombo, languageFor } from './project';
+import { basename, comboFromEvent, diffStatus, formatCombo, isPython, languageFor } from './project';
+import { PythonPanel } from './panels/PythonPanel';
+import { getPythonEnv, pythonProjectId, streamPython } from './python-client';
 import { base64ToArrayBuffer, runWasm } from './runner';
 import { OutputMenu } from './components/OutputMenu';
 import { ArtifactDialog } from './components/ArtifactDialog';
@@ -34,6 +36,7 @@ const PANELS: { id: PanelId; label: string; glyph: string }[] = [
   { id: 'build', label: 'Build', glyph: '▶' },
   { id: 'git', label: 'Git', glyph: '⑂' },
   { id: 'ai', label: 'Assistant', glyph: '✦' },
+  { id: 'python', label: 'Python', glyph: 'Py' },
   { id: 'history', label: 'History', glyph: '↺' },
   { id: 'graph', label: 'Graph', glyph: '⌬' },
   { id: 'package', label: 'Package', glyph: '▤' },
@@ -71,6 +74,8 @@ export function Workspace() {
   const target = settings.target;
   const setTarget = useCallback((next: CompileTarget) => updateSettings({ target: next }), [updateSettings]);
   const [viewer, setViewer] = useState<CompileResult | null>(null);
+  // Tabs follow the project: Python's only for Python projects, and package.json's only when there is one to manage
+  const hasPython = useMemo(() => Object.keys(project.files).some((f) => isPython(f) || f === 'pyproject.toml'), [project.files]);
   const [building, setBuilding] = useState(false);
   const [lastBuild, setLastBuild] = useState<CompileResult | null>(null);
   const [coverage, setCoverage] = useState<CoverageResult | null>(null);
@@ -184,6 +189,20 @@ export function Workspace() {
   // Actions
   // ---------------------------------------------------------------------------
 
+  const terminalRun = useRef<((cmd: string) => void) | null>(null);
+
+  const python = useCallback<WorkspaceActions['python']>(async (command, onOutput = () => {}, signal) => {
+    const p = projectRef.current;
+    const done = await streamPython(
+      { ...command, name: command.name ?? p.name, projectId: pythonProjectId(p.name), files: p.files, env: getPythonEnv() },
+      onOutput,
+      signal
+    );
+    // pyproject.toml, uv.lock and files the program wrote come back into the explorer
+    if (Object.keys(done.changed).length || done.removed.length) dispatch({ type: 'put', files: done.changed, removed: done.removed });
+    return { ...done, ok: done.code === 0 };
+  }, [dispatch]);
+
   const compile = useCallback<WorkspaceActions['compile']>(async (options = {}) => {
     const p = projectRef.current;
     const entry = options.entry ?? p.entry;
@@ -214,6 +233,18 @@ export function Workspace() {
       setBuilding(false);
     }
   }, [target, settings.build, notify, saveSnapshot]);
+
+  /** The toolbar's Compile: Python has no compile step, so it runs the program in the terminal instead */
+  const compileOrRun = useCallback(() => {
+    const entry = projectRef.current.entry;
+    if (entry && isPython(entry)) {
+      notify({ kind: 'info', title: 'Python runs directly', detail: 'Running it in the terminal; there is no compile step.' });
+      setShowTerminal(true);
+      setTimeout(() => terminalRun.current?.('run'), 0);
+      return;
+    }
+    void compile();
+  }, [compile, notify]);
 
   const run = useCallback<WorkspaceActions['run']>(async (args, onOutput, options = {}) => {
     const entry = options.entry ?? projectRef.current.entry;
@@ -316,11 +347,11 @@ export function Workspace() {
     showDiff: setDiff,
     openPanel,
     downloadArtifact,
+    python,
     inspect: (result) => setViewer(result ?? lastBuild),
-  }), [compile, run, format, save, openPanel, downloadArtifact, lastBuild]);
+  }), [compile, run, format, save, openPanel, downloadArtifact, python, lastBuild]);
 
   // Terminal "run" from the toolbar / shortcut
-  const terminalRun = useRef<((cmd: string) => void) | null>(null);
   const runInTerminal = useCallback(() => {
     setShowTerminal(true);
     setTimeout(() => terminalRun.current?.('run'), 0);
@@ -331,7 +362,7 @@ export function Workspace() {
   // ---------------------------------------------------------------------------
 
   const commands = useMemo<Command[]>(() => [
-    { id: 'build.compile', category: 'Build', title: 'Compile', keys: DEFAULT_KEYS['build.compile'], run: () => void compile() },
+    { id: 'build.compile', category: 'Build', title: 'Compile', keys: DEFAULT_KEYS['build.compile'], run: compileOrRun },
     { id: 'build.run', category: 'Build', title: 'Run in terminal (WASM)', keys: DEFAULT_KEYS['build.run'], run: runInTerminal },
     { id: 'build.coverage', category: 'Build', title: 'Analyze scriptc coverage', run: () => void analyze() },
     { id: 'build.inspect', category: 'Build', title: 'Inspect last build output', run: () => lastBuild && setViewer(lastBuild), enabled: !!lastBuild?.success && lastBuild.output !== undefined },
@@ -355,10 +386,11 @@ export function Workspace() {
     { id: 'panel.ai', category: 'Assistant', title: 'Open assistant', keys: DEFAULT_KEYS['panel.ai'], run: () => openPanel('ai') },
     { id: 'panel.history', category: 'History', title: 'Open version history', keys: DEFAULT_KEYS['panel.history'], run: () => openPanel('history') },
     { id: 'panel.graph', category: 'Graph', title: 'Open dependency graph', run: () => openPanel('graph') },
+    { id: 'panel.python', category: 'Python', title: 'Open Python (uv) panel', run: () => openPanel('python') },
     { id: 'panel.package', category: 'Package', title: 'Edit package.json', run: () => openPanel('package') },
     { id: 'collab.toggle', category: 'Collaboration', title: collab ? 'Leave live session' : 'Start live session', run: () => setCollab((v) => !v) },
     { id: 'prefs.settings', category: 'Preferences', title: 'Settings', keys: DEFAULT_KEYS['prefs.settings'], run: () => setDialog('settings') },
-  ], [compile, runInTerminal, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, collab]);
+  ], [compileOrRun, runInTerminal, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, collab]);
 
   const bindings = useMemo(() => {
     const map: Record<string, string> = { ...DEFAULT_KEYS, ...settings.keybindings };
@@ -442,7 +474,7 @@ export function Workspace() {
             }}
             files={secondary ? undefined : project.files}
             diagnostics={diagnosticsFor(path)}
-            onRun={() => void compile()}
+            onRun={compileOrRun}
             onEditor={secondary ? undefined : (editor) => { editorRef.current = editor; }}
             fontSize={settings.fontSize}
             theme={settings.theme}
@@ -457,6 +489,9 @@ export function Workspace() {
       </div>
     </div>
   );
+
+  const panelVisible = (id: PanelId) =>
+    id === 'python' ? hasPython || panel === 'python' : id === 'package' ? !hasPython || 'package.json' in project.files || panel === 'package' : true;
 
   return (
     <ActionsContext.Provider value={actions}>
@@ -485,14 +520,18 @@ export function Workspace() {
           )}
 
           <div className="ml-auto flex items-center gap-2">
-            <OutputMenu target={target} options={settings.build} onTarget={setTarget} onOptions={(patch) => updateSettings({ build: { ...settings.build, ...patch } })} />
-            <button onClick={runInTerminal} className="btn btn-secondary btn-sm" title={`Run as WASM in the terminal (${formatCombo(bindings['build.run'] ?? '', isMac)})`}>
+            {!isPython(project.entry) && <OutputMenu target={target} options={settings.build} onTarget={setTarget} onOptions={(patch) => updateSettings({ build: { ...settings.build, ...patch } })} />}
+            <button
+              onClick={runInTerminal}
+              className={`btn btn-sm ${isPython(project.entry) ? 'btn-primary' : 'btn-secondary'}`}
+              title={isPython(project.entry) ? `Run with uv in the terminal (${formatCombo(bindings['build.run'] ?? '', isMac)})` : `Run as WASM in the terminal (${formatCombo(bindings['build.run'] ?? '', isMac)})`}
+            >
               Run
             </button>
-            <button onClick={() => void compile()} disabled={building} className="btn btn-primary btn-sm" title={formatCombo(bindings['build.compile'] ?? '', isMac)}>
+            {!isPython(project.entry) && <button onClick={compileOrRun} disabled={building} className="btn btn-primary btn-sm" title={formatCombo(bindings['build.compile'] ?? '', isMac)}>
               {building ? 'Compiling…' : 'Compile'}
               <span className="kbd border-black/25 text-[10px] text-[var(--color-accent-fg)]/70">{formatCombo(bindings['build.compile'] ?? '', isMac)}</span>
-            </button>
+            </button>}
             <button onClick={() => setDialog('palette')} className="btn btn-ghost btn-icon" aria-label="Command palette" title={formatCombo(bindings['view.palette'] ?? '', isMac)}>⌘</button>
             <button onClick={() => setDialog('settings')} className="btn btn-ghost btn-icon" aria-label="Settings">⚙</button>
             {user ? (
@@ -594,7 +633,7 @@ export function Workspace() {
           {showPanel && (
             <aside className="pane hidden w-[24rem] shrink-0 flex-col overflow-hidden border-l border-border lg:flex" aria-label="Tools" data-zen-hide>
               <div role="tablist" aria-label="Tool panels" className="flex shrink-0 overflow-x-auto border-b border-border bg-[var(--bar)] px-1">
-                {PANELS.map((p) => (
+                {PANELS.filter((p) => panelVisible(p.id)).map((p) => (
                   <button
                     key={p.id}
                     role="tab"
@@ -623,6 +662,7 @@ export function Workspace() {
                 {panel === 'history' && <HistoryPanel />}
                 {panel === 'graph' && <GraphPanel />}
                 {panel === 'package' && <PackagePanel />}
+                {panel === 'python' && <PythonPanel />}
               </div>
             </aside>
           )}

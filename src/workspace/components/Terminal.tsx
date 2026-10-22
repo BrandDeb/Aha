@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { formatSize } from '@/lib/compiler-browser';
 import { useActions } from '../actions';
-import { allFolders, basename, buildTree, diffStatus, isFolder, isRunnable, resolvePath, type TreeNode } from '../project';
+import { allFolders, basename, buildTree, diffStatus, isFolder, isPython, isRunnable, resolvePath, type TreeNode } from '../project';
+import { streamPython, type PythonCommand, type PythonStream } from '../python-client';
 import { useWorkspace } from '../store';
 
 type LineKind = 'in' | 'out' | 'err' | 'sys';
@@ -21,7 +22,12 @@ const HELP = `Commands
   mv <from> <to>        move or rename        cp <from> <to>   copy a file
   echo <text> [> file]  print or write text   open <file>      open in the editor
   build [file]          compile a native executable with scriptc
-  run [file] [args…]    compile to WASM and run it here (Ctrl+C stops)
+  run [file] [args…]    TypeScript: compile to WASM and run it here · Python: run with uv
+                        (Ctrl+C stops)
+  uv add <pkg…> [--dev] uv remove <pkg…>  uv sync  uv lock [--upgrade]  uv tree
+  uv init [name]        uv python pin 3.12      uv run <file.py> [args…]
+  python <file.py> [args…]   run a Python file with uv
+  install-uv            download uv here if it isn't installed
   entry [file]          show or set the entry file
   format [file]         format with Prettier  git status       changes since last pull
   history  clear  date  whoami  help
@@ -114,6 +120,53 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
     const resolve = (target: string | undefined, fallback = cwd) => (target === undefined ? fallback : resolvePath(cwd, target));
 
     const [command, ...args] = words;
+
+    /** Run a uv command, printing its output as it arrives and merging file changes back */
+    const runPythonCommand = async (cmd: PythonCommand, shown: string) => {
+      print(shown, 'sys');
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setBusy(true);
+      // Output arrives in arbitrary chunks: hold back partial lines until they are complete
+      const partial: Record<PythonStream, string> = { stdout: '', stderr: '', info: '' };
+      const emit = (stream: PythonStream, line: string) => {
+        if (stream === 'stdout') out(line);
+        else print(line, stream === 'info' ? 'sys' : 'out');
+      };
+      const onOutput = (stream: PythonStream, text: string) => {
+        const pieces = (partial[stream] + text).split('\n');
+        partial[stream] = pieces.pop() ?? '';
+        for (const line of pieces) emit(stream, line.replace(/\r$/, ''));
+      };
+      const outcome = await actions.python(cmd, onOutput, controller.signal);
+      for (const stream of ['stdout', 'stderr', 'info'] as const) if (partial[stream]) emit(stream, partial[stream]);
+      abortRef.current = null;
+      setBusy(false);
+      if (outcome.error === 'stopped') return;
+      if (outcome.error) {
+        err(outcome.error);
+        if (/uv isn’t installed/.test(outcome.error)) print('Type install-uv to download it into the studio.', 'sys');
+        return;
+      }
+      const seconds = outcome.ms >= 1000 ? `${(outcome.ms / 1000).toFixed(1)} s` : `${outcome.ms} ms`;
+      if (outcome.timedOut) err(`Timed out after ${seconds}`);
+      else if (outcome.code === 0) print(`exit 0 · ${seconds}`, 'sys');
+      else err(`exit ${outcome.code ?? '?'} · ${seconds}`);
+      const written = Object.keys(outcome.changed).filter((f) => !['pyproject.toml', 'uv.lock', '.python-version'].includes(f));
+      if (written.length) print(`→ wrote ${written.join(', ')}`, 'sys');
+      if (outcome.skipped.length) print(`not copied back (binary or large): ${outcome.skipped.slice(0, 6).join(', ')}${outcome.skipped.length > 6 ? '…' : ''}`, 'sys');
+    };
+
+    /** `python <file>` / `uv run <file>` / `run` on a .py entry */
+    const runPythonFile = async (fileArg: string | undefined, programArgs: string[]) => {
+      const file = fileArg ? resolve(fileArg) : p.entry && isPython(p.entry) ? p.entry : null;
+      if (!file || !(file in p.files) || !isPython(file)) {
+        err(fileArg ? `${fileArg}: not a Python file in this project` : 'usage: python <file.py> [args…]');
+        return;
+      }
+      await runPythonCommand({ action: 'run', entry: file, args: programArgs }, `uv run ${file}${programArgs.length ? ` ${programArgs.join(' ')}` : ''}`);
+    };
+
     switch (command) {
       case 'help':
         out(HELP);
@@ -242,6 +295,7 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
       case 'build': {
         const entry = args[0] ? resolve(args[0]) : undefined;
         if (entry === null || (entry && !(entry in p.files))) { err(`build: ${args[0]}: no such file`); break; }
+        if (isPython(entry ?? p.entry)) { err('build: Python has no compile step. Use run (or python <file>).'); break; }
         print(`scriptc build ${entry ?? p.entry}`, 'sys');
         setBusy(true);
         const result = await actions.compile({ target: 'exe', entry: entry ?? undefined, quiet: true });
@@ -253,7 +307,77 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
           : `✕ ${result.error}`);
         break;
       }
+      case 'uv': {
+        const [sub, ...rest] = args;
+        const flags = rest.filter((a) => a.startsWith('-'));
+        const words2 = rest.filter((a) => !a.startsWith('-'));
+        const dev = flags.includes('--dev') || flags.includes('-d');
+        const shown = `uv ${args.join(' ')}`;
+        switch (sub) {
+          case 'add':
+            if (!words2.length) err('usage: uv add <package…> [--dev]   e.g. uv add httpx "rich>=13"');
+            else await runPythonCommand({ action: 'add', packages: words2, dev }, shown);
+            break;
+          case 'remove':
+            if (!words2.length) err('usage: uv remove <package…> [--dev]');
+            else await runPythonCommand({ action: 'remove', packages: words2, dev }, shown);
+            break;
+          case 'sync':
+          case 'tree':
+            await runPythonCommand({ action: sub }, shown);
+            break;
+          case 'lock':
+            await runPythonCommand({ action: 'lock', upgrade: flags.includes('--upgrade') || flags.includes('-U') }, shown);
+            break;
+          case 'init':
+            await runPythonCommand({ action: 'init', name: words2[0] }, shown);
+            break;
+          case 'python':
+            if (words2[0] === 'pin' && words2[1]) await runPythonCommand({ action: 'pin', version: words2[1] }, shown);
+            else err('usage: uv python pin <version>   e.g. uv python pin 3.12');
+            break;
+          case 'pip':
+            if (words2[0] === 'install' && words2.length > 1) {
+              print('The studio manages packages in pyproject.toml: running uv add instead.', 'sys');
+              await runPythonCommand({ action: 'add', packages: words2.slice(1), dev }, `uv add ${words2.slice(1).join(' ')}`);
+            } else err('usage: uv add <package…>');
+            break;
+          case 'run':
+            await runPythonFile(words2[0], rest.slice(rest.indexOf(words2[0]) + 1));
+            break;
+          default:
+            err(sub ? `uv ${sub}: not supported here. Try: uv add, remove, sync, lock, tree, init, python pin, run` : 'usage: uv <add|remove|sync|lock|tree|init|python pin|run> …');
+        }
+        break;
+      }
+      case 'python':
+      case 'python3':
+        await runPythonFile(args[0], args.slice(1));
+        break;
+      case 'pip':
+      case 'pip3':
+        err('pip isn’t used here — packages live in pyproject.toml. Use: uv add <package>');
+        break;
+      case 'install-uv': {
+        const controller = new AbortController();
+        abortRef.current = controller;
+        setBusy(true);
+        const done = await streamPython({ action: 'install-uv' }, (_stream, text) => text.split('\n').filter(Boolean).forEach((l) => print(l, 'sys')), controller.signal);
+        abortRef.current = null;
+        setBusy(false);
+        if (done.error && done.error !== 'stopped') err(done.error);
+        else if (!done.error) out(`✓ uv ${done.uv ?? ''} is ready. Try: uv add <package>`);
+        break;
+      }
       case 'run': {
+        // `run [file] [args…]`: the first word is a file only if it doesn't look like a flag
+        const explicit = args[0] && !args[0].startsWith('-') ? args[0] : undefined;
+        const explicitPath = explicit ? resolve(explicit) : null;
+        const isPythonRun = explicit ? !!explicitPath && isPython(explicitPath) : !!p.entry && isPython(p.entry);
+        if (isPythonRun) {
+          await runPythonFile(explicit, explicit ? args.slice(1) : args);
+          break;
+        }
         let entry: string | undefined;
         let programArgs = args;
         if (args[0] && !args[0].startsWith('-')) {

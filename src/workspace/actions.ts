@@ -3,6 +3,7 @@
 import { createContext, useContext } from 'react';
 import type { CompileResult } from '@/lib/compiler-browser';
 import type { CompileTarget } from '@/types';
+import type { PythonCommand, PythonOutcome, PythonStream } from './python-client';
 
 export interface RunOutcome {
   ok: boolean;
@@ -30,11 +31,13 @@ export interface WorkspaceActions {
   /** Open a panel in the right sidebar */
   openPanel: (panel: PanelId) => void;
   downloadArtifact: (result?: CompileResult | null) => Promise<void>;
+  /** Run a Python command with uv; file changes it makes are merged into the project */
+  python: (command: PythonCommand, onOutput?: (stream: PythonStream, text: string) => void, signal?: AbortSignal) => Promise<PythonOutcome>;
   /** Open a build artifact in the output viewer (defaults to the last build) */
   inspect: (result?: CompileResult | null) => void;
 }
 
-export type PanelId = 'build' | 'git' | 'ai' | 'history' | 'graph' | 'package';
+export type PanelId = 'build' | 'git' | 'ai' | 'history' | 'graph' | 'package' | 'python';
 
 export const ActionsContext = createContext<WorkspaceActions | null>(null);
 

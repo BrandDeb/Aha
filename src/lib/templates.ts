@@ -7,6 +7,8 @@
  * `eval`/`Function`, and use ES module syntax instead of `module.exports`.
  */
 
+import { PYTHON_TEMPLATES } from './python-templates.ts';
+
 export interface Template {
   id: string;
   name: string;
@@ -21,11 +23,13 @@ export interface Template {
   network?: boolean;
   /** Built as a library from a scriptc.profile.json (static archive or WASM reactor), not as an executable */
   library?: boolean;
+  /** Default is typescript. Python templates keep their files at the project root (uv expects pyproject.toml there) */
+  language?: 'typescript' | 'python';
 }
 
 /** All files of a template as a project, entry under src/ */
 export function templateFiles(template: Template): { files: Record<string, string>; entry: string } {
-  const entry = template.filename.includes('/') ? template.filename : `src/${template.filename}`;
+  const entry = template.language === 'python' || template.filename.includes('/') ? template.filename : `src/${template.filename}`;
   return { files: { [entry]: template.code, ...template.files }, entry };
 }
 
@@ -426,4 +430,5 @@ async function countdown(seconds: number): Promise<void> {
 countdown(Number(process.argv[2] ?? '3'));
 `,
   },
+  ...PYTHON_TEMPLATES,
 ];

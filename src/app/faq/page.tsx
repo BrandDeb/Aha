@@ -16,7 +16,7 @@ interface FAQItem {
   category: Category;
 }
 
-const CATEGORIES = ['General', 'Compiling', 'Workspace', 'GitHub', 'Assistant', 'Self-hosting', 'Security'] as const;
+const CATEGORIES = ['General', 'Compiling', 'Workspace', 'Python', 'GitHub', 'Assistant', 'Self-hosting', 'Security'] as const;
 type Category = (typeof CATEGORIES)[number];
 
 const FAQS: FAQItem[] = [
@@ -103,6 +103,24 @@ const FAQS: FAQItem[] = [
     category: 'GitHub',
     question: 'What can the GitHub integration do?',
     answer: 'Pull any branch of your repositories into the workspace, see changed files with +/− counts, review each one as a side-by-side diff, create branches, and commit and push all changes at once. If someone pushed since your pull, the push is refused so their work is never overwritten — pull, then commit again.',
+  },
+  {
+    id: 'python',
+    category: 'Python',
+    question: 'Can I write Python?',
+    answer: 'Yes. Python projects run with uv, Astral\'s fast package and project manager. Open a Python template, or add a .py file: the Python panel lists pyproject.toml dependencies with the versions uv.lock resolved, adds and removes packages, runs sync, lock and tree, and pins a Python version. In the terminal, `run`, `python main.py`, `uv add httpx` and `uv remove httpx` work; output streams as it happens and files your program writes (reports, CSVs) appear in the explorer. Scripts can also declare dependencies inline (PEP 723) and need no project at all. uv itself is detected on your machine, or the studio can download the official release for you.',
+  },
+  {
+    id: 'python-ai',
+    category: 'Python',
+    question: 'Which Python AI starters are included?',
+    answer: 'An LLM agent with tool calling (any OpenAI-compatible provider), embeddings + search (RAG) that works with keywords alone and improves with an embeddings endpoint, a local-model chat through Ollama, a pandas data-analysis report, an MCP server and a single-file uv script. API keys go in the Python panel\'s environment list and stay in your browser; "Use assistant provider" reuses the provider you already set up for the assistant.',
+  },
+  {
+    id: 'python-safety',
+    category: 'Security',
+    question: 'Is it safe that Python runs on the server?',
+    answer: 'Running Python means running your code on the machine that hosts the studio. That is what you want on your own computer, and the studio listens only on 127.0.0.1 by default so nothing else on your network can reach it. Python commands also require a known Host header (localhost, your NEXT_PUBLIC_BASE_URL or ALLOWED_HOSTS), same-origin requests, rate limits, timeouts and output caps, and the program never sees the server\'s own secrets, only the variables you set. It is not a sandbox: on a shared or public server set NANOCLI_PYTHON=0, or run the studio in a container. The Docker image ships with Python off.',
   },
   {
     id: 'github-scope',

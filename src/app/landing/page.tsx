@@ -158,11 +158,21 @@ export default function LandingPage() {
               <p className="mt-2 text-sm leading-relaxed text-gray-400">{feature.body}</p>
             </div>
           ))}
-          <div className="surface p-6 md:col-span-3">
+          <div className="surface p-6 md:col-span-2">
+            <h3 className="font-medium text-gray-100">Python, with uv</h3>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-400">
+              Write Python next to your TypeScript. Dependencies live in pyproject.toml and are managed by uv — add, lock and sync from a
+              panel or the terminal. Start from an LLM agent with tool calling, a RAG search, a local Ollama chat, a pandas report or an MCP server.
+            </p>
+            <div className="mt-4 rounded-lg border border-border bg-background px-3 py-2 font-mono text-[13px] leading-6">
+              <div><span className="text-accent">$</span> <span className="text-gray-100">uv add openai httpx</span></div>
+              <div><span className="text-accent">$</span> <span className="text-gray-100">run main.py &quot;What is 17 × 23?&quot;</span></div>
+            </div>
+          </div>
+          <div className="surface p-6">
             <h3 className="font-medium text-gray-100">Yours to shape</h3>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-400">
-              Command palette, remappable shortcuts, Prettier on save, version history, zen mode, and light, dark and
-              high-contrast themes.
+            <p className="mt-2 text-sm leading-relaxed text-gray-400">
+              Command palette, remappable shortcuts, Prettier on save, version history, zen mode, and light, dark and high-contrast themes.
             </p>
           </div>
         </div>

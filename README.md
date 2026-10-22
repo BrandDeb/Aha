@@ -78,7 +78,8 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Export** | ZIP export/import, secret GitHub Gist, share links that carry the whole project |
 | **Editing** | Split view, zen mode, command palette (⌘K), remappable shortcuts with export/import, built-in extensions (minimap, word wrap, bracket pairs, sticky scroll, TODO highlights, byte field) |
 | **Accessibility** | Light, dark and high-contrast themes; ARIA tree, tabs and dialogs with focus management; skip link; live regions for builds and toasts; reduced motion respected |
-| **Templates** | Ten starter projects including a multi-file CLI; CI compiles every one with scriptc |
+| **Python (uv)** | Python projects managed with [uv](https://docs.astral.sh/uv/): run files, add/remove/sync/lock/tree from a Packages panel or the terminal, pin a Python version, inline-script dependencies, environment variables for API keys, files your program writes land in the explorer. uv is detected, or downloaded from the official release with a checksum |
+| **Templates** | Eleven TypeScript starters (CI compiles every one with scriptc) and six Python/AI starters: LLM agent with tool calling, embeddings + search (RAG), local models (Ollama), pandas data analysis, an MCP server, a single-file uv script |
 
 Native executables are linked for the machine the server runs on. Use the WASM target (or `run`) for a
 portable artifact.
@@ -111,6 +112,38 @@ studio is hosted elsewhere, start it with `OLLAMA_ORIGINS=https://your-studio.ex
 
 ---
 
+## Python and uv
+
+The Python tab appears for projects with `.py` files or a `pyproject.toml`. Everything goes through uv:
+
+```
+run                       run the entry file (installs what pyproject.toml declares first)
+python main.py --top 5    run a file with arguments
+uv add httpx "rich>=13"   add dependencies (creates pyproject.toml if needed); --dev for dev dependencies
+uv remove httpx           uv sync    uv lock [--upgrade]    uv tree    uv init [name]
+uv python pin 3.12        pin a Python version; uv downloads it if it isn't installed
+install-uv                download uv into ~/.nanocli/ if it isn't on your PATH
+```
+
+Each project gets its own folder and virtual environment under `~/.nanocli/python/` (set `NANOCLI_HOME` to
+move it), kept between runs; uv's cache is shared. The browser stays the source of truth: it sends the project's files with each command and
+gets `pyproject.toml`, `uv.lock` and any text files the program wrote back.
+
+**This runs your code on the machine that hosts the studio.** That is the point of a local editor, so
+Python is on by default, but:
+
+- The server listens on `127.0.0.1` only (`HOST=0.0.0.0` to change it) and Python commands require a
+  trusted `Host` header (localhost, the host of `NEXT_PUBLIC_BASE_URL`, or `ALLOWED_HOSTS`), which also
+  defeats DNS-rebinding attacks from other websites.
+- Programs run with a short allow-list of environment variables (never `ANTHROPIC_API_KEY`, the GitHub
+  secrets or anything else from the server), a private `HOME`, a timeout (5 min per run, 20 min per install)
+  and a 2 MB output cap; aborting kills the whole process tree.
+- It is **not a sandbox**. On a shared or public server set `NANOCLI_PYTHON=0` or run the studio in a
+  container. The Docker image ships with Python off, and its Alpine base can't install most AI wheels
+  (torch and friends need glibc), so use a Debian-based image if you enable it there.
+
+---
+
 ## Pages
 
 | Route | |
@@ -128,6 +161,7 @@ studio is hosted elsewhere, start it with `OLLAMA_ORIGINS=https://your-studio.ex
 ```
 Browser ── Next.js 16 (App Router), React 19, Tailwind v4, Monaco
    │
+   ├── POST /api/python     ── src/lib/python.ts ── uv ── ~/.nanocli/python/<project>/  (streamed NDJSON)
    ├── POST /api/compile   ─┐
    ├── POST /api/coverage  ─┼─ src/lib/compiler.ts ── execFile(scriptc) ── temp/  (pruned hourly)
    ├── GET  /api/download  ─┘
@@ -178,6 +212,16 @@ the first one. A single file is limited to 512 KB, a project to 200 files / 2 MB
 `GET` → `{ configured }`. `POST { action: "chat" | "explain" | "fix" | "tests", prompt, history, files, activeFile, selection?, diagnostics }`
 → streamed plain text using the server's `ANTHROPIC_API_KEY`; 503 when it isn't set. Bring-your-own-key
 requests never touch this route.
+
+### `/api/python` (uv)
+
+`GET` → `{ enabled, uv: { version, source } | null, pythons: ["3.13.1", …] }`.
+`POST { projectId, action, files, env, … }` where `action` is `run` (`entry`, `args`, `packages` for
+`--with`), `add` / `remove` (`packages`, `dev`), `sync`, `lock` (`upgrade`), `init`, `tree`, `pin`
+(`version`) or `install-uv`. The response is newline-delimited JSON: `{ t: "out", s: "stdout" | "stderr" |
+"info", d }` as output arrives, then one `{ t: "done", code, ms, changed, removed, skipped, … }`. Package
+names must be plain requirements (no URLs or paths); environment variables can't override `PATH`, `UV_*`,
+`PYTHON*` or loader variables.
 
 ### `POST /api/coverage`
 
@@ -232,6 +276,17 @@ WS_ALLOWED_ORIGINS=http://localhost:3000
 ANTHROPIC_API_KEY=
 AI_REQUESTS_PER_10_MIN=30   # per client (first X-Forwarded-For hop)
 
+# Network and Python
+HOST=127.0.0.1               # interface to listen on (0.0.0.0 only behind a proxy or in a container)
+ALLOWED_HOSTS=               # extra Host names allowed for Python commands, comma separated
+NANOCLI_PYTHON=1             # 0 turns Python (uv) off entirely
+UV_BIN=                      # path to a specific uv binary
+NANOCLI_HOME=                # where Python environments and caches live (default ~/.nanocli)
+NANOCLI_PY_TIMEOUT_MS=300000          # per program run
+NANOCLI_PY_INSTALL_TIMEOUT_MS=1200000 # per install / sync / lock
+NANOCLI_PY_JOBS=3                     # concurrent Python commands
+NANOCLI_PY_REQUESTS_PER_10_MIN=120    # per client
+
 # Compiler
 MAX_CONCURRENT_BUILDS=2
 SCRIPTC_LINKER=          # optional: linker driver scriptc uses for executables
@@ -248,7 +303,8 @@ SCRIPTC_LINKER=          # optional: linker driver scriptc uses for executables
 | `npm start` | Production server |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | Generate route types and run `tsc` |
-| `npm test` | Unit + scriptc integration tests (`node --test`) |
+| `npm test` | Unit + scriptc and uv integration tests (`node --test`) |
+| `NANOCLI_TEST_NETWORK=1 npm test` | Also installs real packages from PyPI and runs every Python template against fake local LLM servers |
 | `npm run templates:build` | Compile every template to `dist/templates/` |
 | `npm run templates:wasm` | Same, plus WASM modules (uses the bundled zig) |
 | `npm run clean` | Remove `temp/`, `.next/` and `dist/` |
@@ -268,7 +324,7 @@ src/
 │   ├── wasi.worker.ts           Runs WASI modules off the main thread
 │   ├── components/              FileTree, Terminal, CommandPalette, SettingsDialog, dialogs
 │   └── panels/                  Build, Git, Assistant, History, Graph, Package
-└── lib/                         compiler (server), compiler-browser, github, ai, ai-providers, templates
+└── lib/                         compiler, zig, python, uv-install, host (server); compiler-browser; github, ai, ai-providers; templates, python-templates
 scripts/build-templates.ts       Builds every template with scriptc
 tests/                           node:test suites (unit + scriptc integration)
 server.js                        Custom server + WebSocket relay
