@@ -4,19 +4,24 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-// Everything the runner writes goes under NANOCLI_HOME
-const home = fs.mkdtempSync(path.join(os.tmpdir(), 'nanocli-run-'));
+// Everything the runner writes goes under NANOCLI_HOME. With NANOCLI_TEST_NETWORK=1, toolchains that are
+// missing are installed by the studio itself (mise), exactly as on a first Run; NANOCLI_TEST_HOME keeps
+// them between test runs. Otherwise nothing is downloaded and missing languages are skipped.
+const network = process.env.NANOCLI_TEST_NETWORK === '1';
+const home = process.env.NANOCLI_TEST_HOME || fs.mkdtempSync(path.join(os.tmpdir(), 'nanocli-run-'));
 process.env.NANOCLI_HOME = home;
-after(() => fs.rmSync(home, { recursive: true, force: true }));
+if (!network) process.env.NANOCLI_TOOLCHAIN_AUTO_INSTALL = '0';
+if (!process.env.NANOCLI_TEST_HOME) after(() => fs.rmSync(home, { recursive: true, force: true }));
 
 const { LANGUAGES, detectLanguage, isRunnable, monacoLanguageFor, getLanguage } = await import('../src/lib/languages.ts');
 const { LANGUAGE_STARTERS, STARTER_OUTPUT } = await import('../src/lib/language-templates.ts');
 const poly = await import('../src/lib/polyglot.ts');
+const { MANAGED } = await import('../src/lib/toolchains.ts');
 const { isSafeRelativePath, writeProject, collectFiles } = await import('../src/lib/proc.ts');
 
 const statuses = await poly.getLanguageStatuses();
 const installed = new Set(statuses.filter((s) => s.available).map((s) => s.id));
-const need = (id: string) => (installed.has(id) ? false : `${id} is not installed on this machine`);
+const need = (id: string) => (installed.has(id) || (network && MANAGED[id]) ? false : `${id} is not installed on this machine`);
 
 let counter = 0;
 const projectId = () => `proj-${process.pid}-${++counter}`;
@@ -177,19 +182,21 @@ test('writeProject mirrors the browser’s files, keeps dependency folders, and 
 // ---------------------------------------------------------------------------
 
 for (const starter of LANGUAGE_STARTERS) {
-  test(`${starter.name}: the starter runs and prints the expected lines`, { skip: need(starter.language), timeout: 300_000 }, async () => {
+  test(`${starter.name}: the starter runs and prints the expected lines`, { skip: need(starter.language), timeout: 40 * 60_000 }, async () => {
     const files = { [starter.filename]: starter.code, ...starter.files };
-    const { result, stdout } = await run(starter.language, files, starter.filename);
-    assert.equal(result.code, 0, `${stdout}\n${JSON.stringify(result)}`);
+    const { result, stdout, info } = await run(starter.language, files, starter.filename);
+    assert.equal(result.code, 0, `${info.slice(-3000)}\n${stdout}\n${JSON.stringify(result)}`);
     // Zig's std.debug.print writes to stderr; everything else to stdout. Both are streamed as output here.
-    for (const line of STARTER_OUTPUT) assert.ok(stdout.includes(line), `missing “${line}” in:\n${stdout}`);
+    for (const line of starter.expect ?? STARTER_OUTPUT) assert.ok(stdout.includes(line), `missing “${line}” in:\n${stdout}`);
+    if (starter.expect || starter.takesArgs === false) return;
     const withArg = await run(starter.language, files, starter.filename, { args: ['Ada'] });
     assert.ok(withArg.stdout.includes('Hello, Ada!'), withArg.stdout);
   });
 }
 
 test('a toolchain that is not installed explains how to get it, and nothing runs', async () => {
-  const missing = LANGUAGES.find((l) => !installed.has(l.id));
+  // One the studio can't install for you, so the hint is all there is
+  const missing = LANGUAGES.find((l) => !installed.has(l.id) && (!network || !MANAGED[l.id]));
   if (!missing) return;
   const starter = LANGUAGE_STARTERS.find((s) => s.language === missing.id)!;
   const { result } = await run(missing.id, { [starter.filename]: starter.code, ...starter.files }, starter.filename);

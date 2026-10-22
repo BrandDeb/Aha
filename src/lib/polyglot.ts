@@ -13,6 +13,7 @@ import path from 'node:path';
 import { listensOnLoopbackOnly } from './host.ts';
 import { detectLanguage, getLanguage, LANGUAGES, OUT_DIR, type Language, type LangStep } from './languages.ts';
 import { capture, collectFiles, createJobPool, createKeyedLock, diffFiles, isSafeRelativePath, runStep, writeProject } from './proc.ts';
+import { applyManaged, getToolchainState, installFor, MANAGED, refreshBinPaths } from './toolchains.ts';
 import { bundledZigDir, withBundledZig } from './zig.ts';
 
 export const NANOCLI_DIR = process.env.NANOCLI_HOME || path.join(os.homedir(), '.nanocli');
@@ -114,7 +115,7 @@ export function runEnv(host: Record<string, string | undefined>, projectDir: str
   // rustup keeps toolchains under the real home; without this the private HOME below would hide them
   if (!env.RUSTUP_HOME && fsSync.existsSync(path.join(os.homedir(), '.rustup'))) env.RUSTUP_HOME = path.join(os.homedir(), '.rustup');
   const home = path.join(projectDir, '.home');
-  return withBundledZig({
+  const base = withBundledZig({
     ...env,
     HOME: home,
     USERPROFILE: home,
@@ -132,8 +133,9 @@ export function runEnv(host: Record<string, string | undefined>, projectDir: str
     DOTNET_CLI_TELEMETRY_OPTOUT: '1',
     ZIG_GLOBAL_CACHE_DIR: path.join(CACHE, 'zig'),
     NO_COLOR: '1',
-    ...user,
   });
+  // Toolchains the studio installed (mise) come after the system's own
+  return { ...applyManaged(base, (bin, systemPath) => which(bin, systemPath) !== null), ...user };
 }
 
 /** The first executable named `bin` on PATH (or null); no process is started */
@@ -174,6 +176,10 @@ export interface LanguageStatus {
   tool?: string;
   install: Language['install'];
   note?: string;
+  /** The studio can install it with mise (and keep it updated) */
+  installable?: { size: string };
+  /** Installed by the studio rather than found on the system */
+  managed?: boolean;
 }
 
 const statusCache = new Map<string, { at: number; status: LanguageStatus }>();
@@ -189,14 +195,29 @@ async function probeLanguage(language: Language): Promise<LanguageStatus> {
     // Some tools print banners ("Picked up JAVA_TOOL_OPTIONS") before the version: take the first line that has a number
     version = out.output.split('\n').find((line) => /\d+\.\d+/.test(line))?.trim().slice(0, 100);
   }
-  const status: LanguageStatus = { id: language.id, name: language.name, available: !!tool, version, tool: tool ? path.basename(tool.file) : undefined, install: language.install, note: language.note };
+  const managed = MANAGED[language.id];
+  const status: LanguageStatus = {
+    id: language.id,
+    name: language.name,
+    available: !!tool,
+    version,
+    tool: tool ? path.basename(tool.file) : undefined,
+    install: language.install,
+    note: language.note,
+    installable: managed ? { size: managed.size } : undefined,
+    managed: tool ? tool.file.startsWith(path.join(NANOCLI_DIR, 'mise') + path.sep) : undefined,
+  };
   statusCache.set(language.id, { at: Date.now(), status });
   return status;
 }
 
 export async function getLanguageStatuses(): Promise<LanguageStatus[]> {
+  await refreshBinPaths();
   return Promise.all(LANGUAGES.map(probeLanguage));
 }
+
+/** Forget cached statuses (after a toolchain was installed or updated) */
+export const clearLanguageStatuses = () => statusCache.clear();
 
 // ---------------------------------------------------------------------------
 // Running
@@ -237,8 +258,10 @@ export async function runLanguage(request: RunRequest, hooks: RunHooks): Promise
   return pool.run(() =>
     lock(request.projectId, async () => {
       const projectDir = path.join(RUN_PROJECTS, request.projectId);
-      await writeProject(projectDir, request.files, { keep: KEEP });
-      const env = runEnv(process.env, projectDir, request.env);
+      // Plus the folders this language's tools generate (Foundry's out/, Gleam's build/…)
+      const keep = new Set([...KEEP, ...(language.buildDirs ?? [])]);
+      await writeProject(projectDir, request.files, { keep });
+      await refreshBinPaths();
       await fs.mkdir(path.join(projectDir, '.home'), { recursive: true });
       await fs.mkdir(path.join(projectDir, OUT_DIR), { recursive: true });
       for (const shared of ['go-build', 'gopath', 'cargo', 'npm', 'bun', 'nuget', 'zig']) await fs.mkdir(path.join(CACHE, shared), { recursive: true });
@@ -253,7 +276,17 @@ export async function runLanguage(request: RunRequest, hooks: RunHooks): Promise
       });
       if ('error' in plan) return result({ error: plan.error });
 
-      // Every tool this plan needs must be installed before anything runs
+      // Every tool this plan needs must be installed before anything runs. Missing ones the studio
+      // can provide are installed now (once; later runs reuse them), unless that is switched off.
+      let env = runEnv(process.env, projectDir, request.env);
+      const missing = () => plan.find((step) => step.tool && !resolveTool(step.tool, env.PATH ?? env.Path ?? ''));
+      if (missing() && MANAGED[language.id] && (await getToolchainState()).autoInstall) {
+        hooks.onOutput('info', `${language.name} isn’t installed yet: installing it for the studio (first run only).\n`);
+        const installed = await installFor(language.id, (text) => hooks.onOutput('info', text), hooks.signal);
+        if (!installed.ok) return result({ error: `${installed.error}\n\n${installHint(language)}` });
+        statusCache.delete(language.id);
+        env = runEnv(process.env, projectDir, request.env);
+      }
       const resolved: { step: LangStep; file: string; prefix: string[] }[] = [];
       for (const step of plan) {
         if (!step.tool) {
@@ -290,7 +323,7 @@ export async function runLanguage(request: RunRequest, hooks: RunHooks): Promise
       }
 
       const { files: after, skipped } = await collectFiles(projectDir, {
-        skipDirs: KEEP,
+        skipDirs: keep,
         maxFiles: MAX_RUN_FILES,
         maxFileBytes: MAX_RETURNED_FILE_BYTES,
         maxTotalBytes: MAX_RETURNED_TOTAL_BYTES,

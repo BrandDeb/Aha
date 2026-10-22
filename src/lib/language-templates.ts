@@ -14,6 +14,10 @@ export interface LanguageStarter {
   filename: string;
   code: string;
   files?: Record<string, string>;
+  /** What a run prints when it works, if not STARTER_OUTPUT (smart contracts build and test instead) */
+  expect?: string[];
+  /** False when the program takes no command-line arguments (Gleam without packages, Cairo) */
+  takesArgs?: boolean;
 }
 
 /** The output every starter prints when run with no arguments */
@@ -259,6 +263,8 @@ Console.WriteLine("Primes up to 30: " + string.Join(" ", primes));
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net9.0</TargetFramework>
+    <!-- Run on the newest .NET installed, even when it is a newer major version than this targets -->
+    <RollForward>LatestMajor</RollForward>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -441,5 +447,408 @@ for ((n = 2; n <= 30; n++)); do
 done
 echo "Primes up to 30: \${primes[*]}"
 `,
+  },
+  {
+    id: 'lang-scala',
+    name: 'Scala',
+    language: 'scala',
+    description: 'Scala 3, run with scala-cli',
+    filename: 'main.scala',
+    code: `@main def hello(args: String*): Unit =
+  val name = args.headOption.getOrElse("World")
+  println(s"Hello, $name!")
+  val primes = (2 to 30).filter(n => (2 until n).forall(n % _ != 0))
+  println(s"Primes up to 30: \${primes.mkString(" ")}")
+`,
+  },
+  {
+    id: 'lang-clojure',
+    name: 'Clojure',
+    language: 'clojure',
+    description: 'Clojure on the JVM, run with the Clojure CLI',
+    filename: 'main.clj',
+    code: `(require '[clojure.string :as str])
+
+(let [name (or (first *command-line-args*) "World")
+      prime? (fn [n] (not-any? #(zero? (mod n %)) (range 2 n)))]
+  (println (str "Hello, " name "!"))
+  (println (str "Primes up to 30: " (str/join " " (filter prime? (range 2 31))))))
+`,
+  },
+  {
+    id: 'lang-groovy',
+    name: 'Groovy',
+    language: 'groovy',
+    description: 'Groovy script on the JVM',
+    filename: 'main.groovy',
+    code: `def name = args ? args[0] : 'World'
+println "Hello, \${name}!"
+def primes = (2..30).findAll { n -> (2..<n).every { n % it != 0 } }
+println "Primes up to 30: \${primes.join(' ')}"
+`,
+  },
+  {
+    id: 'lang-fsharp',
+    name: 'F#',
+    language: 'fsharp',
+    description: 'F# script, run with dotnet fsi',
+    filename: 'main.fsx',
+    code: `let args = fsi.CommandLineArgs |> Array.skip 1
+let name = if args.Length > 0 then args.[0] else "World"
+printfn "Hello, %s!" name
+
+let isPrime n = [ 2 .. n - 1 ] |> List.forall (fun d -> n % d <> 0)
+let primes = [ 2 .. 30 ] |> List.filter isPrime |> List.map string
+printfn "Primes up to 30: %s" (String.concat " " primes)
+`,
+  },
+  {
+    id: 'lang-gleam',
+    name: 'Gleam',
+    language: 'gleam',
+    description: 'Gleam on the JavaScript target',
+    filename: 'src/hello.gleam',
+    code: `import gleam/int
+import gleam/io
+import gleam/list
+import gleam/string
+
+pub fn main() {
+  io.println("Hello, World!")
+  let primes = primes_from(2, [])
+  io.println("Primes up to 30: " <> string.join(list.map(primes, int.to_string), " "))
+}
+
+fn primes_from(n: Int, found: List(Int)) -> List(Int) {
+  case n > 30 {
+    True -> list.reverse(found)
+    False ->
+      case is_prime(n, 2) {
+        True -> primes_from(n + 1, [n, ..found])
+        False -> primes_from(n + 1, found)
+      }
+  }
+}
+
+fn is_prime(n: Int, d: Int) -> Bool {
+  case d * d > n {
+    True -> True
+    False ->
+      case n % d {
+        0 -> False
+        _ -> is_prime(n, d + 1)
+      }
+  }
+}
+`,
+    files: {
+      'gleam.toml': 'name = "hello"\nversion = "1.0.0"\ntarget = "javascript"\n\n[dependencies]\ngleam_stdlib = ">= 0.44.0 and < 2.0.0"\n',
+    },
+    takesArgs: false,
+  },
+  {
+    id: 'lang-nim',
+    name: 'Nim',
+    language: 'nim',
+    description: 'Nim, compiled through C and run',
+    filename: 'main.nim',
+    code: `import std/[os, sequtils, strutils]
+
+let name = if paramCount() > 0: paramStr(1) else: "World"
+echo "Hello, ", name, "!"
+
+proc isPrime(n: int): bool =
+  for d in 2 ..< n:
+    if n mod d == 0: return false
+  true
+
+echo "Primes up to 30: ", toSeq(2 .. 30).filterIt(isPrime(it)).mapIt($it).join(" ")
+`,
+  },
+  {
+    id: 'lang-crystal',
+    name: 'Crystal',
+    language: 'crystal',
+    description: 'Crystal: Ruby-like syntax, compiled to native code',
+    filename: 'main.cr',
+    code: `name = ARGV.first? || "World"
+puts "Hello, #{name}!"
+
+primes = (2..30).select { |n| (2...n).all? { |d| n % d != 0 } }
+puts "Primes up to 30: #{primes.join(" ")}"
+`,
+  },
+  {
+    id: 'lang-odin',
+    name: 'Odin',
+    language: 'odin',
+    description: 'Odin, compiled to a native executable',
+    filename: 'main.odin',
+    code: `package main
+
+import "core:fmt"
+import "core:os"
+
+main :: proc() {
+	name := len(os.args) > 1 ? os.args[1] : "World"
+	fmt.printf("Hello, %s!\\n", name)
+	fmt.print("Primes up to 30:")
+	for n in 2 ..= 30 {
+		prime := true
+		for d := 2; d * d <= n; d += 1 {
+			if n % d == 0 {
+				prime = false
+				break
+			}
+		}
+		if prime {
+			fmt.printf(" %d", n)
+		}
+	}
+	fmt.println()
+}
+`,
+  },
+  {
+    id: 'lang-racket',
+    name: 'Racket',
+    language: 'racket',
+    description: 'Racket, a modern Lisp',
+    filename: 'main.rkt',
+    code: `#lang racket/base
+(require racket/list racket/string)
+
+(define args (current-command-line-arguments))
+(define name (if (> (vector-length args) 0) (vector-ref args 0) "World"))
+(printf "Hello, ~a!\\n" name)
+
+(define (prime? n) (for/and ([d (in-range 2 n)]) (not (zero? (modulo n d)))))
+(printf "Primes up to 30: ~a\\n" (string-join (map number->string (filter prime? (range 2 31))) " "))
+`,
+  },
+  {
+    id: 'lang-d',
+    name: 'D',
+    language: 'd',
+    description: 'D, compiled with LDC',
+    filename: 'main.d',
+    code: `import std.stdio, std.algorithm, std.range, std.conv, std.array;
+
+void main(string[] args)
+{
+    auto name = args.length > 1 ? args[1] : "World";
+    writeln("Hello, ", name, "!");
+    auto primes = iota(2, 31).filter!(n => iota(2, n).all!(d => n % d != 0)).map!(to!string).join(" ");
+    writeln("Primes up to 30: ", primes);
+}
+`,
+  },
+  {
+    id: 'lang-erlang',
+    name: 'Erlang',
+    language: 'erlang',
+    description: 'Erlang, run as an escript',
+    filename: 'main.erl',
+    code: `#!/usr/bin/env escript
+-module(main).
+-export([main/1]).
+
+main(Args) ->
+    Name = case Args of
+        [First | _] -> First;
+        [] -> "World"
+    end,
+    io:format("Hello, ~s!~n", [Name]),
+    Primes = [N || N <- lists:seq(2, 30), lists:all(fun(D) -> N rem D =/= 0 end, lists:seq(2, N - 1))],
+    io:format("Primes up to 30: ~s~n", [lists:join(" ", [integer_to_list(P) || P <- Primes])]).
+`,
+  },
+  {
+    id: 'lang-ocaml',
+    name: 'OCaml',
+    language: 'ocaml',
+    description: 'OCaml script',
+    filename: 'main.ml',
+    code: `let () =
+  let name = if Array.length Sys.argv > 1 then Sys.argv.(1) else "World" in
+  Printf.printf "Hello, %s!\\n" name;
+  let is_prime n =
+    let rec go d = d * d > n || (n mod d <> 0 && go (d + 1)) in
+    go 2
+  in
+  let primes = List.filter is_prime (List.init 29 (fun i -> i + 2)) in
+  Printf.printf "Primes up to 30: %s\\n" (String.concat " " (List.map string_of_int primes))
+`,
+  },
+  {
+    id: 'lang-fortran',
+    name: 'Fortran',
+    language: 'fortran',
+    description: 'Modern Fortran, compiled with gfortran',
+    filename: 'main.f90',
+    code: `program main
+  implicit none
+  character(len=100) :: name
+  character(len=200) :: line
+  character(len=8) :: buf
+  integer :: n, d
+  logical :: prime
+
+  if (command_argument_count() > 0) then
+    call get_command_argument(1, name)
+  else
+    name = 'World'
+  end if
+  print '(a)', 'Hello, ' // trim(name) // '!'
+
+  line = 'Primes up to 30:'
+  do n = 2, 30
+    prime = .true.
+    do d = 2, n - 1
+      if (mod(n, d) == 0) then
+        prime = .false.
+        exit
+      end if
+    end do
+    if (prime) then
+      write (buf, '(i0)') n
+      line = trim(line) // ' ' // trim(buf)
+    end if
+  end do
+  print '(a)', trim(line)
+end program main
+`,
+  },
+  {
+    id: 'lang-cairo',
+    name: 'Cairo (Starknet)',
+    language: 'cairo',
+    description: 'Cairo, the language of Starknet, built and run with Scarb',
+    filename: 'src/lib.cairo',
+    code: `#[executable]
+fn main() {
+    println!("Hello, World!");
+    let mut line: ByteArray = "Primes up to 30:";
+    let mut n: u32 = 2;
+    while n <= 30 {
+        let mut d: u32 = 2;
+        let mut prime = true;
+        while d * d <= n {
+            if n % d == 0 {
+                prime = false;
+                break;
+            }
+            d += 1;
+        };
+        if prime {
+            line += format!(" {}", n);
+        }
+        n += 1;
+    };
+    println!("{}", line);
+}
+`,
+    files: {
+      'Scarb.toml': '[package]\nname = "hello"\nversion = "0.1.0"\nedition = "2024_07"\n\n[cairo]\nenable-gas = false\n\n[dependencies]\ncairo_execute = "*"\n\n[executable]\n',
+    },
+    takesArgs: false,
+  },
+  {
+    id: 'lang-solidity',
+    name: 'Solidity (Foundry)',
+    language: 'solidity',
+    description: 'An Ethereum smart contract with unit and fuzz tests, built and tested with Foundry',
+    filename: 'src/Counter.sol',
+    code: `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+contract Counter {
+    uint256 public number;
+
+    function setNumber(uint256 newNumber) public {
+        number = newNumber;
+    }
+
+    function increment() public {
+        number++;
+    }
+}
+`,
+    files: {
+      'foundry.toml': '[profile.default]\nsrc = "src"\nout = "out"\nlibs = ["lib"]\ntest = "test"\n',
+      'test/Counter.t.sol': `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {Counter} from "../src/Counter.sol";
+
+contract CounterTest {
+    Counter counter;
+
+    function setUp() public {
+        counter = new Counter();
+        counter.setNumber(0);
+    }
+
+    function test_Increment() public {
+        counter.increment();
+        require(counter.number() == 1, "expected 1");
+    }
+
+    /// Foundry calls this with 256 random values
+    function testFuzz_SetNumber(uint256 x) public {
+        counter.setNumber(x);
+        require(counter.number() == x, "number mismatch");
+    }
+}
+`,
+    },
+    expect: ['[PASS] test_Increment()', '2 passed; 0 failed'],
+  },
+  {
+    id: 'lang-vyper',
+    name: 'Vyper',
+    language: 'vyper',
+    description: 'A Pythonic Ethereum contract, compiled to its ABI and bytecode',
+    filename: 'contract.vy',
+    code: `# pragma version ^0.4.0
+greeting: public(String[100])
+
+
+@deploy
+def __init__():
+    self.greeting = "Hello, World!"
+
+
+@external
+@view
+def add(a: uint256, b: uint256) -> uint256:
+    return a + b
+`,
+    expect: ['"name": "greeting"', '0x'],
+  },
+  {
+    id: 'lang-move',
+    name: 'Move (Sui)',
+    language: 'move',
+    description: 'A Sui Move package with a unit test, built and tested with the Sui CLI',
+    filename: 'sources/greeting.move',
+    code: `module hello::greeting;
+
+use std::string::{Self, String};
+
+public fun greet(name: vector<u8>): String {
+    let mut s = string::utf8(b"Hello, ");
+    s.append(string::utf8(name));
+    s.append(string::utf8(b"!"));
+    s
+}
+
+#[test]
+fun test_greet() {
+    assert!(greet(b"World") == string::utf8(b"Hello, World!"), 0);
+}
+`,
+    files: { 'Move.toml': '[package]\nname = "hello"\nedition = "2024"\n\n[addresses]\nhello = "0x0"\n' },
+    expect: ['test_greet', 'Test result: OK'],
   },
 ];

@@ -274,29 +274,51 @@ it on. At most three dev servers run at once (the least recently viewed stops fi
 
 ## Other languages
 
-TypeScript compiles with scriptc and Python runs with uv; everything else runs with **its own toolchain on this machine**.
-Pick **New project → Other languages** (or open any file) and press **Run**: the **Run** tab (and the terminal's `run`) show
-the output, take arguments and standard input, and say exactly what to install when a toolchain is missing.
+TypeScript compiles with scriptc and Python runs with uv; everything else runs with **its own toolchain**, which the studio
+installs for you. Pick **New project → Other languages** (or open any file) and press **Run**: the **Run** tab (and the
+terminal's `run`) show the output, take arguments and standard input.
 
 | | | |
 |---|---|---|
-| JavaScript (Node), TypeScript on Bun or Deno | Go (modules too) | Rust (single file or Cargo project) |
-| C and C++ (your compiler, or the bundled **zig**) | Zig (bundled) | Java (single file or packages) |
-| Kotlin, C# (.NET) | Ruby (Bundler), PHP, Lua, Perl | R, Julia, Swift, Dart, Elixir, Haskell, Bash |
+| JavaScript (Node), TypeScript on Bun or Deno | Go (modules too), Rust (file or Cargo) | C and C++ (your compiler, or the bundled **zig**), Zig |
+| Java, Kotlin, Scala, Clojure, Groovy | C# and F# (.NET) | Ruby (Bundler), PHP, Perl, Lua, Bash |
+| R, Julia | Swift, Dart | Elixir, Erlang, Gleam, Haskell |
+| Nim, Crystal, Odin, D | OCaml, Racket, Fortran | |
+
+**Smart contracts:** Solidity with Foundry (build plus unit and fuzz tests; `forge` fetches the `solc` each contract asks for),
+Vyper (ABI and bytecode), Cairo for Starknet (Scarb), and Move for Sui (build and test).
+
+### Toolchains, installed and kept current
+
+- **Out of the box.** If a language isn't installed, the first **Run** installs it (or press **Install** in the Run tab), with
+  [mise](https://mise.jdx.dev): about 1 MB for Lua, 75 MB for Go, a few hundred for Swift or .NET. A tool's runtime comes
+  with it (Kotlin, Scala and Clojure bring Java; Elixir brings Erlang; Vyper runs through uv).
+- **Yours first.** Anything already on your `PATH` is used as is. The studio's toolchains live in `~/.nanocli/mise` with
+  their own data, config and caches, so they never touch your own mise, `~/.rustup` or `~/.cargo`.
+- **Patched as soon as releases ship.** Each tool is pinned to its major line (`go = "1"`, `zig = "0.16"`, `rust = "stable"`).
+  The studio checks every 12 hours and applies updates within the line automatically, removes what they replaced, and keeps
+  mise itself current. A new major version is shown with an **Upgrade** button and never installed on its own.
+- **Verified downloads.** mise comes from its official mirror and is checked against the release's SHA-256 list before it
+  runs; mise checks the toolchains it installs.
+- Switches: `NANOCLI_TOOLCHAIN_AUTO_INSTALL=0` and `NANOCLI_TOOLCHAIN_AUTO_UPDATE=0`, or the two checkboxes in the Run tab.
 
 Which engine runs a file: `.ts` is scriptc, `.py` is uv, a `deno.json` or `bunfig.toml` moves `.ts`/`.js` to Deno or Bun, a
-`package.json` makes `.js` run on Node, and other extensions pick their language. `languages` in the terminal lists what this
-machine has. Projects keep their dependencies and build output on the server between runs (`~/.nanocli/run/`), caches (Go,
-Cargo, npm, NuGet, zig) are shared, and files a program writes come back into the explorer.
+`package.json` makes `.js` run on Node, and other extensions pick their language (Gleam, Cairo, Move and Solidity projects
+need their `gleam.toml`, `Scarb.toml`, `Move.toml` or `foundry.toml`). `languages` in the terminal lists what this machine
+has. Projects keep their dependencies and build output on the server between runs (`~/.nanocli/run/`), caches are shared,
+and files a program writes come back into the explorer.
 
 Same trust model as Python: it **runs your code on the machine hosting the studio**, so it is only on when the studio
 listens on that machine alone (`NANOCLI_RUN=0` turns it off, `=1` forces it on). Programs get a short allow-list of
 environment variables (never the studio's keys), a private `HOME`, a time limit per step (5 min to run, 10 to compile), a 2 MB
 output cap, and stopping a run kills the whole process tree. It is not a sandbox.
 
-Checked against the real toolchains here: Node, Bun, Go, Rust, Java, C, C++, Zig, Ruby, PHP, Perl and Bash. The starters for
-Deno, Kotlin, C#, Lua, R, Julia, Swift, Dart, Elixir and Haskell are written carefully but were not run on this machine (their
-tools aren't installed here), so expect to fix a typo or two the first time.
+**Tested for real**, with the studio installing each missing toolchain itself (`NANOCLI_TEST_NETWORK=1 npm test`): Node, Bun,
+Deno, Go, Rust, C, C++, Zig, Java, Kotlin, C#, F#, Ruby, PHP, Perl, Lua, R, Julia, Swift, Dart, Elixir, Erlang, Gleam, Clojure,
+Groovy, Nim, Crystal, Odin, D, Bash, and the Solidity, Vyper and Cairo contracts. Not yet run end to end: Scala and Racket
+(their downloads failed behind the test machine's TLS proxy), Move (Sui fetches its framework from GitHub, which that machine
+blocks), and Haskell, OCaml and Fortran, which use your own install (ghcup, opam, gfortran) because mise has no reliable build
+of them.
 
 ---
 
@@ -418,6 +440,12 @@ configuration is validated on every request and travels with it; the server keep
 `GET ?projectId=…&since=N` returns the status (`installing`, `starting`, `ready`, `stopped`, `failed`), the URL and the
 log lines after `N`. Same checks as `/api/run`: same origin, a trusted host, a rate limit, and only where it is enabled.
 
+### `/api/toolchains` (local only)
+
+`GET` → `{ enabled, mise, tools: [{ tool, requested, version, update?, major? }], autoUpdate, autoInstall, lastCheck, lastUpdate }`.
+`POST { action: 'install', language }`, `{ action: 'update' }` and `{ action: 'upgrade', tool }` stream progress as
+newline-delimited JSON; `{ action: 'settings', autoUpdate?, autoInstall? }`. Same checks as `/api/run`.
+
 ### `/api/run` (other languages)
 
 `GET` → `{ enabled, languages: [{ id, name, available, version?, install }] }`. `POST { projectId, entry, files, args?, stdin?, env?, language? }`
@@ -501,6 +529,8 @@ NANOCLI_RUN=                 # 0 = don't run other languages, 1 = force on; unse
 NANOCLI_RUN_JOBS=3           # concurrent runs
 NANOCLI_DEV=                 # web app dev servers: 0 = off, 1 = force on; unset = on only when HOST is loopback
 NANOCLI_DEV_SERVERS=3        # dev servers running at once
+NANOCLI_TOOLCHAIN_AUTO_INSTALL=1   # 0 = never install a missing toolchain on Run
+NANOCLI_TOOLCHAIN_AUTO_UPDATE=1    # 0 = don't apply toolchain updates on their own
 TRUST_PROXY_HOPS=1           # reverse proxies in front of the studio (rate limits use the address the last one saw)
 COMPILE_REQUESTS_PER_10_MIN=300
 NANOCLI_RUN_REQUESTS_PER_10_MIN=150

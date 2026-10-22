@@ -56,3 +56,35 @@ export function useLanguages(): { status: { enabled: boolean; languages: Languag
   }, [tick]);
   return { status, refresh: useCallback(() => setTick((n) => n + 1), []) };
 }
+
+// ---------------------------------------------------------------------------
+// Toolchains the studio installs and keeps updated (/api/toolchains)
+// ---------------------------------------------------------------------------
+
+export interface ToolchainInfo {
+  enabled: boolean;
+  mise?: string | null;
+  tools?: { tool: string; requested: string; version: string; update?: string; major?: string }[];
+  autoUpdate?: boolean;
+  autoInstall?: boolean;
+  lastCheck?: number;
+  lastUpdate?: { at: number; updated: string[] };
+}
+
+export async function fetchToolchains(): Promise<ToolchainInfo | null> {
+  try {
+    const response = await fetch('/api/toolchains', { cache: 'no-store' });
+    return response.ok ? ((await response.json()) as ToolchainInfo) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Install a language's toolchain, update everything, or move one tool to its next major version; streams progress */
+export function toolchainCommand(body: { action: 'install'; language: string } | { action: 'update' } | { action: 'upgrade'; tool: string }, onOutput: (stream: PythonStream, text: string) => void, signal?: AbortSignal) {
+  return streamCommand('/api/toolchains', body, onOutput, signal);
+}
+
+export async function saveToolchainSettings(patch: { autoUpdate?: boolean; autoInstall?: boolean }): Promise<void> {
+  await fetch('/api/toolchains', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'settings', ...patch }) }).catch(() => {});
+}

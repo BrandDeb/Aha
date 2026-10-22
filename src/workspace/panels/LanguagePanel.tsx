@@ -1,10 +1,10 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { detectLanguage } from '@/lib/languages';
 import { useActions } from '../actions';
 import { splitArgs } from '../connector-forms';
-import { useLanguages } from '../run-client';
+import { fetchToolchains, saveToolchainSettings, toolchainCommand, useLanguages, type ToolchainInfo } from '../run-client';
 import { type PythonStream } from '../python-client';
 import { useWorkspace } from '../store';
 
@@ -28,6 +28,15 @@ export function LanguagePanel() {
   const [log, setLog] = useState<LogLine[]>([]);
   const [running, setRunning] = useState(false);
   const controller = useRef<AbortController | null>(null);
+  const [toolchains, setToolchains] = useState<ToolchainInfo | null>(null);
+  const [toolTick, setToolTick] = useState(0);
+  useEffect(() => {
+    let live = true;
+    fetchToolchains().then((t) => live && setToolchains(t));
+    return () => {
+      live = false;
+    };
+  }, [toolTick]);
   const partial = useRef<Record<PythonStream, string>>({ stdout: '', stderr: '', info: '' });
 
   const addLines = (stream: PythonStream, lines: string[]) => setLog((prev) => [...prev.slice(-500), ...lines.map((text) => ({ stream, text }))]);
@@ -60,6 +69,25 @@ export function LanguagePanel() {
     if (outcome.skipped.length) addLines('info', [`Not copied back (binary or large): ${outcome.skipped.slice(0, 5).join(', ')}`]);
   };
 
+  /** Install, update or upgrade toolchains, with the progress in the output area */
+  const manage = async (body: Parameters<typeof toolchainCommand>[0], label: string) => {
+    if (running) return;
+    setRunning(true);
+    setLog([]);
+    addLines('info', [label]);
+    controller.current = new AbortController();
+    const outcome = await toolchainCommand(body, append, controller.current.signal);
+    flush();
+    controller.current = null;
+    setRunning(false);
+    if (outcome.error && outcome.error !== 'stopped') addLines('stderr', outcome.error.split('\n'));
+    else if (outcome.code === 0) addLines('info', ['Done.']);
+    refresh();
+    setToolTick((n) => n + 1);
+  };
+  const updates = toolchains?.tools?.filter((t) => t.update) ?? [];
+  const majors = toolchains?.tools?.filter((t) => t.major) ?? [];
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="space-y-3 border-b border-border p-4">
@@ -77,8 +105,13 @@ export function LanguagePanel() {
             {info?.available ? (
               <p className="text-xs text-gray-400">
                 <span className="mr-1.5 text-accent" aria-hidden="true">✓</span>
-                {info.version ?? info.tool} found on this machine.
+                {info.version ?? info.tool} {info.managed ? 'installed by the studio, kept up to date.' : 'found on this machine.'}
               </p>
+            ) : info?.installable ? (
+              <div className="space-y-2 rounded-lg border border-border p-3 text-xs text-gray-300">
+                <p>{language.name} isn’t installed yet. The studio can install it for you (about {info.installable.size}) and keep it updated{toolchains?.autoInstall !== false ? '; pressing Run does that too' : ''}.</p>
+                <button className="btn btn-primary btn-sm" disabled={running} onClick={() => void manage({ action: 'install', language: language.id }, `Installing ${language.name}…`)}>Install {language.name}</button>
+              </div>
             ) : info ? (
               <div className="space-y-1.5 rounded-lg border border-border p-3 text-xs text-gray-300">
                 <p><span className="mr-1.5 text-warn" aria-hidden="true">!</span>{language.name} isn’t installed here.</p>
@@ -102,7 +135,7 @@ export function LanguagePanel() {
               {running ? (
                 <button className="btn btn-secondary btn-sm" onClick={() => controller.current?.abort()}>Stop</button>
               ) : (
-                <button className="btn btn-primary btn-sm" onClick={() => void run()} disabled={info ? !info.available : false}>Run</button>
+                <button className="btn btn-primary btn-sm" onClick={() => void run()} disabled={info ? !info.available && !(info.installable && toolchains?.autoInstall !== false) : false}>Run</button>
               )}
             </div>
             <details>
@@ -135,11 +168,44 @@ export function LanguagePanel() {
                   <li key={l.id} className="flex items-center gap-2 px-3 py-1.5">
                     <span className={l.available ? 'text-accent' : 'text-gray-600'} aria-hidden="true">{l.available ? '✓' : '·'}</span>
                     <span className="min-w-0 flex-1 truncate text-gray-200">{l.name}</span>
-                    <span className="max-w-[45%] truncate font-mono text-[11px] text-gray-500" title={l.available ? l.version : l.install[platformKey()]}>{l.available ? (l.version ?? l.tool) : 'not installed'}</span>
+                    {l.managed && <span className="badge px-1 py-0 text-[10px]" title="Installed and kept up to date by the studio">studio</span>}
+                    <span className="max-w-[45%] truncate font-mono text-[11px] text-gray-500" title={l.available ? l.version : l.install[platformKey()]}>{l.available ? (l.version ?? l.tool) : l.installable ? 'installs on first run' : 'not installed'}</span>
                   </li>
                 ))}
               </ul>
-              <p className="text-[11px] text-gray-500">Anything missing can be installed with the command shown when you open a project in that language.</p>
+              <p className="text-[11px] text-gray-500">Missing toolchains are installed by the studio (with mise) the first time you run that language, into its own folder; anything you installed yourself is used first.</p>
+
+              {toolchains?.enabled && (
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="eyebrow">Studio toolchains</span>
+                    <button className="text-[11px] text-gray-500 hover:text-gray-100" disabled={running || !toolchains.tools?.length} onClick={() => void manage({ action: 'update' }, 'Checking for toolchain updates…')}>Check for updates</button>
+                  </div>
+                  {toolchains.tools?.length ? (
+                    <ul className="space-y-1 text-xs">
+                      {toolchains.tools.map((t) => (
+                        <li key={t.tool} className="flex items-center gap-2">
+                          <span className="min-w-0 flex-1 truncate font-mono text-gray-300">{t.tool} {t.version}</span>
+                          {t.update && <span className="text-[11px] text-warn" title="Applied automatically when auto-update is on">→ {t.update}</span>}
+                          {t.major && <button className="rounded px-1 text-[11px] text-accent hover:bg-[var(--accent-soft)]" disabled={running} onClick={() => void manage({ action: 'upgrade', tool: t.tool }, `Upgrading ${t.tool} to ${t.major}…`)} title={`A new major version. Your line (${t.requested}) keeps getting patches until you move.`}>{t.major} available</button>}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-[11px] text-gray-500">None yet.</p>
+                  )}
+                  {(updates.length > 0 || majors.length > 0) && <p className="text-[11px] text-gray-500">{updates.length ? `${updates.length} update${updates.length > 1 ? 's' : ''} within your versions. ` : ''}{majors.length ? 'New major versions are offered, never installed on their own.' : ''}</p>}
+                  {toolchains.lastUpdate && <p className="text-[11px] text-gray-500">Last updated {new Date(toolchains.lastUpdate.at).toLocaleString()}: {toolchains.lastUpdate.updated.join(', ')}</p>}
+                  <label className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                    <input type="checkbox" checked={toolchains.autoUpdate !== false} onChange={(e) => { const autoUpdate = e.target.checked; setToolchains((t) => t && { ...t, autoUpdate }); void saveToolchainSettings({ autoUpdate }); }} />
+                    Apply patch and minor updates automatically (checked every 12 hours)
+                  </label>
+                  <label className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                    <input type="checkbox" checked={toolchains.autoInstall !== false} onChange={(e) => { const autoInstall = e.target.checked; setToolchains((t) => t && { ...t, autoInstall }); void saveToolchainSettings({ autoInstall }); }} />
+                    Install a missing toolchain when I press Run
+                  </label>
+                </div>
+              )}
             </div>
           )
         )}

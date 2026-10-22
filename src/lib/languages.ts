@@ -42,6 +42,8 @@ export interface Language {
   install: { windows: string; mac: string; linux: string };
   /** Why a project of this language might need more than a single file */
   note?: string;
+  /** Top-level folders its tools generate: kept between runs, never sent back as project files */
+  buildDirs?: string[];
   plan: (ctx: PlanContext) => LangStep[] | { error: string };
 }
 
@@ -336,6 +338,224 @@ export const LANGUAGES: Language[] = [
     versionArgs: ['--version'],
     install: { windows: 'Git for Windows (git-scm.com) provides bash', mac: 'preinstalled', linux: 'preinstalled' },
     plan: ({ entry, args }) => [{ label: 'bash', tool: [['bash']], args: [entry, ...args], timeoutMs: RUN }],
+  },
+  {
+    id: 'scala',
+    name: 'Scala',
+    extensions: ['.scala', '.sc'],
+    monaco: 'scala',
+    tools: [['scala-cli'], ['scala']],
+    versionArgs: ['version'],
+    install: { windows: 'winget install VirtusLab.ScalaCLI', mac: 'brew install Virtuslab/scala-cli/scala-cli', linux: 'curl -sSLf https://scala-cli.virtuslab.org/get | sh' },
+    note: 'Runs with scala-cli; the first run downloads the Scala compiler.',
+    buildDirs: ['.scala-build', '.bsp'],
+    plan: ({ entry, paths, args }) => [
+      { label: 'scala-cli run', tool: [['scala-cli'], ['scala']], args: ['run', '--server=false', ...entryFirst(entry, withExt(paths, ['.scala'])), ...(args.length ? ['--', ...args] : [])], timeoutMs: COMPILE },
+    ],
+  },
+  {
+    id: 'clojure',
+    name: 'Clojure',
+    extensions: ['.clj'],
+    monaco: 'clojure',
+    tools: [['clojure'], ['clj']],
+    versionArgs: ['--version'],
+    install: { windows: 'scoop install clojure', mac: 'brew install clojure/tools/clojure', linux: 'curl -L -O https://github.com/clojure/brew-install/releases/latest/download/linux-install.sh && sudo bash linux-install.sh' },
+    buildDirs: ['.cpcache'],
+    plan: ({ entry, args }) => [{ label: 'clojure', tool: [['clojure'], ['clj']], args: ['-M', entry, ...args], timeoutMs: COMPILE }],
+  },
+  {
+    id: 'groovy',
+    name: 'Groovy',
+    extensions: ['.groovy'],
+    monaco: 'java',
+    tools: [['groovy']],
+    versionArgs: ['--version'],
+    install: { windows: 'winget install Apache.Groovy.4', mac: 'brew install groovy', linux: 'sdk install groovy (sdkman.io)' },
+    plan: ({ entry, args }) => [{ label: 'groovy', tool: [['groovy']], args: [entry, ...args], timeoutMs: COMPILE }],
+  },
+  {
+    id: 'fsharp',
+    name: 'F#',
+    extensions: ['.fsx'],
+    monaco: 'fsharp',
+    tools: [['dotnet']],
+    versionArgs: ['--version'],
+    install: { windows: 'winget install Microsoft.DotNet.SDK.10', mac: 'brew install dotnet', linux: 'sudo apt install dotnet-sdk-10.0' },
+    note: 'F# scripts (.fsx) run with dotnet fsi.',
+    plan: ({ entry, args }) => [{ label: 'dotnet fsi', tool: [['dotnet']], args: ['fsi', '--quiet', entry, ...args], timeoutMs: COMPILE }],
+  },
+  {
+    id: 'gleam',
+    name: 'Gleam',
+    extensions: ['.gleam'],
+    monaco: 'rust',
+    tools: [['gleam']],
+    versionArgs: ['--version'],
+    install: { windows: 'winget install Gleam.Gleam', mac: 'brew install gleam', linux: 'gleam.run/getting-started/installing' },
+    note: 'Runs on the JavaScript target (Node.js), so no Erlang install is needed.',
+    buildDirs: ['build'],
+    plan: ({ paths, args }) =>
+      paths.includes('gleam.toml')
+        ? [{ label: 'gleam run', tool: [['gleam']], args: ['run', '--target', 'javascript', ...(args.length ? ['--', ...args] : [])], timeoutMs: COMPILE }]
+        : { error: 'Gleam projects need a gleam.toml. Start from the Gleam template, or run `gleam new`.' },
+  },
+  {
+    id: 'nim',
+    name: 'Nim',
+    extensions: ['.nim'],
+    monaco: 'python',
+    tools: [['nim']],
+    versionArgs: ['--version'],
+    install: { windows: 'winget install nim.nim', mac: 'brew install nim', linux: 'curl https://nim-lang.org/choosenim/init.sh -sSf | sh' },
+    note: 'Nim compiles through C, so it also needs a C compiler.',
+    plan: ({ entry, args }) => [{ label: 'nim r', tool: [['nim']], args: ['r', '--hints:off', `--nimcache:${OUT_DIR}/nimcache`, entry, ...args], timeoutMs: COMPILE }],
+  },
+  {
+    id: 'crystal',
+    name: 'Crystal',
+    extensions: ['.cr'],
+    monaco: 'ruby',
+    tools: [['crystal']],
+    versionArgs: ['--version'],
+    install: { windows: 'winget install CrystalLang.Crystal', mac: 'brew install crystal', linux: 'curl -fsSL https://crystal-lang.org/install.sh | sudo bash' },
+    plan: ({ entry, args }) => [{ label: 'crystal run', tool: [['crystal']], args: ['run', '--no-color', entry, ...(args.length ? ['--', ...args] : [])], timeoutMs: COMPILE }],
+  },
+  {
+    id: 'odin',
+    name: 'Odin',
+    extensions: ['.odin'],
+    monaco: 'go',
+    tools: [['odin']],
+    versionArgs: ['version'],
+    install: { windows: 'odin-lang.org/docs/install', mac: 'brew install odin', linux: 'odin-lang.org/docs/install' },
+    plan: ({ entry, args, windows }) => [
+      { label: 'odin build', tool: [['odin']], args: ['build', entry, '-file', `-out:${OUT_DIR}/main${windows ? '.exe' : ''}`], timeoutMs: COMPILE },
+      runOutput(args),
+    ],
+  },
+  {
+    id: 'racket',
+    name: 'Racket',
+    extensions: ['.rkt'],
+    monaco: 'scheme',
+    tools: [['racket']],
+    versionArgs: ['--version'],
+    install: { windows: 'winget install Racket.Racket', mac: 'brew install --cask racket', linux: 'sudo apt install racket' },
+    plan: ({ entry, args }) => [{ label: 'racket', tool: [['racket']], args: [entry, ...args], timeoutMs: RUN }],
+  },
+  {
+    id: 'd',
+    name: 'D',
+    extensions: ['.d'],
+    monaco: 'cpp',
+    tools: [['ldc2'], ['dmd']],
+    versionArgs: ['--version'],
+    install: { windows: 'winget install LDC.LDC', mac: 'brew install ldc', linux: 'sudo apt install ldc' },
+    plan: ({ entry, paths, args, windows }) => [
+      { label: 'compile', tool: [['ldc2'], ['dmd']], args: [...entryFirst(entry, withExt(paths, ['.d'])), `-of=${OUT_DIR}/main${windows ? '.exe' : ''}`, `-od=${OUT_DIR}/obj`], timeoutMs: COMPILE },
+      runOutput(args),
+    ],
+  },
+  {
+    id: 'erlang',
+    name: 'Erlang',
+    extensions: ['.erl'],
+    monaco: 'plaintext',
+    tools: [['erl']],
+    versionArgs: ['-noshell', '-eval', 'io:format("Erlang/OTP ~s~n", [erlang:system_info(otp_release)]), halt().'],
+    install: { windows: 'winget install Erlang.ErlangOTP', mac: 'brew install erlang', linux: 'sudo apt install erlang' },
+    note: 'Runs as an escript: the entry module exports main/1.',
+    plan: ({ entry, args }) => [{ label: 'escript', tool: [['escript']], args: [entry, ...args], timeoutMs: RUN }],
+  },
+  {
+    id: 'ocaml',
+    name: 'OCaml',
+    extensions: ['.ml'],
+    monaco: 'fsharp',
+    tools: [['ocaml']],
+    versionArgs: ['-version'],
+    install: { windows: 'winget install OCaml.opam', mac: 'brew install ocaml', linux: 'sudo apt install ocaml' },
+    plan: ({ entry, args }) => [{ label: 'ocaml', tool: [['ocaml']], args: [entry, ...args], timeoutMs: RUN }],
+  },
+  {
+    id: 'fortran',
+    name: 'Fortran',
+    extensions: ['.f90', '.f95', '.f03', '.f08'],
+    monaco: 'plaintext',
+    tools: [['gfortran'], ['flang-new'], ['flang']],
+    versionArgs: ['--version'],
+    install: { windows: 'winget install MSYS2.MSYS2, then pacman -S mingw-w64-ucrt-x86_64-gcc-fortran', mac: 'brew install gcc', linux: 'sudo apt install gfortran' },
+    plan: ({ entry, paths, args, windows }) => [
+      { label: 'compile', tool: [['gfortran'], ['flang-new'], ['flang']], args: ['-O1', '-o', `${OUT_DIR}/main${windows ? '.exe' : ''}`, ...entryFirst(entry, withExt(paths, ['.f90', '.f95', '.f03', '.f08']))], timeoutMs: COMPILE },
+      runOutput(args),
+    ],
+  },
+
+  // Smart contracts: building and testing them is the "run"
+  {
+    id: 'solidity',
+    name: 'Solidity (Foundry)',
+    extensions: ['.sol'],
+    monaco: 'sol',
+    tools: [['forge']],
+    versionArgs: ['--version'],
+    install: { windows: 'foundry via WSL (getfoundry.sh)', mac: 'curl -L https://foundry.paradigm.xyz | bash && foundryup', linux: 'curl -L https://foundry.paradigm.xyz | bash && foundryup' },
+    note: 'Builds and tests with Foundry: contracts in src/, tests (*.t.sol) in test/. Forge downloads the solc version each contract asks for.',
+    buildDirs: ['out', 'cache', 'lib'],
+    plan: ({ paths }) =>
+      paths.includes('foundry.toml')
+        ? [
+            { label: 'forge build', tool: [['forge']], args: ['build'], timeoutMs: COMPILE },
+            { label: 'forge test', tool: [['forge']], args: ['test', '-vv'], timeoutMs: COMPILE },
+          ]
+        : { error: 'Solidity projects run with Foundry and need a foundry.toml. Start from the Solidity template.' },
+  },
+  {
+    id: 'vyper',
+    name: 'Vyper',
+    extensions: ['.vy'],
+    monaco: 'python',
+    tools: [['vyper']],
+    versionArgs: ['--version'],
+    install: { windows: 'uv tool install vyper', mac: 'uv tool install vyper', linux: 'uv tool install vyper' },
+    note: 'Compiles the contract and prints its ABI and bytecode.',
+    plan: ({ entry }) => [{ label: 'vyper', tool: [['vyper']], args: ['-f', 'abi,bytecode', entry], timeoutMs: COMPILE }],
+  },
+  {
+    id: 'move',
+    name: 'Move (Sui)',
+    extensions: ['.move'],
+    monaco: 'rust',
+    tools: [['sui'], ['aptos']],
+    versionArgs: ['--version'],
+    install: { windows: 'docs.sui.io/guides/developer/getting-started/sui-install', mac: 'brew install sui', linux: 'docs.sui.io/guides/developer/getting-started/sui-install' },
+    note: 'Builds and tests a Move package (Move.toml) with the Sui CLI, or the Aptos CLI when that is what is installed.',
+    buildDirs: ['build'],
+    plan: ({ paths }) =>
+      paths.includes('Move.toml')
+        ? [
+            { label: 'move build', tool: [['sui', 'move', 'build'], ['aptos', 'move', 'compile']], args: [], timeoutMs: COMPILE },
+            { label: 'move test', tool: [['sui', 'move', 'test'], ['aptos', 'move', 'test']], args: [], timeoutMs: COMPILE },
+          ]
+        : { error: 'Move code builds as a package with a Move.toml. Start from the Move template.' },
+  },
+  {
+    id: 'cairo',
+    name: 'Cairo (Starknet)',
+    extensions: ['.cairo'],
+    monaco: 'rust',
+    tools: [['scarb']],
+    versionArgs: ['--version'],
+    install: { windows: 'docs.swmansion.com/scarb/download', mac: 'curl --proto =https --tlsv1.2 -sSf https://docs.swmansion.com/scarb/install.sh | sh', linux: 'curl --proto =https --tlsv1.2 -sSf https://docs.swmansion.com/scarb/install.sh | sh' },
+    note: 'Builds and runs a Scarb package (Scarb.toml).',
+    plan: ({ paths }) =>
+      paths.includes('Scarb.toml')
+        ? [
+            { label: 'scarb build', tool: [['scarb']], args: ['build'], timeoutMs: COMPILE },
+            { label: 'scarb execute', tool: [['scarb']], args: ['execute', '--print-program-output'], timeoutMs: COMPILE },
+          ]
+        : { error: 'Cairo code builds as a Scarb package with a Scarb.toml. Start from the Cairo template.' },
   },
 ];
 
