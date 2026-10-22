@@ -74,6 +74,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Assistant** | Any model you choose — free tiers (Gemini, Groq, OpenRouter, Cerebras, Mistral), local (Ollama, LM Studio) or your own Anthropic/OpenAI key: explain, fix build errors, generate tests, chat — with one-click Apply that versions the previous file first |
 | **Agent** | Give it a goal; it reads your project, edits a private copy, builds and runs it to check its work, and retries within a budget. You review diffs and accept or discard; see [Agent](#agent) |
 | **Field kits** | A project plus its playbook, setup, checks and agent house rules, shared as one file; three built in for FDE and ISV work; see [Field kits](#field-kits) |
+| **Skills** | Agent Skills (`SKILL.md`), the format Claude uses: 15 built in, install any from GitHub, or write your own; loaded on demand; see [Skills](#skills-what-the-agent-knows-how-to-do) |
 | **Worker** | An AI teammate that codes alongside you: fixes failures and editor errors, resolves TODOs, adds tests and takes the next step toward your goal, on its own while you pause (Autonomous) or when you say (Suggest); see [the worker](#the-worker-an-ai-teammate-that-codes-alongside-you) |
 | **Connectors** | MCP servers, GitHub, SQLite/PostgreSQL, web pages and search, and your own commands as agent tools, asked about before use |
 | **Formatting** | Prettier in the browser, format on save, configurable rules |
@@ -183,6 +184,31 @@ the header says what it is on. Every task runs on a private copy and arrives as 
 your files until you accept it. It keeps itself in check: a per-hour budget, never the same task twice, waiting for you once
 three of its results need review, and pausing after three results that didn't come out verified. **Best of 3** quality runs
 each task Harness²-style (the current setup against two variations) and recommends the one that verified.
+
+### Skills: what the agent knows how to do
+
+The agent uses **skills** in the open [Agent Skills](https://agentskills.io) format: a folder with a `SKILL.md` whose
+frontmatter names the skill and says when to use it, followed by instructions and any reference files. It is the same format
+Claude uses, so skills written for Claude and other agents work here unchanged. Like Claude, the agent sees only each skill's
+name and description; when a task matches, it loads the instructions with `use_skill` and reads reference files with
+`read_skill_file` as it needs them, so hundreds of skills cost a few lines of context. Start a request with `/skill-name` to
+use one directly.
+
+- **Built in:** systematic debugging, test-driven development, writing tests, code review, refactoring, security review
+  (with a full checklist), performance, API design, CLI design, accessible frontend components, database changes, smart
+  contract security (with Foundry patterns), documentation, dependency upgrades, and creating skills.
+- **From GitHub:** **Settings → Skills → Add from GitHub** takes `owner/repo`, a folder in it, or a link to a `SKILL.md`,
+  lists every skill it finds with its description, and installs the ones you pick, pinned to the commit it read (for example
+  `anthropics/skills`). **Update** moves a skill to the latest commit. Private repositories work when you're signed in with
+  GitHub. Files are listed with the GitHub API, or with git when the API is rate-limited or blocked.
+- **Your own:** write one in **Settings → Skills** (kept for you in `~/.nanocli/skills`), or put it in the project at
+  `agent/skills/<name>/SKILL.md` so it travels with the project and with [field kits](#field-kits). The agent can write one
+  for you too: ask it to "create a skill for…".
+
+Skills are instructions, not code: installing one runs nothing, text files only (no binaries), with size limits, and paths
+can't leave the skill folder. A skill can't override your request or the safety rules, and anything it asks the agent to run
+still needs your OK. Installing is available when the studio runs on your own machine (`NANOCLI_SKILLS=1` turns it on for a
+server, `0` turns it off); built-in and project skills always work.
 
 ### Try several approaches (Harness²-style)
 
@@ -501,6 +527,10 @@ requests never touch this route.
 "info", d }` as output arrives, then one `{ t: "done", code, ms, changed, removed, skipped, … }`. Package
 names must be plain requirements (no URLs or paths); environment variables can't override `PATH`, `UV_*`,
 `PYTHON*` or loader variables.
+
+### `/api/skills`
+
+`GET` lists skills (built in and installed); `GET ?name=` returns one, `GET ?name=&file=` one of its files. `POST` with `action`: `discover` / `install` (GitHub), `update`, `create`, `enable`, `remove` (same-origin, local only).
 
 ### `/api/connectors`
 

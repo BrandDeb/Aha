@@ -6,6 +6,7 @@ import { getProvider } from '@/lib/ai-providers';
 import { useAiConfig } from '../ai-config';
 import { AiModelSettings } from '../components/AiModelSettings';
 import { ago, BUDGETS, laneOf, stateOf, useProposals, type AgentPrefs } from '../proposals';
+import { useSkillIndex } from '../skills-client';
 
 /** The Agent tab: which model, how it works, and every proposal so far */
 export function AgentPanel() {
@@ -13,6 +14,7 @@ export function AgentPanel() {
   const provider = getProvider(config.provider);
   const { proposals, activeId, ask, open, remove, prefs, setPrefs } = useProposals();
   const [configuring, setConfiguring] = useState(false);
+  const skills = useSkillIndex().index?.skills.filter((s) => s.enabled) ?? [];
   const [goal, setGoal] = useState('');
   const ready = !!provider && provider.kind !== 'server';
 
@@ -93,6 +95,9 @@ export function AgentPanel() {
             <input type="checkbox" checked={prefs.trustCommands} onChange={(e) => setPrefs({ trustCommands: e.target.checked })} />
             Run commands without asking
           </label>
+          <p className="text-xs text-gray-400" title={skills.map((s) => s.name).join(', ')}>
+            {skills.length} skills · it loads one when a task calls for it, or type <span className="font-mono text-gray-300">/name</span>. Add from GitHub or write your own in Settings → Skills.
+          </p>
           <label className="flex items-center gap-1.5 text-xs text-gray-400" title="When a build, run or the preview fails, the agent starts debugging it on its own: once per distinct failure, one at a time. The fix arrives as a proposal; nothing changes until you accept.">
             <input type="checkbox" checked={prefs.autoDebug} onChange={(e) => setPrefs({ autoDebug: e.target.checked })} />
             Debug failures automatically

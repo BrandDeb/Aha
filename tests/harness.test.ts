@@ -34,7 +34,7 @@ test('harness files: edits apply to the harness only and appear in the system pr
   assert.match(system, /Project notes \(AGENTS\.md\):\nUse 2 spaces\.\n\nBuild with scriptc\./);
   assert.match(system, /Project instructions \(agent\/prompt\.md\):\nAlways run build/);
   assert.match(system, /Tool guidance \(agent\/tools\.md\):\nPrefer edit_file\./);
-  assert.match(system, /- agent\/skills\/fix-types\.md: Fixing type errors/);
+  assert.match(system, /<skills>\n[\s\S]*- fix-types: Fixing type errors/);
   assert.equal(harnessPrompt(files), '');
   assert.ok(isHarnessFile('agent/x.md') && isHarnessFile('AGENTS.md') && !isHarnessFile('src/a.ts'));
 });

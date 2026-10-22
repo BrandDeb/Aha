@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS, useWorkspace, type Settings } from '../store';
 import { useToast } from '../toasts';
 import { AiModelSettings } from './AiModelSettings';
 import { ConnectorSettings } from './ConnectorSettings';
+import { SkillSettings } from './SkillSettings';
 import { MaintenanceSettings } from './MaintenanceSettings';
 import type { UpdateStatus } from '../maintenance-client';
 import type { Command } from './CommandPalette';
@@ -20,9 +21,9 @@ export const EXTENSIONS: { id: keyof Settings['extensions'] | string; name: stri
   { id: 'todoHighlights', name: 'TODO highlights', description: 'Underline TODO, FIXME, HACK and NOTE comments.' },
 ];
 
-export type SettingsTab = 'general' | 'appearance' | 'ai' | 'connectors' | 'maintenance' | 'keys' | 'extensions';
+export type SettingsTab = 'general' | 'appearance' | 'ai' | 'skills' | 'connectors' | 'maintenance' | 'keys' | 'extensions';
 type Tab = SettingsTab;
-const TAB_LABELS: Record<Tab, string> = { general: 'General', appearance: 'Appearance', ai: 'AI models', connectors: 'Connectors', maintenance: 'Maintenance', keys: 'Shortcuts', extensions: 'Extensions' };
+const TAB_LABELS: Record<Tab, string> = { general: 'General', appearance: 'Appearance', ai: 'AI models', skills: 'Skills', connectors: 'Connectors', maintenance: 'Maintenance', keys: 'Shortcuts', extensions: 'Extensions' };
 
 export function SettingsDialog({ commands, isMac, onClose, initialTab = 'general', update, refreshUpdate }: { commands: Command[]; isMac: boolean; onClose: () => void; initialTab?: SettingsTab; update: UpdateStatus | null; refreshUpdate: (force?: boolean) => Promise<void> }) {
   const { settings, updateSettings } = useWorkspace();
@@ -88,7 +89,7 @@ export function SettingsDialog({ commands, isMac, onClose, initialTab = 'general
 
   return (
     <Dialog title="Settings" onClose={onClose} width="max-w-2xl" tall>
-      <div className="segmented mb-4 self-start" role="tablist" aria-label="Settings sections">
+      <div className="segmented mb-4 max-w-full flex-wrap self-start [&>button]:whitespace-nowrap" role="tablist" aria-label="Settings sections">
         {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
             {TAB_LABELS[t]}
@@ -205,6 +206,7 @@ export function SettingsDialog({ commands, isMac, onClose, initialTab = 'general
 
         {tab === 'ai' && <AiModelSettings />}
 
+        {tab === 'skills' && <SkillSettings />}
         {tab === 'connectors' && <ConnectorSettings />}
 
         {tab === 'maintenance' && <MaintenanceSettings update={update} refresh={refreshUpdate} />}

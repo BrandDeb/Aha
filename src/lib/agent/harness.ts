@@ -77,12 +77,7 @@ export function harnessPrompt(files: Record<string, string>): string {
   if (files[PROMPT_FILE]?.trim()) parts.push(`Project instructions (${PROMPT_FILE}):\n${clip(files[PROMPT_FILE].trim())}`);
   if (files[TOOLS_FILE]?.trim()) parts.push(`Tool guidance (${TOOLS_FILE}):\n${clip(files[TOOLS_FILE].trim())}`);
   if (files[LESSONS_FILE]?.trim()) parts.push(`Lessons from earlier runs (${LESSONS_FILE}):\n${clip(files[LESSONS_FILE].trim())}`);
-  const skills = Object.keys(files)
-    .filter((p) => p.startsWith(`${SKILLS_DIR}/`) && p.endsWith('.md'))
-    .sort()
-    .slice(0, 20)
-    .map((p) => `- ${p}: ${(files[p].split('\n').find((l) => l.trim()) ?? '').replace(/^#+\s*/, '').slice(0, 100)}`);
-  if (skills.length) parts.push(`Skills (read one with read_file when it applies):\n${skills.join('\n')}`);
+  // The project's skills (agent/skills/) are listed with every other skill (lib/skills/format.ts)
   return parts.join('\n\n');
 }
 

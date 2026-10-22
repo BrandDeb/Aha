@@ -20,6 +20,8 @@ import { callModelFor } from '@/lib/agent/model';
 import { systemPromptFor } from '@/lib/agent/prompt';
 import { Stage, type SerializedStage } from '@/lib/agent/stage';
 import { workspaceTools } from '@/lib/agent/tools';
+import { skillTools } from '@/lib/skills/format';
+import { fetchSkillIndex, skillLibrary } from './skills-client';
 import { DEFAULT_BUDGET, type AgentEvent, type Budget, type Message, type Risk, type StopReason, type ToolCall, type ToolResult } from '@/lib/agent/types';
 import { resolveProvider } from '@/lib/ai-providers';
 import { createAgentHost } from './agent-host';
@@ -266,10 +268,11 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
         const connected = await buildConnectorTools(getConnectors(), controller.signal);
         if (connected.connected.length) log(id, { kind: 'notice', text: `Connected: ${connected.connected.map((c) => c.name).join(', ')}` });
         for (const f of connected.failed) log(id, { kind: 'notice', text: `${f.name} is not available: ${f.error}` });
+        const skills = (await fetchSkillIndex())?.skills ?? [];
         const run = await runAgent({
           goal,
-          system: systemPromptFor(stage.files()),
-          tools: [...workspaceTools(host), ...connected.tools],
+          system: systemPromptFor(stage.files(), skills),
+          tools: [...workspaceTools(host), ...connected.tools, ...skillTools(skillLibrary(skills, () => stage.files()))],
           callModel: callModelFor(target),
           budget: BUDGETS[prefs.budget].budget,
           autoApprove: prefs.trustCommands ? ['read', 'stage', 'build', 'exec'] : ['read', 'stage', 'build'],
@@ -320,12 +323,14 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
         else if (event.type === 'composing') log(id, { kind: 'notice', text: 'Comparing the approaches…' });
       };
       try {
+        const skills = (await fetchSkillIndex())?.skills ?? [];
         const result = await runHarnessLoop({
           goal,
           files: p.files,
           makeHost: (s) => createAgentHost({ stage: s, projectName: p.name, entry: p.entry, files: s.files(), onPlan: () => {} }),
           callModel: callModelFor(target),
-          system: systemPromptFor,
+          system: (files) => systemPromptFor(files, skills),
+          extraTools: (s) => skillTools(skillLibrary(skills, () => s.files())),
           k,
           mode: 'parallel',
           budget: { maxSteps: 12, maxToolCalls: 40, maxMillis: 4 * 60_000, maxFixAttempts: 3 },
