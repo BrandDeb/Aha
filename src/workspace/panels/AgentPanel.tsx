@@ -1,0 +1,394 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { runAgent } from '@/lib/agent/loop';
+import { callModelFor } from '@/lib/agent/model';
+import { systemPromptFor } from '@/lib/agent/prompt';
+import { Stage } from '@/lib/agent/stage';
+import { workspaceTools } from '@/lib/agent/tools';
+import { DEFAULT_BUDGET, type AgentEvent, type Budget, type Message, type Risk, type StopReason, type ToolCall, type ToolResult } from '@/lib/agent/types';
+import { getProvider, resolveProvider } from '@/lib/ai-providers';
+import { useActions } from '../actions';
+import { createAgentHost } from '../agent-host';
+import { useAiConfig } from '../ai-config';
+import { AiModelSettings } from '../components/AiModelSettings';
+import { useWorkspace } from '../store';
+import { useToast } from '../toasts';
+
+interface Entry {
+  id: number;
+  kind: 'text' | 'tool' | 'notice';
+  text?: string;
+  call?: ToolCall;
+  risk?: Risk;
+  result?: ToolResult;
+  approved?: boolean;
+}
+
+interface ChangeRow {
+  path: string;
+  kind: 'added' | 'modified' | 'deleted';
+  added: number;
+  removed: number;
+}
+
+const BUDGETS: Record<string, { label: string; budget: Partial<Budget> }> = {
+  quick: { label: 'Quick · 10 steps', budget: { maxSteps: 10, maxToolCalls: 30, maxMillis: 3 * 60_000, maxFixAttempts: 2 } },
+  standard: { label: 'Standard · 25 steps', budget: DEFAULT_BUDGET },
+  long: { label: 'Long · 60 steps', budget: { maxSteps: 60, maxToolCalls: 200, maxMillis: 25 * 60_000, maxFixAttempts: 6 } },
+};
+
+const IDEAS = ['Fix the build errors', 'Add tests for the entry file', 'Explain this project and suggest improvements', 'Add --help and argument validation'];
+
+const OUTCOME: Record<StopReason, { label: string; tone: string }> = {
+  finished: { label: 'Finished', tone: 'text-accent' },
+  budget: { label: 'Stopped: budget used', tone: 'text-warn' },
+  stuck: { label: 'Stopped: going in circles', tone: 'text-warn' },
+  aborted: { label: 'Stopped', tone: 'text-gray-400' },
+  declined: { label: 'Declined by the model', tone: 'text-warn' },
+  error: { label: 'Failed', tone: 'text-danger' },
+};
+
+/** The one thing worth showing about a call: the path, query or first argument */
+function summarize(call: ToolCall): string {
+  const args = call.args;
+  const main = args.path ?? args.query ?? args.entry ?? args.action ?? args.steps ?? Object.values(args).find((v) => typeof v === 'string');
+  const text = typeof main === 'string' ? main.replace(/\s+/g, ' ').trim() : '';
+  return text.length > 60 ? `${text.slice(0, 57)}…` : text;
+}
+
+function rowsOf(stage: Stage): ChangeRow[] {
+  return Object.entries(stage.changes())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([path, kind]) => {
+      const { added, removed } = stage.diff(path);
+      return { path, kind, added, removed };
+    });
+}
+
+export function AgentPanel() {
+  const { project, dispatch, saveSnapshot } = useWorkspace();
+  const actions = useActions();
+  const { notify } = useToast();
+  const config = useAiConfig();
+  const provider = getProvider(config.provider);
+
+  const [goal, setGoal] = useState('');
+  const [budgetId, setBudgetId] = useState('standard');
+  const [trustCommands, setTrustCommands] = useState(false);
+  const [configuring, setConfiguring] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [plan, setPlan] = useState('');
+  const [step, setStep] = useState(0);
+  const [outcome, setOutcome] = useState<{ reason: StopReason; summary: string } | null>(null);
+  const [changes, setChanges] = useState<ChangeRow[]>([]);
+  const [pending, setPending] = useState<{ call: ToolCall; risk: Risk } | null>(null);
+
+  const stageRef = useRef<Stage | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const answerRef = useRef<((allowed: boolean, always?: boolean) => void) | null>(null);
+  const historyRef = useRef<Message[]>([]);
+  const idRef = useRef(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [entries, pending, outcome]);
+
+  // Leaving the panel mid-run must not leave a model call or a question hanging
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const handleEvent = (event: AgentEvent) => {
+    if (event.type === 'step') setStep(event.step);
+    else if (event.type === 'text') setEntries((prev) => [...prev, { id: ++idRef.current, kind: 'text', text: event.text }]);
+    else if (event.type === 'notice') setEntries((prev) => [...prev, { id: ++idRef.current, kind: 'notice', text: event.text }]);
+    else if (event.type === 'tool') setEntries((prev) => [...prev, { id: ++idRef.current, kind: 'tool', call: event.call, risk: event.risk }]);
+    else if (event.type === 'approval') setEntries((prev) => prev.map((e) => (e.call?.id === event.call.id ? { ...e, approved: event.approved } : e)));
+    else if (event.type === 'result') {
+      setEntries((prev) => prev.map((e) => (e.call?.id === event.call.id ? { ...e, result: event.result } : e)));
+      if (stageRef.current) setChanges(rowsOf(stageRef.current));
+    } else if (event.type === 'done') setOutcome({ reason: event.reason, summary: event.summary });
+  };
+
+  const start = async (text: string) => {
+    const task = text.trim();
+    if (!task || running) return;
+    const target = resolveProvider(config);
+    if ('error' in target) {
+      notify({ kind: 'error', title: 'Choose a model first', detail: target.error });
+      setConfiguring(true);
+      return;
+    }
+    if (target.provider.kind === 'server') {
+      notify({ kind: 'error', title: 'The agent needs your own model', detail: 'Pick a provider with a key, or a local model such as Ollama, in the model settings.' });
+      setConfiguring(true);
+      return;
+    }
+
+    // A fresh proposal on top of the project as it is now, keeping any edits still waiting for review
+    const stage = stageRef.current ?? new Stage(project.files);
+    stage.rebase(project.files);
+    stageRef.current = stage;
+    const host = createAgentHost({ stage, projectName: project.name, entry: project.entry, files: stage.files(), onPlan: setPlan });
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setRunning(true);
+    setOutcome(null);
+    setEntries((prev) => [...prev, { id: ++idRef.current, kind: 'text', text: `**You:** ${task}` }]);
+    setGoal('');
+    let trusted = trustCommands;
+
+    try {
+      const result = await runAgent({
+        goal: task,
+        system: systemPromptFor(stage.files()),
+        tools: workspaceTools(host),
+        callModel: callModelFor(target),
+        budget: BUDGETS[budgetId].budget,
+        autoApprove: trusted ? ['read', 'stage', 'build', 'exec'] : ['read', 'stage', 'build'],
+        history: historyRef.current,
+        signal: controller.signal,
+        onEvent: handleEvent,
+        approve: (call, spec) =>
+          new Promise<boolean>((resolve) => {
+            setPending({ call, risk: spec.risk });
+            answerRef.current = (allowed, always) => {
+              if (always) trusted = true;
+              setPending(null);
+              answerRef.current = null;
+              resolve(allowed);
+            };
+          }),
+      });
+      historyRef.current = result.messages;
+    } finally {
+      setRunning(false);
+      setPending(null);
+      answerRef.current?.(false);
+      abortRef.current = null;
+      if (stageRef.current) setChanges(rowsOf(stageRef.current));
+    }
+  };
+
+  const stop = () => {
+    abortRef.current?.abort();
+    answerRef.current?.(false);
+  };
+
+  const accept = (only?: string[]) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const conflicts = stage.conflicts(project.files);
+    const chosen = (only ?? changes.map((c) => c.path)).filter((p) => !conflicts.includes(p));
+    if (conflicts.length) {
+      notify({ kind: 'info', title: `${conflicts.length} file${conflicts.length > 1 ? 's' : ''} skipped`, detail: `${conflicts.join(', ')} changed while the agent worked. Review them by hand.` });
+    }
+    if (!chosen.length) return;
+    const { files, removed } = stage.toPut(chosen);
+    saveSnapshot('Before agent changes');
+    dispatch({ type: 'put', files, removed });
+    stage.rebase({ ...Object.fromEntries(Object.entries(project.files).filter(([p]) => !removed.includes(p))), ...files });
+    setChanges(rowsOf(stage));
+    notify({ kind: 'success', title: `Applied ${chosen.length} change${chosen.length > 1 ? 's' : ''}`, detail: 'The previous version is in History.' });
+  };
+
+  const discard = (paths?: string[]) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    if (paths) paths.forEach((p) => stage.revert(p));
+    else stage.clear();
+    setChanges(rowsOf(stage));
+  };
+
+  const review = (path: string) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const { before, after } = stage.diff(path);
+    actions.showDiff({ title: `Agent: ${path}`, path, original: before, modified: after });
+  };
+
+  const reset = () => {
+    historyRef.current = [];
+    setEntries([]);
+    setPlan('');
+    setOutcome(null);
+    setStep(0);
+  };
+
+  const budget = BUDGETS[budgetId].budget as Budget;
+  const lastText = [...entries].reverse().find((e) => e.kind === 'text')?.text;
+  const outcomeInfo = outcome && OUTCOME[outcome.reason];
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="space-y-2 border-b border-border p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="eyebrow">Agent</h3>
+          <button
+            onClick={() => setConfiguring((v) => !v)}
+            aria-expanded={configuring}
+            className="max-w-[60%] truncate rounded-md px-1.5 py-0.5 font-mono text-[11px] text-gray-400 hover:bg-white/[0.07] hover:text-gray-100"
+            title="Choose provider and model"
+          >
+            {provider && provider.kind !== 'server' ? `${provider.name} · ${config.models[provider.id] ?? provider.models[0] ?? '—'}` : 'Choose a model'} ▾
+          </button>
+        </div>
+        <p className="text-xs leading-relaxed text-gray-400">
+          Give it a goal. It reads your project, edits a private copy, builds to check its work and retries within a budget.
+          Nothing reaches your files until you accept it.
+        </p>
+      </div>
+
+      {(configuring || !provider || provider.kind === 'server') && (
+        <div className="max-h-[70%] shrink-0 overflow-y-auto border-b border-border p-4">
+          <p className="mb-3 text-sm text-gray-300">The agent calls tools, so it needs a model with tool support: your own key (Anthropic, OpenAI, Gemini, Groq, OpenRouter) or a local model in Ollama.</p>
+          <AiModelSettings compact onSelect={() => setConfiguring(true)} />
+          {provider && provider.kind !== 'server' && <button onClick={() => setConfiguring(false)} className="btn btn-secondary btn-sm mt-3 w-full">Done</button>}
+        </div>
+      )}
+
+      <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4" aria-live="polite">
+        {entries.length === 0 && !running && (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500">Try one of these, or describe your own task:</p>
+            <div className="flex flex-wrap gap-1.5">
+              {IDEAS.map((idea) => (
+                <button key={idea} onClick={() => setGoal(idea)} className="btn btn-secondary btn-sm">{idea}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {plan && (
+          <div className="rounded-xl border border-border p-3">
+            <div className="eyebrow mb-1.5">Plan</div>
+            <ul className="space-y-1 text-sm text-gray-300">
+              {plan.split('\n').filter((l) => l.trim()).map((line, i) => {
+                const done = /^\s*[-*]\s*\[[xX]\]/.test(line);
+                return (
+                  <li key={i} className={done ? 'text-gray-500 line-through' : undefined}>
+                    <span aria-hidden="true" className="mr-1.5 font-mono text-xs">{done ? '✓' : '○'}</span>
+                    {line.replace(/^\s*[-*]\s*(\[[ xX]\])?\s*/, '')}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
+        {entries.map((entry) =>
+          entry.kind === 'text' ? (
+            <p key={entry.id} className="whitespace-pre-wrap text-sm leading-relaxed text-gray-300">{entry.text?.replace(/\*\*/g, '')}</p>
+          ) : entry.kind === 'notice' ? (
+            <p key={entry.id} className="text-xs text-gray-500">{entry.text}</p>
+          ) : (
+            <details key={entry.id} className="group rounded-lg border border-border bg-white/[0.02] text-sm">
+              <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 marker:hidden">
+                <span
+                  aria-label={entry.result ? (entry.result.ok ? 'succeeded' : 'failed') : 'running'}
+                  className={`h-2 w-2 shrink-0 rounded-full ${entry.result ? (entry.result.ok ? 'bg-accent' : 'bg-danger') : 'animate-pulse bg-gray-500'}`}
+                />
+                <span className="font-mono text-xs text-gray-100">{entry.call?.name}</span>
+                <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-500">{entry.call && summarize(entry.call)}</span>
+                {entry.approved === false && <span className="badge px-1.5 py-0 text-[10px]">declined</span>}
+              </summary>
+              {entry.result && <pre className="max-h-56 overflow-auto border-t border-border px-3 py-2 font-mono text-[11px] leading-relaxed text-gray-400">{entry.result.content}</pre>}
+            </details>
+          )
+        )}
+
+        {pending && (
+          <div role="alertdialog" aria-label="Allow this action?" className="space-y-2 rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] p-3">
+            <div className="text-sm font-medium text-gray-100">The agent wants to run a command on this machine</div>
+            <pre className="overflow-auto rounded-md bg-black/30 p-2 font-mono text-xs text-gray-200">{pending.call.name} {JSON.stringify(pending.call.args)}</pre>
+            <div className="flex flex-wrap gap-1.5">
+              <button className="btn btn-primary btn-sm" onClick={() => answerRef.current?.(true)}>Allow once</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => answerRef.current?.(true, true)}>Allow for this run</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => answerRef.current?.(false)}>Decline</button>
+            </div>
+          </div>
+        )}
+
+        {running && !pending && (
+          <p className="flex items-center gap-2 text-sm text-gray-500">
+            <span className="h-3 w-3 animate-spin rounded-full border border-gray-600 border-t-gray-100" aria-hidden="true" />
+            Working · step {step} of {budget.maxSteps}
+          </p>
+        )}
+
+        {outcome && outcomeInfo && (
+          <div className="space-y-1.5 rounded-xl border border-border p-3">
+            <div className={`text-xs font-medium ${outcomeInfo.tone}`}>{outcomeInfo.label}{step ? ` · ${step} step${step > 1 ? 's' : ''}` : ''}</div>
+            {outcome.summary !== lastText && <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-300">{outcome.summary}</p>}
+          </div>
+        )}
+
+        {changes.length > 0 && (
+          <div className="rounded-xl border border-border">
+            <div className="flex items-center justify-between border-b border-border px-3 py-2">
+              <span className="eyebrow whitespace-nowrap">Changes · {changes.length}</span>
+              <div className="flex gap-1">
+                <button className="btn btn-primary btn-sm h-7" disabled={running} onClick={() => accept()}>Accept all</button>
+                <button className="btn btn-ghost btn-sm h-7" disabled={running} onClick={() => discard()}>Discard</button>
+              </div>
+            </div>
+            <ul className="divide-y divide-border">
+              {changes.map((row) => (
+                <li key={row.path} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+                  <span className={`w-12 shrink-0 font-mono ${row.kind === 'deleted' ? 'text-danger' : row.kind === 'added' ? 'text-accent' : 'text-gray-400'}`}>{row.kind}</span>
+                  <button className="min-w-0 flex-1 truncate text-left font-mono text-gray-100 hover:underline" onClick={() => review(row.path)} title="Review the diff">{row.path}</button>
+                  <span className="shrink-0 font-mono text-gray-500">+{row.added} −{row.removed}</span>
+                  <button className="btn btn-ghost btn-sm h-6 px-1.5 text-[11px]" disabled={running} onClick={() => accept([row.path])}>Accept</button>
+                  <button className="btn btn-ghost btn-sm h-6 px-1.5 text-[11px]" disabled={running} onClick={() => discard([row.path])}>Reject</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <form
+        className="space-y-2 border-t border-border p-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void start(goal);
+        }}
+      >
+        <textarea
+          value={goal}
+          onChange={(e) => setGoal(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              void start(goal);
+            }
+          }}
+          rows={3}
+          placeholder="What should the agent do?  (⌘/Ctrl + Enter to run)"
+          aria-label="Goal for the agent"
+          disabled={running}
+          className="input min-h-[4rem] resize-none text-sm"
+        />
+        <div className="flex items-center gap-2">
+          <select value={budgetId} onChange={(e) => setBudgetId(e.target.value)} disabled={running} className="input h-8 min-w-0 flex-1 text-xs" aria-label="Budget">
+            {Object.entries(BUDGETS).map(([id, b]) => <option key={id} value={id}>{b.label}</option>)}
+          </select>
+          {running ? (
+            <button type="button" onClick={stop} className="btn btn-secondary">Stop</button>
+          ) : (
+            <button type="submit" disabled={!goal.trim()} className="btn btn-primary">Run agent</button>
+          )}
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <label className="flex items-center gap-1.5 text-xs text-gray-400" title="Python and package commands run on this machine. Off means you are asked each time.">
+            <input type="checkbox" checked={trustCommands} onChange={(e) => setTrustCommands(e.target.checked)} disabled={running} />
+            Run commands without asking
+          </label>
+          {(entries.length > 0 || outcome) && !running && <button type="button" onClick={reset} className="text-xs text-gray-500 hover:text-gray-100">New task</button>}
+        </div>
+      </form>
+    </div>
+  );
+}

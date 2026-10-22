@@ -12,7 +12,7 @@ export const MAX_FILE_BYTES = 512 * 1024;
 export const MAX_STAGED_FILES = 200;
 
 export class Stage {
-  private readonly base: Record<string, string>;
+  private base: Record<string, string>;
   private readonly edits = new Map<string, string | null>(); // null = deleted
 
   constructor(base: Record<string, string>) {
@@ -77,6 +77,19 @@ export class Stage {
     const before = this.base[path] ?? '';
     const after = this.read(path) ?? '';
     return { before, after, ...lineDelta(before, after) };
+  }
+
+  /** Changed files whose current project content no longer matches what the agent started from */
+  conflicts(current: Record<string, string>): string[] {
+    return [...this.edits.keys()].filter((path) => (current[path] ?? null) !== (this.base[path] ?? null));
+  }
+
+  /** Start from a new project state (after some changes were accepted), keeping only edits that still differ */
+  rebase(base: Record<string, string>): void {
+    this.base = { ...base };
+    for (const [path, content] of [...this.edits]) {
+      if ((content ?? null) === (this.base[path] ?? null)) this.edits.delete(path);
+    }
   }
 
   get size(): number {

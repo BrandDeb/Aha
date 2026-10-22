@@ -37,7 +37,7 @@ export interface WorkspaceActions {
   inspect: (result?: CompileResult | null) => void;
 }
 
-export type PanelId = 'build' | 'git' | 'ai' | 'history' | 'graph' | 'package' | 'python';
+export type PanelId = 'build' | 'git' | 'ai' | 'agent' | 'history' | 'graph' | 'package' | 'python';
 
 export const ActionsContext = createContext<WorkspaceActions | null>(null);
 

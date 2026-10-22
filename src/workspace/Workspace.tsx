@@ -16,6 +16,7 @@ import { SettingsDialog } from './components/SettingsDialog';
 import { TemplatesDialog } from './components/TemplatesDialog';
 import { Terminal } from './components/Terminal';
 import { canFormat, formatSource } from './format';
+import { AgentPanel } from './panels/AgentPanel';
 import { AiPanel } from './panels/AiPanel';
 import { BuildPanel } from './panels/BuildPanel';
 import { GitPanel } from './panels/GitPanel';
@@ -36,6 +37,7 @@ const PANELS: { id: PanelId; label: string; glyph: string }[] = [
   { id: 'build', label: 'Build', glyph: '▶' },
   { id: 'git', label: 'Git', glyph: '⑂' },
   { id: 'ai', label: 'Assistant', glyph: '✦' },
+  { id: 'agent', label: 'Agent', glyph: '⚙' },
   { id: 'python', label: 'Python', glyph: 'Py' },
   { id: 'history', label: 'History', glyph: '↺' },
   { id: 'graph', label: 'Graph', glyph: '⌬' },
@@ -386,6 +388,7 @@ export function Workspace() {
     { id: 'panel.ai', category: 'Assistant', title: 'Open assistant', keys: DEFAULT_KEYS['panel.ai'], run: () => openPanel('ai') },
     { id: 'panel.history', category: 'History', title: 'Open version history', keys: DEFAULT_KEYS['panel.history'], run: () => openPanel('history') },
     { id: 'panel.graph', category: 'Graph', title: 'Open dependency graph', run: () => openPanel('graph') },
+    { id: 'panel.agent', category: 'Assistant', title: 'Open agent', run: () => openPanel('agent') },
     { id: 'panel.python', category: 'Python', title: 'Open Python (uv) panel', run: () => openPanel('python') },
     { id: 'panel.package', category: 'Package', title: 'Edit package.json', run: () => openPanel('package') },
     { id: 'collab.toggle', category: 'Collaboration', title: collab ? 'Leave live session' : 'Start live session', run: () => setCollab((v) => !v) },
@@ -659,6 +662,7 @@ export function Workspace() {
                   const selection = editor?.getSelection();
                   return selection && !selection.isEmpty() ? editor?.getModel()?.getValueInRange(selection) ?? '' : '';
                 }} />}
+                {panel === 'agent' && <AgentPanel />}
                 {panel === 'history' && <HistoryPanel />}
                 {panel === 'graph' && <GraphPanel />}
                 {panel === 'package' && <PackagePanel />}

@@ -205,7 +205,7 @@ export function workspaceTools(host: AgentHost): Tool[] {
   if (host.build) {
     tools.push({
       name: 'build',
-      description: 'Type-check and compile the project with scriptc, including your pending edits. Returns the diagnostics (file:line:col code message). Run it after changing code, and fix what it reports.',
+      description: 'Type-check and compile the project with scriptc, including your pending edits. Returns the diagnostics (file:line:col code message). Run it after changing code, and fix what it reports. Only files reachable from the entry file are checked; pass another entry to check a different file.',
       risk: 'build',
       verify: true,
       parameters: { type: 'object', properties: { entry: { type: 'string', description: `Entry file (default ${host.entry})` } } },

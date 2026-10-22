@@ -54,6 +54,28 @@ test('Stage: edits layer over the project and never change the original', () => 
   stage.clear();
 });
 
+test('Stage: detects files the user changed while the agent worked', () => {
+  const stage = new Stage({ 'a.ts': '1', 'b.ts': '2' });
+  stage.write('a.ts', 'agent');
+  stage.write('c.ts', 'new');
+  assert.deepEqual(stage.conflicts({ 'a.ts': '1', 'b.ts': '2' }), []);
+  assert.deepEqual(stage.conflicts({ 'a.ts': 'user edit', 'b.ts': '2' }), ['a.ts']);
+  assert.deepEqual(stage.conflicts({ 'a.ts': '1', 'b.ts': '2', 'c.ts': 'user made it too' }), ['c.ts']);
+});
+
+test('Stage: rebasing onto the accepted project keeps only what is still pending', () => {
+  const stage = new Stage({ 'a.ts': '1', 'b.ts': '2' });
+  stage.write('a.ts', 'A');
+  stage.write('b.ts', 'B');
+  stage.delete('b.ts');
+  stage.write('c.ts', 'C');
+  stage.rebase({ 'a.ts': 'A', 'b.ts': '2' }); // the user accepted a.ts only
+  assert.deepEqual(stage.changes(), { 'b.ts': 'deleted', 'c.ts': 'added' });
+  assert.deepEqual(stage.files(), { 'a.ts': 'A', 'c.ts': 'C' });
+  stage.rebase({ 'a.ts': 'A', 'c.ts': 'C' });
+  assert.equal(stage.size, 0);
+});
+
 test('Stage: refuses bad paths, huge files and deleting what does not exist', () => {
   const stage = new Stage({});
   for (const path of ['../evil.ts', '/abs.ts', '.env', 'a b.ts', '']) assert.match(stage.write(path, 'x') ?? '', /not a valid project path/, path);
