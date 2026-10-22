@@ -235,7 +235,7 @@ public class Main {
     filename: 'main.kt',
     code: `fun main(args: Array<String>) {
     val name = args.firstOrNull() ?: "World"
-    println("Hello, $(name)!")
+    println("Hello, $name!")
 
     val primes = (2..30).filter { n -> (2..n).takeWhile { it * it <= n }.none { n % it == 0 } }
     println("Primes up to 30: " + primes.joinToString(" "))
@@ -353,7 +353,7 @@ cat("Primes up to 30:", Filter(is_prime, 2:30), "\\n")
     description: 'Julia script',
     filename: 'main.jl',
     code: `name = length(ARGS) > 0 ? ARGS[1] : "World"
-println("Hello, $name!")
+println("Hello, $(name)!")
 
 isprime_(n) = n > 1 && all(n % d != 0 for d in 2:isqrt(n))
 println("Primes up to 30: ", join(filter(isprime_, 2:30), " "))
