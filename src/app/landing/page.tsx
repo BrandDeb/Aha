@@ -6,7 +6,10 @@
 import Link from 'next/link';
 import { ByteField } from '@/components/ByteField';
 import { SiteFooter, SiteHeader } from '@/components/SiteHeader';
-import { TEMPLATES } from '@/lib/templates';
+import { TEMPLATES as ALL_TEMPLATES } from '@/lib/templates';
+
+// The landing and onboarding pages show the headline languages; the New project dialog has every starter
+const TEMPLATES = ALL_TEMPLATES.filter((t) => ['typescript', 'python'].includes(t.language ?? 'typescript'));
 
 const STATS = [
   { value: '55 KB', label: 'Hello-world executable', detail: 'stripped, statically linked runtime' },

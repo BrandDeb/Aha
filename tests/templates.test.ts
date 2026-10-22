@@ -35,7 +35,7 @@ function run(binary: string, args: string[] = []): string {
 
 test('template ids and filenames are unique', () => {
   assert.equal(new Set(TEMPLATES.map((t) => t.id)).size, TEMPLATES.length);
-  const typescript = TEMPLATES.filter((t) => t.language !== 'python');
+  const typescript = TEMPLATES.filter((t) => (t.language ?? 'typescript') === 'typescript');
   assert.equal(new Set(typescript.map((t) => t.filename)).size, typescript.length);
 });
 
@@ -66,7 +66,7 @@ function buildLibrary(name: string, files: Record<string, string>): string {
   return archive;
 }
 
-for (const template of TEMPLATES.filter((t) => t.language !== 'python')) {
+for (const template of TEMPLATES.filter((t) => (t.language ?? 'typescript') === 'typescript')) {
   test(`template "${template.name}" compiles with scriptc`, { skip }, () => {
     const { files, entry } = templateFiles(template);
     if (template.library) buildLibrary(template.id, files);

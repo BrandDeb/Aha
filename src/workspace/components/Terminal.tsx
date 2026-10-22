@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 're
 import { formatSize } from '@/lib/compiler-browser';
 import { useActions } from '../actions';
 import { allFolders, basename, buildTree, diffStatus, isFolder, isPython, isRunnable, resolvePath, type TreeNode } from '../project';
-import { streamPython, type PythonCommand, type PythonStream } from '../python-client';
+import { detectLanguage } from '@/lib/languages';
+import { streamPython, type PythonCommand, type PythonOutcome, type PythonStream } from '../python-client';
+import { fetchLanguages } from '../run-client';
 import { useWorkspace } from '../store';
 
 type LineKind = 'in' | 'out' | 'err' | 'sys';
@@ -22,8 +24,9 @@ const HELP = `Commands
   mv <from> <to>        move or rename        cp <from> <to>   copy a file
   echo <text> [> file]  print or write text   open <file>      open in the editor
   build [file]          compile a native executable with scriptc
-  run [file] [args…]    TypeScript: compile to WASM and run it here · Python: run with uv
-                        (Ctrl+C stops)
+  run [file] [args…]    TypeScript: compile to WASM and run it here · Python: run with uv ·
+                        Go, Rust, Java, C, Ruby, PHP… run with their own toolchain (Ctrl+C stops)
+  languages             which languages this machine can run, and how to install the rest
   uv add <pkg…> [--dev] uv remove <pkg…>  uv sync  uv lock [--upgrade]  uv tree
   uv init [name]        uv python pin 3.12      uv run <file.py> [args…]
   python <file.py> [args…]   run a Python file with uv
@@ -121,8 +124,8 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
 
     const [command, ...args] = words;
 
-    /** Run a uv command, printing its output as it arrives and merging file changes back */
-    const runPythonCommand = async (cmd: PythonCommand, shown: string) => {
+    /** Run a command on the server, printing its output as it arrives and reporting how it ended */
+    const runStreamed = async (shown: string, start: (onOutput: (stream: PythonStream, text: string) => void, signal: AbortSignal) => Promise<PythonOutcome>) => {
       print(shown, 'sys');
       const controller = new AbortController();
       abortRef.current = controller;
@@ -138,7 +141,7 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
         partial[stream] = pieces.pop() ?? '';
         for (const line of pieces) emit(stream, line.replace(/\r$/, ''));
       };
-      const outcome = await actions.python(cmd, onOutput, controller.signal);
+      const outcome = await start(onOutput, controller.signal);
       for (const stream of ['stdout', 'stderr', 'info'] as const) if (partial[stream]) emit(stream, partial[stream]);
       abortRef.current = null;
       setBusy(false);
@@ -156,6 +159,12 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
       if (written.length) print(`→ wrote ${written.join(', ')}`, 'sys');
       if (outcome.skipped.length) print(`not copied back (binary or large): ${outcome.skipped.slice(0, 6).join(', ')}${outcome.skipped.length > 6 ? '…' : ''}`, 'sys');
     };
+
+    const runPythonCommand = (cmd: PythonCommand, shown: string) => runStreamed(shown, (onOutput, signal) => actions.python(cmd, onOutput, signal));
+
+    /** `run` on an entry in one of the other languages */
+    const runLanguageFile = (file: string, programArgs: string[], name: string) =>
+      runStreamed(`${name}: ${file}${programArgs.length ? ` ${programArgs.join(' ')}` : ''}`, (onOutput, signal) => actions.runLanguage({ entry: file, args: programArgs }, onOutput, signal));
 
     /** `python <file>` / `uv run <file>` / `run` on a .py entry */
     const runPythonFile = async (fileArg: string | undefined, programArgs: string[]) => {
@@ -358,6 +367,13 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
       case 'pip3':
         err('pip isn’t used here — packages live in pyproject.toml. Use: uv add <package>');
         break;
+      case 'languages': {
+        const info = await fetchLanguages();
+        if (!info) err('Could not reach the studio server.');
+        else if (!info.enabled) out('Running other languages is off on this server (it only runs programs when it listens on your own machine).');
+        else out(info.languages.map((l) => `${l.available ? '✓' : '·'} ${l.name.padEnd(30)} ${l.available ? (l.version ?? l.tool ?? '') : `not installed — ${l.install[navigator.platform.startsWith('Win') ? 'windows' : /Mac/.test(navigator.platform) ? 'mac' : 'linux']}`}`).join('\n'));
+        break;
+      }
       case 'install-uv': {
         const controller = new AbortController();
         abortRef.current = controller;
@@ -376,6 +392,12 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
         const isPythonRun = explicit ? !!explicitPath && isPython(explicitPath) : !!p.entry && isPython(p.entry);
         if (isPythonRun) {
           await runPythonFile(explicit, explicit ? args.slice(1) : args);
+          break;
+        }
+        const languageFile = explicit ? explicitPath : p.entry;
+        const language = languageFile && languageFile in p.files ? detectLanguage(languageFile, Object.keys(p.files)) : null;
+        if (language && languageFile) {
+          await runLanguageFile(languageFile, explicit ? args.slice(1) : args, language.name);
           break;
         }
         let entry: string | undefined;

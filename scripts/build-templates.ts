@@ -20,7 +20,7 @@ mkdirSync(srcDir, { recursive: true });
 
 let failed = 0;
 // Python templates are run with uv, not compiled
-for (const template of TEMPLATES.filter((t) => t.language !== 'python')) {
+for (const template of TEMPLATES.filter((t) => (t.language ?? 'typescript') === 'typescript')) {
   const { files, entry } = templateFiles(template);
   for (const [file, content] of Object.entries(files)) {
     mkdirSync(path.dirname(path.join(srcDir, template.id, file)), { recursive: true });

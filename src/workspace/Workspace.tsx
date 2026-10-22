@@ -16,8 +16,10 @@ import { useUpdateStatus } from './maintenance-client';
 import { Terminal } from './components/Terminal';
 import { canFormat, formatSource } from './format';
 import { BuildPanel } from './panels/BuildPanel';
+import { detectLanguage } from '@/lib/languages';
 import { basename, comboFromEvent, diffStatus, formatCombo, isPython, languageFor } from './project';
 import { getPythonEnv, pythonProjectId, streamPython } from './python-client';
+import { runProject } from './run-client';
 import { base64ToArrayBuffer, runWasm } from './runner';
 import { OutputMenu } from './components/OutputMenu';
 import { TARGET_GROUPS, targetInfo } from './targets';
@@ -33,6 +35,7 @@ const GitPanel = dynamic(() => import('./panels/GitPanel').then((m) => m.GitPane
 const GraphPanel = dynamic(() => import('./panels/GraphPanel').then((m) => m.GraphPanel), { ssr: false, loading: PanelLoading });
 const HistoryPanel = dynamic(() => import('./panels/HistoryPanel').then((m) => m.HistoryPanel), { ssr: false, loading: PanelLoading });
 const PackagePanel = dynamic(() => import('./panels/PackagePanel').then((m) => m.PackagePanel), { ssr: false, loading: PanelLoading });
+const LanguagePanel = dynamic(() => import('./panels/LanguagePanel').then((m) => m.LanguagePanel), { ssr: false, loading: PanelLoading });
 const PythonPanel = dynamic(() => import('./panels/PythonPanel').then((m) => m.PythonPanel), { ssr: false, loading: PanelLoading });
 const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then((m) => m.SettingsDialog), { ssr: false });
 const TemplatesDialog = dynamic(() => import('./components/TemplatesDialog').then((m) => m.TemplatesDialog), { ssr: false });
@@ -45,6 +48,7 @@ const PANELS: { id: PanelId; label: string; glyph: string }[] = [
   { id: 'ai', label: 'Assistant', glyph: '✦' },
   { id: 'agent', label: 'Agent', glyph: '⚙' },
   { id: 'python', label: 'Python', glyph: 'Py' },
+  { id: 'languages', label: 'Run', glyph: '▷' },
   { id: 'history', label: 'History', glyph: '↺' },
   { id: 'graph', label: 'Graph', glyph: '⌬' },
   { id: 'package', label: 'Package', glyph: '▤' },
@@ -83,6 +87,9 @@ export function Workspace() {
   const setTarget = useCallback((next: CompileTarget) => updateSettings({ target: next }), [updateSettings]);
   const [viewer, setViewer] = useState<CompileResult | null>(null);
   // Tabs follow the project: Python's only for Python projects, and package.json's only when there is one to manage
+  // Which engine runs the entry file: uv (Python), scriptc (TypeScript), or one of the other languages
+  const entryLanguage = useMemo(() => (project.entry ? detectLanguage(project.entry, Object.keys(project.files)) : null), [project.entry, project.files]);
+  const usesScriptc = !isPython(project.entry) && !entryLanguage;
   const hasPython = useMemo(() => Object.keys(project.files).some((f) => isPython(f) || f === 'pyproject.toml'), [project.files]);
   const [building, setBuilding] = useState(false);
   const [lastBuild, setLastBuild] = useState<CompileResult | null>(null);
@@ -222,6 +229,14 @@ export function Workspace() {
     return { ...done, ok: done.code === 0 };
   }, [dispatch]);
 
+  const runLanguage = useCallback<WorkspaceActions['runLanguage']>(async (options, onOutput = () => {}, signal) => {
+    const p = projectRef.current;
+    const outcome = await runProject(p.name, p.files, options, onOutput, signal);
+    // Cargo.lock, go.sum and files the program wrote come back into the explorer
+    if (Object.keys(outcome.changed).length || outcome.removed.length) dispatch({ type: 'put', files: outcome.changed, removed: outcome.removed });
+    return outcome;
+  }, [dispatch]);
+
   const compile = useCallback<WorkspaceActions['compile']>(async (options = {}) => {
     const p = projectRef.current;
     const entry = options.entry ?? p.entry;
@@ -256,8 +271,8 @@ export function Workspace() {
   /** The toolbar's Compile: Python has no compile step, so it runs the program in the terminal instead */
   const compileOrRun = useCallback(() => {
     const entry = projectRef.current.entry;
-    if (entry && isPython(entry)) {
-      notify({ kind: 'info', title: 'Python runs directly', detail: 'Running it in the terminal; there is no compile step.' });
+    if (entry && (isPython(entry) || detectLanguage(entry, Object.keys(projectRef.current.files)))) {
+      notify({ kind: 'info', title: 'This language runs directly', detail: 'Running it in the terminal; scriptc compiles TypeScript only.' });
       setShowTerminal(true);
       setTimeout(() => terminalRun.current?.('run'), 0);
       return;
@@ -367,8 +382,9 @@ export function Workspace() {
     openPanel,
     downloadArtifact,
     python,
+    runLanguage,
     inspect: (result) => setViewer(result ?? lastBuild),
-  }), [compile, run, format, save, openPanel, downloadArtifact, python, lastBuild]);
+  }), [compile, run, format, save, openPanel, downloadArtifact, python, runLanguage, lastBuild]);
 
   // Terminal "run" from the toolbar / shortcut
   const runInTerminal = useCallback(() => {
@@ -406,6 +422,7 @@ export function Workspace() {
     { id: 'panel.history', category: 'History', title: 'Open version history', keys: DEFAULT_KEYS['panel.history'], run: () => openPanel('history') },
     { id: 'panel.graph', category: 'Graph', title: 'Open dependency graph', run: () => openPanel('graph') },
     { id: 'panel.agent', category: 'Assistant', title: 'Open agent', run: () => openPanel('agent') },
+    { id: 'panel.languages', category: 'Run', title: 'Open languages panel (Go, Rust, Java, C…)', run: () => openPanel('languages') },
     { id: 'panel.python', category: 'Python', title: 'Open Python (uv) panel', run: () => openPanel('python') },
     { id: 'panel.package', category: 'Package', title: 'Edit package.json', run: () => openPanel('package') },
     { id: 'collab.toggle', category: 'Collaboration', title: collab ? 'Leave live session' : 'Start live session', run: () => setCollab((v) => !v) },
@@ -512,7 +529,7 @@ export function Workspace() {
   );
 
   const panelVisible = (id: PanelId) =>
-    id === 'python' ? hasPython || panel === 'python' : id === 'package' ? !hasPython || 'package.json' in project.files || panel === 'package' : true;
+    id === 'python' ? hasPython || panel === 'python' : id === 'languages' ? !!entryLanguage || panel === 'languages' : id === 'package' ? !hasPython || 'package.json' in project.files || panel === 'package' : true;
 
   return (
     <ActionsContext.Provider value={actions}>
@@ -541,15 +558,15 @@ export function Workspace() {
           )}
 
           <div className="ml-auto flex items-center gap-2">
-            {!isPython(project.entry) && <OutputMenu target={target} options={settings.build} onTarget={setTarget} onOptions={(patch) => updateSettings({ build: { ...settings.build, ...patch } })} />}
+            {usesScriptc && <OutputMenu target={target} options={settings.build} onTarget={setTarget} onOptions={(patch) => updateSettings({ build: { ...settings.build, ...patch } })} />}
             <button
               onClick={runInTerminal}
-              className={`btn btn-sm ${isPython(project.entry) ? 'btn-primary' : 'btn-secondary'}`}
-              title={isPython(project.entry) ? `Run with uv in the terminal (${formatCombo(bindings['build.run'] ?? '', isMac)})` : `Run as WASM in the terminal (${formatCombo(bindings['build.run'] ?? '', isMac)})`}
+              className={`btn btn-sm ${usesScriptc ? 'btn-secondary' : 'btn-primary'}`}
+              title={`${isPython(project.entry) ? 'Run with uv' : entryLanguage ? `Run with ${entryLanguage.name}` : 'Run as WASM'} in the terminal (${formatCombo(bindings['build.run'] ?? '', isMac)})`}
             >
               Run
             </button>
-            {!isPython(project.entry) && <button onClick={compileOrRun} disabled={building} className="btn btn-primary btn-sm" title={formatCombo(bindings['build.compile'] ?? '', isMac)}>
+            {usesScriptc && <button onClick={compileOrRun} disabled={building} className="btn btn-primary btn-sm" title={formatCombo(bindings['build.compile'] ?? '', isMac)}>
               {building ? 'Compiling…' : 'Compile'}
               <span className="kbd border-black/25 text-[10px] text-[var(--color-accent-fg)]/70">{formatCombo(bindings['build.compile'] ?? '', isMac)}</span>
             </button>}
@@ -685,6 +702,7 @@ export function Workspace() {
                 {panel === 'graph' && <GraphPanel />}
                 {panel === 'package' && <PackagePanel />}
                 {panel === 'python' && <PythonPanel />}
+                {panel === 'languages' && <LanguagePanel key={`${project.name}:${project.entry}`} />}
               </div>
             </aside>
           )}

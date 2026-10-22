@@ -7,6 +7,7 @@
  * `eval`/`Function`, and use ES module syntax instead of `module.exports`.
  */
 
+import { LANGUAGE_STARTERS } from './language-templates.ts';
 import { PYTHON_TEMPLATES } from './python-templates.ts';
 
 export interface Template {
@@ -23,13 +24,13 @@ export interface Template {
   network?: boolean;
   /** Built as a library from a scriptc.profile.json (static archive or WASM reactor), not as an executable */
   library?: boolean;
-  /** Default is typescript. Python templates keep their files at the project root (uv expects pyproject.toml there) */
-  language?: 'typescript' | 'python';
+  /** Default is typescript. Every other language keeps its files at the project root (uv expects pyproject.toml there, go.mod and Cargo.toml too). Values: typescript, python, or an id from languages.ts */
+  language?: string;
 }
 
 /** All files of a template as a project, entry under src/ */
 export function templateFiles(template: Template): { files: Record<string, string>; entry: string } {
-  const entry = template.language === 'python' || template.filename.includes('/') ? template.filename : `src/${template.filename}`;
+  const entry = (template.language ?? 'typescript') !== 'typescript' || template.filename.includes('/') ? template.filename : `src/${template.filename}`;
   return { files: { [entry]: template.code, ...template.files }, entry };
 }
 
@@ -418,4 +419,5 @@ countdown(Number(process.argv[2] ?? '3'));
 `,
   },
   ...PYTHON_TEMPLATES,
+  ...LANGUAGE_STARTERS.map(({ id, name, description, filename, code, files, language }): Template => ({ id, name, description, filename, code, files, language })),
 ];

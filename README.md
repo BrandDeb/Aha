@@ -216,6 +216,34 @@ used. If disk matters more than offline WASM builds, remove `@zigc/*` after inst
 
 ---
 
+## Other languages
+
+TypeScript compiles with scriptc and Python runs with uv; everything else runs with **its own toolchain on this machine**.
+Pick **New project → Other languages** (or open any file) and press **Run**: the **Run** tab (and the terminal's `run`) show
+the output, take arguments and standard input, and say exactly what to install when a toolchain is missing.
+
+| | | |
+|---|---|---|
+| JavaScript (Node), TypeScript on Bun or Deno | Go (modules too) | Rust (single file or Cargo project) |
+| C and C++ (your compiler, or the bundled **zig**) | Zig (bundled) | Java (single file or packages) |
+| Kotlin, C# (.NET) | Ruby (Bundler), PHP, Lua, Perl | R, Julia, Swift, Dart, Elixir, Haskell, Bash |
+
+Which engine runs a file: `.ts` is scriptc, `.py` is uv, a `deno.json` or `bunfig.toml` moves `.ts`/`.js` to Deno or Bun, a
+`package.json` makes `.js` run on Node, and other extensions pick their language. `languages` in the terminal lists what this
+machine has. Projects keep their dependencies and build output on the server between runs (`~/.nanocli/run/`), caches (Go,
+Cargo, npm, NuGet, zig) are shared, and files a program writes come back into the explorer.
+
+Same trust model as Python: it **runs your code on the machine hosting the studio**, so it is only on when the studio
+listens on that machine alone (`NANOCLI_RUN=0` turns it off, `=1` forces it on). Programs get a short allow-list of
+environment variables (never the studio's keys), a private `HOME`, a time limit per step (5 min to run, 10 to compile), a 2 MB
+output cap, and stopping a run kills the whole process tree. It is not a sandbox.
+
+Checked against the real toolchains here: Node, Bun, Go, Rust, Java, C, C++, Zig, Ruby, PHP, Perl and Bash. The starters for
+Deno, Kotlin, C#, Lua, R, Julia, Swift, Dart, Elixir and Haskell are written carefully but were not run on this machine (their
+tools aren't installed here), so expect to fix a typo or two the first time.
+
+---
+
 ## Maintenance
 
 The studio looks after itself, and asks before it changes anything.
@@ -327,6 +355,12 @@ names must be plain requirements (no URLs or paths); environment variables can't
 `POST { action: "tools" | "call", connector, tool?, args? }` → `{ ok, tools }` or `{ ok, text, isError }`. The connector's
 configuration is validated on every request and travels with it; the server keeps only warm MCP sessions.
 
+### `/api/run` (other languages)
+
+`GET` → `{ enabled, languages: [{ id, name, available, version?, install }] }`. `POST { projectId, entry, files, args?, stdin?, env?, language? }`
+streams newline-delimited JSON like `/api/python`: `{ t: "out", s, d }` lines, then `{ t: "done", code, ms, changed, removed, skipped, timedOut?, truncated?, error? }`.
+Paths and environment variable names are validated; `PATH`, `HOME`, loader and toolchain variables (`GOPATH`, `CARGO_*`, `JAVA_*`…) can't be set.
+
 ### `/api/doctor` and `/api/update` (local only)
 
 `GET /api/doctor` → `{ checks: [{ id, label, status, detail, fix? }], server }`; `POST { fix }` applies one. `GET /api/update`
@@ -400,6 +434,9 @@ NANOCLI_PY_JOBS=3                     # concurrent Python commands
 NANOCLI_PY_REQUESTS_PER_10_MIN=120    # per client
 
 # Connectors (agent tools: MCP, databases, web, GitHub)
+NANOCLI_RUN=                 # 0 = don't run other languages, 1 = force on; unset = on only when HOST is loopback
+NANOCLI_RUN_JOBS=3           # concurrent runs
+NANOCLI_RUN_REQUESTS_PER_10_MIN=150
 NANOCLI_CONNECTORS=          # 0 = off, 1 = force on; unset = on only when HOST is loopback
 NANOCLI_CONNECTOR_CALLS_PER_10_MIN=400  # per client
 

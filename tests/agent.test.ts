@@ -164,6 +164,23 @@ test('build and run tools use the staged files; python merges what uv changes in
   assert.deepEqual(workspaceTools({ stage, entry: 'x' }).map((t) => t.name), ['update_plan', 'list_files', 'read_file', 'search', 'write_file', 'edit_file', 'delete_file']);
 });
 
+test('run_code runs the staged project in its language and stages what the run writes', async () => {
+  const calls: { files: Record<string, string>; entry: string; args: string[] }[] = [];
+  const { tools, stage } = setup({ 'main.go': 'package main' }, {
+    entry: 'main.go',
+    languageName: 'Go',
+    runCode: async (files, entry, args) => (calls.push({ files, entry, args }), { ok: true, text: 'Exit code 0\nhi', changed: { 'go.sum': 'sums' }, removed: [] }),
+  });
+  const tool = tools.find((t) => t.name === 'run_code')!;
+  assert.equal(tool.risk, 'exec', 'running code on the host always asks');
+  assert.match(tool.description, /with Go on this machine/);
+  stage.write('main.go', 'package main // edited');
+  assert.deepEqual(await run(tools, 'run_code', { args: ['x'] }), { ok: true, content: 'Exit code 0\nhi' });
+  assert.deepEqual([calls[0].entry, calls[0].args, calls[0].files['main.go']], ['main.go', ['x'], 'package main // edited']);
+  assert.equal(stage.read('go.sum'), 'sums');
+  assert.equal((await run(tools, 'run_code', { entry: 'nope.go' })).ok, false);
+});
+
 test('validateArgs reports missing and mistyped arguments precisely', () => {
   const spec = workspaceTools({ stage: new Stage({}), entry: 'x' }).find((t) => t.name === 'read_file')!;
   assert.equal(validateArgs(spec, { path: 'a' }), null);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { getLanguage } from '@/lib/languages';
 import { TEMPLATES, templateFiles, type Template } from '@/lib/templates';
 import { useWorkspace } from '../store';
 import { useToast } from '../toasts';
@@ -9,8 +10,11 @@ import { Dialog } from './Dialog';
 export function TemplatesDialog({ onClose }: { onClose: () => void }) {
   const { project, dispatch, saveSnapshot } = useWorkspace();
   const { notify } = useToast();
-  const [language, setLanguage] = useState<'all' | 'typescript' | 'python'>('all');
-  const shown = TEMPLATES.filter((t) => language === 'all' || (t.language ?? 'typescript') === language);
+  const [language, setLanguage] = useState<'all' | 'typescript' | 'python' | 'other'>('all');
+  const groupOf = (t: Template) => ((t.language ?? 'typescript') === 'typescript' || t.language === 'python' ? (t.language ?? 'typescript') : 'other');
+  const shown = TEMPLATES.filter((t) => language === 'all' || groupOf(t) === language);
+  /** A short tag for the card: TS, Python, or the language's first word */
+  const tagOf = (t: Template) => (t.language === 'python' ? 'Python' : (t.language ?? 'typescript') === 'typescript' ? 'TS' : (getLanguage(t.language!)?.name.split(' ')[0] ?? t.language));
 
   const create = (template: Template) => {
     const { files, entry } = templateFiles(template);
@@ -25,9 +29,9 @@ export function TemplatesDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Dialog title="New project" description="TypeScript templates compile with scriptc as-is. Python templates run with uv." onClose={onClose} width="max-w-3xl">
+    <Dialog title="New project" description="TypeScript templates compile with scriptc as-is. Python runs with uv. Other languages run with their own toolchain on this machine." onClose={onClose} width="max-w-3xl">
       <div className="segmented mb-3 self-start" role="group" aria-label="Language">
-        {([['all', 'All'], ['typescript', 'TypeScript'], ['python', 'Python · AI']] as const).map(([value, label]) => (
+        {([['all', 'All'], ['typescript', 'TypeScript'], ['python', 'Python · AI'], ['other', 'Other languages']] as const).map(([value, label]) => (
           <button key={value} aria-pressed={language === value} onClick={() => setLanguage(value)}>{label}</button>
         ))}
       </div>
@@ -44,7 +48,7 @@ export function TemplatesDialog({ onClose }: { onClose: () => void }) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate text-sm font-medium text-gray-100">{template.name}</span>
-                    <span className="badge shrink-0 px-1.5 py-0 text-[10px]">{template.language === 'python' ? 'Python' : 'TS'}</span>
+                    <span className="badge shrink-0 px-1.5 py-0 text-[10px]">{tagOf(template)}</span>
                   </span>
                   <span className="shrink-0 font-mono text-[11px] text-gray-500">{count > 1 ? `${count} files` : template.filename}</span>
                 </div>

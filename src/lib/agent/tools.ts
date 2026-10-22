@@ -30,6 +30,10 @@ export interface AgentHost {
   runProgram?: (files: Record<string, string>, entry: string, args: string[], signal?: AbortSignal) => Promise<HostOutcome>;
   /** uv commands for Python projects; files the command changes come back to be staged */
   python?: (command: PythonHostCommand, files: Record<string, string>, signal?: AbortSignal) => Promise<HostOutcome & { changed?: Record<string, string>; removed?: string[] }>;
+  /** Run the staged project in its language (Go, Rust, Java, C…) on this machine; files the run changes come back to be staged */
+  runCode?: (files: Record<string, string>, entry: string, args: string[], signal?: AbortSignal) => Promise<HostOutcome & { changed?: Record<string, string>; removed?: string[] }>;
+  /** Name of that language, for the tool's description */
+  languageName?: string;
   onPlan?: (plan: string) => void;
 }
 
@@ -259,6 +263,30 @@ export function workspaceTools(host: AgentHost): Tool[] {
           packages: Array.isArray(args.packages) ? args.packages.map(String) : undefined,
         };
         const outcome = await host.python!(command, stage.files(), signal);
+        for (const [path, content] of Object.entries(outcome.changed ?? {})) stage.write(path, content);
+        for (const path of outcome.removed ?? []) stage.delete(path);
+        return { ok: outcome.ok, content: outcome.text };
+      },
+    });
+  }
+
+  if (host.runCode) {
+    tools.push({
+      name: 'run_code',
+      description: `Run the project's entry file${host.languageName ? ` with ${host.languageName}` : ''} on this machine (compiling first if the language needs it) and return its output and exit code. This executes code on the host, so the user is asked first.`,
+      risk: 'exec',
+      verify: true,
+      parameters: {
+        type: 'object',
+        properties: {
+          args: { type: 'array', items: { type: 'string' }, description: 'Command-line arguments' },
+          entry: { type: 'string', description: `Entry file (default ${host.entry})` },
+        },
+      },
+      run: async (args, { signal }) => {
+        const entry = str(args.entry) || host.entry;
+        if (!stage.has(entry)) return fail(`The entry file “${entry}” does not exist.`);
+        const outcome = await host.runCode!(stage.files(), entry, Array.isArray(args.args) ? args.args.map(String) : [], signal);
         for (const [path, content] of Object.entries(outcome.changed ?? {})) stage.write(path, content);
         for (const path of outcome.removed ?? []) stage.delete(path);
         return { ok: outcome.ok, content: outcome.text };

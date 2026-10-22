@@ -9,8 +9,10 @@
 import { compileTypeScriptBrowser, type CompileResult } from '@/lib/compiler-browser';
 import type { AgentHost, HostOutcome } from '@/lib/agent/tools';
 import type { Stage } from '@/lib/agent/stage';
+import { detectLanguage } from '@/lib/languages';
 import { isPython } from './project';
 import { getPythonEnv, pythonProjectId, streamPython } from './python-client';
+import { runProject } from './run-client';
 import { base64ToArrayBuffer, runWasm } from './runner';
 
 const RUN_TIMEOUT_MS = 20_000;
@@ -33,7 +35,23 @@ export function createAgentHost(options: { stage: Stage; projectName: string; en
   const { stage, entry, files, projectName } = options;
   const host: AgentHost = { stage, entry, onPlan: options.onPlan };
 
-  if (!isPython(entry)) {
+  const language = isPython(entry) ? null : detectLanguage(entry, Object.keys(files));
+  if (language) {
+    host.languageName = language.name;
+    host.runCode = async (staged, runEntry, args, signal) => {
+      const lines: string[] = [];
+      let size = 0;
+      const done = await runProject(projectName, staged, { entry: runEntry, args }, (stream, text) => {
+        if (size > MAX_OUTPUT) return;
+        size += text.length;
+        lines.push(stream === 'stderr' ? text.replace(/^/gm, '[stderr] ') : text);
+      }, signal);
+      const status = done.error ? `Failed: ${done.error}` : done.timedOut ? 'Timed out.' : `Exit code ${done.code} in ${done.ms} ms`;
+      return { ok: done.ok, text: `${status}\n${lines.join('').trim()}${size > MAX_OUTPUT ? '\n… output truncated' : ''}`.trim(), changed: done.changed, removed: done.removed };
+    };
+  }
+
+  if (!isPython(entry) && !language) {
     host.build = async (staged, buildEntry) => {
       const result = await compile(staged, buildEntry, 'ir');
       return result.success ? { ok: true, text: `Build succeeded (${result.durationMs ?? 0} ms). No diagnostics.` } : { ok: false, text: formatDiagnostics(result, buildEntry) };

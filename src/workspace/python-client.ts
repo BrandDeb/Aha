@@ -38,14 +38,20 @@ export type PythonOutcome = PythonDone & { ok: boolean };
 const failure = (error: string): PythonDone => ({ code: null, ms: 0, changed: {}, removed: [], skipped: [], error });
 
 /** POST a command and read the newline-delimited JSON stream it answers with */
-export async function streamPython(
+export function streamPython(body: Record<string, unknown>, onOutput: (stream: PythonStream, text: string) => void, signal?: AbortSignal): Promise<PythonDone> {
+  return streamCommand('/api/python', body, onOutput, signal);
+}
+
+/** The same protocol for any route that streams `{ t: 'out' }` lines and one `{ t: 'done' }` (Python and the other languages) */
+export async function streamCommand(
+  url: string,
   body: Record<string, unknown>,
   onOutput: (stream: PythonStream, text: string) => void,
   signal?: AbortSignal
 ): Promise<PythonDone> {
   let response: Response;
   try {
-    response = await fetch('/api/python', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
+    response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
   } catch (error) {
     if ((error as Error).name === 'AbortError') return failure('stopped');
     return failure('Could not reach the studio server.');

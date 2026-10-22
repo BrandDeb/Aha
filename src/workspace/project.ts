@@ -2,6 +2,8 @@
  * Pure project/VFS helpers. No React, no DOM — unit tested in tests/workspace.test.ts.
  */
 
+import { monacoLanguageFor } from '../lib/languages.ts';
+
 export interface Project {
   name: string;
   /** Project-relative path -> file content */
@@ -139,7 +141,7 @@ export function isPython(filePath: string): boolean {
 }
 
 export function isRunnable(filePath: string): boolean {
-  return (/\.(?:ts|mts|cts|js|mjs|cjs)$/.test(filePath) && !filePath.endsWith('.d.ts')) || isPython(filePath);
+  return (/\.(?:ts|mts|cts|js|mjs|cjs)$/.test(filePath) && !filePath.endsWith('.d.ts')) || isPython(filePath) || monacoLanguageFor(filePath) !== null;
 }
 
 export function languageFor(filePath: string): string {
@@ -151,7 +153,7 @@ export function languageFor(filePath: string): string {
   if (filePath.endsWith('.md')) return 'markdown';
   if (filePath.endsWith('.css')) return 'css';
   if (filePath.endsWith('.html')) return 'html';
-  return 'plaintext';
+  return monacoLanguageFor(filePath) ?? 'plaintext';
 }
 
 // ---------------------------------------------------------------------------
