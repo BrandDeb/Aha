@@ -209,3 +209,25 @@ test('diagnostics point at the file that failed in a project', { skip: scriptcMi
   assert.equal(result.diagnostics?.[0]?.file, 'src/bad.ts');
   assert.equal(result.diagnostics?.[0]?.line, 2);
 });
+
+test('withBundledZig appends the bundled zig so a system zig still wins', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { withBundledZig, bundledZigDir } = await import('../src/lib/zig.ts');
+  const root = mkdtempSync(path.join(tmpdir(), 'zig-'));
+  try {
+    assert.equal(bundledZigDir(root), null);
+    const env = { PATH: '/usr/bin' };
+    assert.equal(withBundledZig(env, root), env); // nothing installed: untouched
+
+    const bin = path.join(root, 'node_modules', '@zigc', `${process.platform}-${process.arch}`, 'bin');
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(path.join(bin, process.platform === 'win32' ? 'zig.exe' : 'zig'), '');
+    const next = withBundledZig(env, root);
+    assert.equal(next.PATH, `/usr/bin${path.delimiter}${bin}`);
+    assert.equal(withBundledZig(next, root), next); // not added twice
+    assert.equal(withBundledZig({ Path: 'C:\\x' }, root).Path, `C:\\x${path.delimiter}${bin}`); // Windows casing
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

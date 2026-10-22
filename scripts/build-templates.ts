@@ -2,13 +2,14 @@
  * Compile every studio template with scriptc.
  *
  *   npm run templates:build            # native executables in dist/templates
- *   npm run templates:build -- --wasm  # also WASI modules (needs zig on PATH);
+ *   npm run templates:build -- --wasm  # also WASI modules (uses the bundled zig, or one on PATH);
  *                                      # templates that use sockets are native-only
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { TEMPLATES, templateFiles } from '../src/lib/templates.ts';
+import { withBundledZig } from '../src/lib/zig.ts';
 
 const outDir = path.join(process.cwd(), 'dist', 'templates');
 const srcDir = path.join(outDir, 'src');
@@ -39,7 +40,7 @@ for (const template of TEMPLATES) {
     try {
       execFileSync(scriptc, ['build', source, '-o', target.out, '--strip'], {
         stdio: 'pipe',
-        env: { ...process.env, ...target.env },
+        env: withBundledZig({ ...process.env, ...target.env }),
       });
       const kb = (statSync(target.out).size / 1024).toFixed(1);
       console.log(`✓ ${template.name.padEnd(22)} ${target.label.padEnd(6)} ${kb} KB`);

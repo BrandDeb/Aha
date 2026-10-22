@@ -220,6 +220,13 @@ export function Workspace() {
     const result = await compile({ target: 'wasm', entry, quiet: true });
     if (!result) return { ok: false, message: 'Build failed' };
     if (!result.success) {
+      // SC3002: the wasm32-wasi target has no socket API, so http and fetch can't run in the tab
+      if (result.diagnostics?.some((d) => d.code === 'SC3002')) {
+        return {
+          ok: false,
+          message: 'This program uses network sockets (http or fetch), which WebAssembly can’t do in the browser. Set the target to Native and press Compile to build it for your machine.',
+        };
+      }
       return {
         ok: false,
         message: result.diagnostics?.length

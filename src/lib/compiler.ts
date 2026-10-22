@@ -8,6 +8,7 @@ import { promisify } from 'util';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
+import { withBundledZig, ZIG_MISSING_MESSAGE } from './zig.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -253,10 +254,6 @@ function downloadUrlFor(filename: string): string {
   return `/api/download/${encodeURIComponent(filename)}`;
 }
 
-function withExtension(filename: string, extension: string): string {
-  return filename.replace(/\.ts$/, extension);
-}
-
 interface PreparedBuild {
   /** Unique id for this build (32 hex chars) */
   id: string;
@@ -393,7 +390,7 @@ function scriptc(args: string[], env?: Record<string, string>) {
     timeout: EXEC_TIMEOUT_MS,
     maxBuffer: EXEC_MAX_BUFFER,
     cwd: TEMP_DIR,
-    env: env ? { ...process.env, ...env } : process.env,
+    env: withBundledZig(env ? { ...process.env, ...env } : process.env),
   });
 }
 
@@ -523,7 +520,9 @@ export async function compileTypeScript(options: CompileOptions): Promise<Compil
       const result = failure(error, build);
       result.phases = phases;
       if (options.target === 'wasm' && /spawnSync zig ENOENT/.test(String((error as ExecError)?.stderr))) {
-        result.error = 'WASM linking needs zig on the server PATH (scriptc uses it as the wasm32-wasi linker).';
+        // The raw "SC3004 spawnSync zig ENOENT" diagnostic means nothing to a user
+        result.error = ZIG_MISSING_MESSAGE;
+        result.diagnostics = [];
       }
       return result;
     }

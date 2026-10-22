@@ -59,5 +59,14 @@
     "zero-runtime"
   ],
   "author": "",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "optionalDependencies": {
+    "@zigc/darwin-arm64": "0.17.0",
+    "@zigc/darwin-x64": "0.17.0",
+    "@zigc/lib": "0.17.0",
+    "@zigc/linux-arm64": "0.17.0",
+    "@zigc/linux-x64": "0.17.0",
+    "@zigc/win32-arm64": "0.17.0",
+    "@zigc/win32-x64": "0.17.0"
+  }
 }

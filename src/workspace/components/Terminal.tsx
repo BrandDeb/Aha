@@ -269,15 +269,21 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
         const controller = new AbortController();
         abortRef.current = controller;
         setBusy(true);
+        let sawUsage = false;
         const outcome = await actions.run(
           [basename(target).replace(/\.\w+$/, ''), ...programArgs],
-          (stream, line) => (stream === 'stdout' ? out(line) : err(line)),
+          (stream, line) => {
+            if (/^usage:/i.test(line.trim())) sawUsage = true;
+            if (stream === 'stdout') out(line);
+            else err(line);
+          },
           { entry: target, signal: controller.signal }
         );
         abortRef.current = null;
         setBusy(false);
         if (outcome.ok) {
           print(`exit ${outcome.code} · ${outcome.ms?.toFixed(1)} ms · ${formatSize(outcome.memoryBytes)} linear memory`, 'sys');
+          if (outcome.code && sawUsage && !programArgs.length) print('This program expects arguments — pass them after run, e.g. run <args>', 'sys');
         } else if (outcome.message) {
           err(outcome.message);
         }

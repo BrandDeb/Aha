@@ -15,7 +15,8 @@ executable that runs without Node.js.
 ## Quick start
 
 Requires **Node.js 24+** (scriptc 0.2 needs it) and **clang** on the PATH for linking native executables.
-WASM output additionally needs **zig** (scriptc uses it as the wasm32-wasi linker).
+WASM output (and the terminal's `run`) needs **zig** as scriptc's wasm32-wasi linker. `npm install` fetches a copy for
+your platform (about 375 MB in `node_modules`), so there is nothing to install; a zig already on your PATH is used instead.
 
 ```bash
 git clone https://github.com/BrandDeb/Aha.git
@@ -30,8 +31,7 @@ Copy `.env.example` to `.env.local` only for GitHub sign-in or a hosted default 
 ### VS Code
 
 1. Install [Node.js 24](https://nodejs.org) and clang (macOS: `xcode-select --install`; Ubuntu/WSL:
-   `sudo apt install clang lld`; Windows: use WSL). Optional: [zig](https://ziglang.org/download/) for WASM and
-   the terminal's `run`.
+   `sudo apt install clang lld`; Windows: use WSL). zig is bundled by `npm install`.
 2. **File → Open Folder…** and pick the cloned `Aha` folder; accept the recommended extensions.
 3. Open the terminal (<kbd>Ctrl</kbd>+<kbd>`</kbd>) and run `npm install`.
 4. Press <kbd>F5</kbd> (**NanoCLI Studio: dev server**) — the browser opens at http://localhost:3000 with
@@ -104,8 +104,9 @@ the provider, never through the studio server.
 | Custom | — | Any OpenAI-compatible server that allows browser requests |
 | Studio server | Operator pays | Shown only when `ANTHROPIC_API_KEY` is set on the server |
 
-**Fetch models** lists what your key can use (OpenRouter's free models first); **Test connection** sends a
-one-word prompt and reports latency. Ollama accepts requests from `localhost` pages by default; when the
+The model list loads by itself from each provider (OpenRouter's needs no key) and shows only chat models, free and newest
+first; a saved model the provider has dropped is swapped for a current one. **Test connection** sends a one-word prompt and
+reports latency. A pasted key that doesn't look like that provider's gets a hint. Ollama accepts requests from `localhost` pages by default; when the
 studio is hosted elsewhere, start it with `OLLAMA_ORIGINS=https://your-studio.example ollama serve`.
 
 ---
@@ -246,7 +247,7 @@ SCRIPTC_LINKER=          # optional: linker driver scriptc uses for executables
 | `npm run typecheck` | Generate route types and run `tsc` |
 | `npm test` | Unit + scriptc integration tests (`node --test`) |
 | `npm run templates:build` | Compile every template to `dist/templates/` |
-| `npm run templates:wasm` | Same, plus WASM modules (needs zig) |
+| `npm run templates:wasm` | Same, plus WASM modules (uses the bundled zig) |
 | `npm run clean` | Remove `temp/`, `.next/` and `dist/` |
 
 ---

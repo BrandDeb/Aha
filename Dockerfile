@@ -19,7 +19,8 @@ RUN npm ci
 COPY . .
 
 # Build the application, then drop dev-only packages from the runtime image
-RUN npm run build && npm prune --omit=dev
+# The runtime image installs zig from the system packages, so drop the bundled copy (~375 MB)
+RUN npm run build && npm prune --omit=dev && rm -rf node_modules/@zigc
 
 # Stage 2: Production image
 FROM node:24-alpine AS runner
