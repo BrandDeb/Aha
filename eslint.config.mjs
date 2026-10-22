@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     // Compiler working directory (user-submitted code)
     "temp/**",
     "dist/**",
+    // Plain-Node helper scripts that tests spawn
+    "tests/fixtures/**",
   ]),
   {
     rules: {
