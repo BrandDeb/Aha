@@ -152,7 +152,7 @@ export function languageFor(filePath: string): string {
   if (filePath.endsWith('.json')) return 'json';
   if (filePath.endsWith('.md')) return 'markdown';
   if (filePath.endsWith('.css')) return 'css';
-  if (filePath.endsWith('.html')) return 'html';
+  if (/\.(?:html|vue|svelte|astro)$/.test(filePath)) return 'html'; // components: closest built-in highlighting
   return monacoLanguageFor(filePath) ?? 'plaintext';
 }
 

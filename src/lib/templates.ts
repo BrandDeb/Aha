@@ -9,6 +9,7 @@
 
 import { LANGUAGE_STARTERS } from './language-templates.ts';
 import { PYTHON_TEMPLATES } from './python-templates.ts';
+import { WEB_STARTERS } from './web-templates.ts';
 
 export interface Template {
   id: string;
@@ -24,7 +25,7 @@ export interface Template {
   network?: boolean;
   /** Built as a library from a scriptc.profile.json (static archive or WASM reactor), not as an executable */
   library?: boolean;
-  /** Default is typescript. Every other language keeps its files at the project root (uv expects pyproject.toml there, go.mod and Cargo.toml too). Values: typescript, python, or an id from languages.ts */
+  /** Default is typescript. Every other language keeps its files at the project root (uv expects pyproject.toml there, go.mod and Cargo.toml too). Values: typescript, python, web (a framework with its own dev server, see frameworks.ts), or an id from languages.ts */
   language?: string;
 }
 
@@ -420,4 +421,5 @@ countdown(Number(process.argv[2] ?? '3'));
   },
   ...PYTHON_TEMPLATES,
   ...LANGUAGE_STARTERS.map(({ id, name, description, filename, code, files, language }): Template => ({ id, name, description, filename, code, files, language })),
+  ...WEB_STARTERS.map(({ id, name, description, filename, code, files }): Template => ({ id, name, description, filename, code, files, language: 'web' })),
 ];

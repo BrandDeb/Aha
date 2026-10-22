@@ -10,11 +10,11 @@ import { Dialog } from './Dialog';
 export function TemplatesDialog({ onClose }: { onClose: () => void }) {
   const { project, dispatch, saveSnapshot } = useWorkspace();
   const { notify } = useToast();
-  const [language, setLanguage] = useState<'all' | 'typescript' | 'python' | 'other'>('all');
-  const groupOf = (t: Template) => ((t.language ?? 'typescript') === 'typescript' || t.language === 'python' ? (t.language ?? 'typescript') : 'other');
+  const [language, setLanguage] = useState<'all' | 'typescript' | 'web' | 'python' | 'other'>('all');
+  const groupOf = (t: Template) => ((t.language ?? 'typescript') === 'typescript' || t.language === 'python' || t.language === 'web' ? (t.language ?? 'typescript') : 'other');
   const shown = TEMPLATES.filter((t) => language === 'all' || groupOf(t) === language);
   /** A short tag for the card: TS, Python, or the language's first word */
-  const tagOf = (t: Template) => (t.language === 'python' ? 'Python' : (t.language ?? 'typescript') === 'typescript' ? 'TS' : (getLanguage(t.language!)?.name.split(' ')[0] ?? t.language));
+  const tagOf = (t: Template) => (t.language === 'web' ? 'Web' : t.language === 'python' ? 'Python' : (t.language ?? 'typescript') === 'typescript' ? 'TS' : (getLanguage(t.language!)?.name.split(' ')[0] ?? t.language));
 
   const create = (template: Template) => {
     const { files, entry } = templateFiles(template);
@@ -29,9 +29,9 @@ export function TemplatesDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <Dialog title="New project" description="TypeScript templates compile with scriptc as-is. Python runs with uv. Other languages run with their own toolchain on this machine." onClose={onClose} width="max-w-3xl">
+    <Dialog title="New project" description="TypeScript templates compile with scriptc as-is. Web apps run with their framework's dev server and a live preview. Python runs with uv. Other languages run with their own toolchain on this machine." onClose={onClose} width="max-w-3xl">
       <div className="segmented mb-3 self-start" role="group" aria-label="Language">
-        {([['all', 'All'], ['typescript', 'TypeScript'], ['python', 'Python · AI'], ['other', 'Other languages']] as const).map(([value, label]) => (
+        {([['all', 'All'], ['typescript', 'TypeScript'], ['web', 'Web apps'], ['python', 'Python · AI'], ['other', 'Other languages']] as const).map(([value, label]) => (
           <button key={value} aria-pressed={language === value} onClick={() => setLanguage(value)}>{label}</button>
         ))}
       </div>

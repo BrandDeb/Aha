@@ -249,6 +249,29 @@ used. If disk matters more than offline WASM builds, remove `@zigc/*` after inst
 
 ---
 
+## Web apps and live preview
+
+Pick a starter under **New project → Web apps** (React, Vue, Svelte, Solid, Preact or plain TypeScript on Vite;
+Next.js; Nuxt; SvelteKit; Astro; React Router; Angular), or open any project whose `package.json` uses one of them,
+and press **Run**. The studio starts the framework's own dev server and shows the app in a **Preview** pane next to the
+editor (Ctrl/⌘ + Alt + P toggles it):
+
+- **Real hot reload.** Edits are synced as you type (only the files that changed), so the framework's HMR updates the
+  page and keeps component state; in testing a React edit showed up in about 0.3 s. Accepting an agent proposal
+  updates the preview the same way.
+- **Installs only when needed.** Dependencies are installed with the lockfile's package manager (npm, pnpm, yarn or Bun)
+  on the first start and again only when `package.json` or the lockfile changes.
+- **A path bar, reload, Full / Tablet / Phone widths, open in a new tab, and the server's log.** The status bar shows
+  where it is running.
+- **Isolated.** The page runs on its own origin (`127.0.0.1` and a free port) in a sandboxed frame, so it cannot reach the
+  studio. Each project's files live in `~/.nanocli/dev/<project>`.
+
+Like **Other languages** below, this runs your project's code (and its packages' install scripts) on the machine hosting
+the studio, so it is on only when the studio listens on that machine alone. `NANOCLI_DEV=0` turns it off and `=1` forces
+it on. At most three dev servers run at once (the least recently viewed stops first), a server nobody has looked at for
+20 minutes stops, and they all stop with the studio. Every starter is tested for real: installed, served and edited
+(`NANOCLI_TEST_NETWORK=1 npm test`).
+
 ## Other languages
 
 TypeScript compiles with scriptc and Python runs with uv; everything else runs with **its own toolchain on this machine**.
@@ -388,6 +411,13 @@ names must be plain requirements (no URLs or paths); environment variables can't
 `POST { action: "tools" | "call", connector, tool?, args? }` → `{ ok, tools }` or `{ ok, text, isError }`. The connector's
 configuration is validated on every request and travels with it; the server keeps only warm MCP sessions.
 
+### `/api/devserver` (web apps)
+
+`POST { action: 'start', projectId, files }` writes the project, installs when needed and starts the dev server
+(it returns at once); `{ action: 'sync', projectId, changed, removed }` applies edits; `{ action: 'stop', projectId }`.
+`GET ?projectId=…&since=N` returns the status (`installing`, `starting`, `ready`, `stopped`, `failed`), the URL and the
+log lines after `N`. Same checks as `/api/run`: same origin, a trusted host, a rate limit, and only where it is enabled.
+
 ### `/api/run` (other languages)
 
 `GET` → `{ enabled, languages: [{ id, name, available, version?, install }] }`. `POST { projectId, entry, files, args?, stdin?, env?, language? }`
@@ -469,6 +499,8 @@ NANOCLI_PY_REQUESTS_PER_10_MIN=120    # per client
 # Connectors (agent tools: MCP, databases, web, GitHub)
 NANOCLI_RUN=                 # 0 = don't run other languages, 1 = force on; unset = on only when HOST is loopback
 NANOCLI_RUN_JOBS=3           # concurrent runs
+NANOCLI_DEV=                 # web app dev servers: 0 = off, 1 = force on; unset = on only when HOST is loopback
+NANOCLI_DEV_SERVERS=3        # dev servers running at once
 NANOCLI_RUN_REQUESTS_PER_10_MIN=150
 NANOCLI_CONNECTORS=          # 0 = off, 1 = force on; unset = on only when HOST is loopback
 NANOCLI_CONNECTOR_CALLS_PER_10_MIN=400  # per client

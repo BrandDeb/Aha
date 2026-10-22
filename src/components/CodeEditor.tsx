@@ -327,7 +327,8 @@ export function CodeEditor({
   const syncModels = () => {
     const monaco = monacoRef.current;
     if (!monaco || !files) return;
-    const wanted = new Set(Object.keys(files).map(uriFor));
+    // Compared in Monaco's own form: it percent-encodes characters such as + and @ (SvelteKit's +page.svelte)
+    const wanted = new Set(Object.keys(files).map((p) => monaco.Uri.parse(uriFor(p)).toString()));
     let added = false;
     for (const [filePath, content] of Object.entries(files)) {
       if (filePath === path) continue;

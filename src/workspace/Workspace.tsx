@@ -17,6 +17,7 @@ import { useUpdateStatus } from './maintenance-client';
 import { Terminal } from './components/Terminal';
 import { canFormat, formatSource } from './format';
 import { BuildPanel } from './panels/BuildPanel';
+import { detectFramework } from '@/lib/frameworks';
 import { detectLanguage } from '@/lib/languages';
 import { basename, comboFromEvent, diffStatus, formatCombo, isPython, languageFor } from './project';
 import { getPythonEnv, pythonProjectId, streamPython } from './python-client';
@@ -24,6 +25,7 @@ import { runProject } from './run-client';
 import { base64ToArrayBuffer, runWasm } from './runner';
 import { OutputMenu } from './components/OutputMenu';
 import { TARGET_GROUPS, targetInfo } from './targets';
+import { useDevServer } from './devserver-client';
 import { useProposals } from './proposals';
 import { useWorkspace } from './store';
 import { useToast } from './toasts';
@@ -43,6 +45,7 @@ const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then(
 const TemplatesDialog = dynamic(() => import('./components/TemplatesDialog').then((m) => m.TemplatesDialog), { ssr: false });
 const ProjectDialog = dynamic(() => import('./components/ProjectDialog').then((m) => m.ProjectDialog), { ssr: false });
 const ArtifactDialog = dynamic(() => import('./components/ArtifactDialog').then((m) => m.ArtifactDialog), { ssr: false });
+const PreviewPane = dynamic(() => import('./components/PreviewPane').then((m) => m.PreviewPane), { ssr: false, loading: PanelLoading });
 const ProposalView = dynamic(() => import('./components/ProposalView').then((m) => m.ProposalView), { ssr: false, loading: PanelLoading });
 
 const PANELS: { id: PanelId; label: string; glyph: string }[] = [
@@ -70,6 +73,7 @@ const DEFAULT_KEYS: Record<string, string> = {
   'view.terminal': 'Mod+J',
   'view.split': 'Mod+\\',
   'view.zen': 'Mod+Alt+Z',
+  'view.preview': 'Mod+Alt+P',
   'view.theme': 'Mod+Alt+T',
   'panel.git': 'Mod+Alt+G',
   'panel.ai': 'Mod+I',
@@ -104,7 +108,11 @@ export function Workspace() {
   // Tabs follow the project: Python's only for Python projects, and package.json's only when there is one to manage
   // Which engine runs the entry file: uv (Python), scriptc (TypeScript), or one of the other languages
   const entryLanguage = useMemo(() => (project.entry ? detectLanguage(project.entry, Object.keys(project.files)) : null), [project.entry, project.files]);
-  const usesScriptc = !isPython(project.entry) && !entryLanguage;
+  // Web apps (Vite, Next.js, Nuxt…) run with their own dev server in the Preview pane
+  const web = useMemo(() => detectFramework(project.files), [project.files]);
+  const usesScriptc = !isPython(project.entry) && !entryLanguage && !web;
+  const [showPreview, setShowPreview] = useState(false);
+  const devServer = useDevServer(project.name, project.files, !!web);
   const hasPython = useMemo(() => Object.keys(project.files).some((f) => isPython(f) || f === 'pyproject.toml'), [project.files]);
   const [building, setBuilding] = useState(false);
   const [lastBuild, setLastBuild] = useState<CompileResult | null>(null);
@@ -407,13 +415,21 @@ export function Workspace() {
     setTimeout(() => terminalRun.current?.('run'), 0);
   }, []);
 
+  const { start: startDevServer, state: devState } = devServer;
+  const runPreview = useCallback(() => {
+    setShowPreview(true);
+    if (devState.status !== 'ready' && devState.status !== 'installing' && devState.status !== 'starting') startDevServer();
+  }, [devState.status, startDevServer]);
+  const runApp = web ? runPreview : runInTerminal;
+
   // ---------------------------------------------------------------------------
   // Commands & shortcuts
   // ---------------------------------------------------------------------------
 
   const commands = useMemo<Command[]>(() => [
     { id: 'build.compile', category: 'Build', title: 'Compile', keys: DEFAULT_KEYS['build.compile'], run: compileOrRun },
-    { id: 'build.run', category: 'Build', title: 'Run in terminal (WASM)', keys: DEFAULT_KEYS['build.run'], run: runInTerminal },
+    { id: 'build.run', category: 'Build', title: web ? `Run ${web.label} with its dev server` : 'Run in terminal', keys: DEFAULT_KEYS['build.run'], run: runApp },
+    { id: 'view.preview', category: 'View', title: 'Toggle preview', keys: DEFAULT_KEYS['view.preview'], run: () => setShowPreview((v) => !v), enabled: !!web },
     { id: 'build.coverage', category: 'Build', title: 'Analyze scriptc coverage', run: () => void analyze() },
     { id: 'build.inspect', category: 'Build', title: 'Inspect last build output', run: () => lastBuild && setViewer(lastBuild), enabled: !!lastBuild?.success && lastBuild.output !== undefined },
     ...TARGET_GROUPS.flatMap((group) =>
@@ -444,7 +460,7 @@ export function Workspace() {
     { id: 'collab.toggle', category: 'Collaboration', title: collab ? 'Leave live session' : 'Start live session', run: () => setCollab((v) => !v) },
     { id: 'prefs.settings', category: 'Preferences', title: 'Settings', keys: DEFAULT_KEYS['prefs.settings'], run: () => { setSettingsTab('general'); setDialog('settings'); } },
     { id: 'prefs.maintenance', category: 'Preferences', title: 'Updates and health checks', run: () => { setSettingsTab('maintenance'); setDialog('settings'); } },
-  ], [compileOrRun, runInTerminal, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, collab]);
+  ], [compileOrRun, runApp, web, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, collab]);
 
   const bindings = useMemo(() => {
     const map: Record<string, string> = { ...DEFAULT_KEYS, ...settings.keybindings };
@@ -544,8 +560,10 @@ export function Workspace() {
     </div>
   );
 
+  // Web apps have no scriptc build: their side panel opens on the agent instead
+  const shownPanel: PanelId = web && panel === 'build' ? 'agent' : panel;
   const panelVisible = (id: PanelId) =>
-    id === 'python' ? hasPython || panel === 'python' : id === 'languages' ? !!entryLanguage || panel === 'languages' : id === 'package' ? !hasPython || 'package.json' in project.files || panel === 'package' : true;
+    id === 'build' ? !web : id === 'python' ? hasPython || panel === 'python' : id === 'languages' ? !!entryLanguage || panel === 'languages' : id === 'package' ? !hasPython || 'package.json' in project.files || panel === 'package' : true;
 
   return (
     <ActionsContext.Provider value={actions}>
@@ -579,13 +597,19 @@ export function Workspace() {
 
           <div className="ml-auto flex items-center gap-2">
             {usesScriptc && <OutputMenu target={target} options={settings.build} onTarget={setTarget} onOptions={(patch) => updateSettings({ build: { ...settings.build, ...patch } })} />}
-            <button
-              onClick={runInTerminal}
-              className={`btn btn-sm ${usesScriptc ? 'btn-secondary' : 'btn-primary'}`}
-              title={`${isPython(project.entry) ? 'Run with uv' : entryLanguage ? `Run with ${entryLanguage.name}` : 'Run as WASM'} in the terminal (${formatCombo(bindings['build.run'] ?? '', isMac)})`}
-            >
-              Run
-            </button>
+            {web && !showPreview && devState.status === 'ready' ? (
+              <button onClick={() => setShowPreview(true)} className="btn btn-primary btn-sm" title={`Show the running app (${formatCombo(bindings['view.preview'] ?? '', isMac)})`}>
+                <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" /> Preview
+              </button>
+            ) : (
+              <button
+                onClick={runApp}
+                className={`btn btn-sm ${usesScriptc ? 'btn-secondary' : 'btn-primary'}`}
+                title={`${web ? `Start ${web.label} and preview it` : isPython(project.entry) ? 'Run with uv in the terminal' : entryLanguage ? `Run with ${entryLanguage.name} in the terminal` : 'Run as WASM in the terminal'} (${formatCombo(bindings['build.run'] ?? '', isMac)})`}
+              >
+                Run
+              </button>
+            )}
             {usesScriptc && <button onClick={compileOrRun} disabled={building} className="btn btn-primary btn-sm" title={formatCombo(bindings['build.compile'] ?? '', isMac)}>
               {building ? 'Compiling…' : 'Compile'}
               <span className="kbd border-black/25 text-[10px] text-[var(--color-accent-fg)]/70">{formatCombo(bindings['build.compile'] ?? '', isMac)}</span>
@@ -681,16 +705,19 @@ export function Workspace() {
                   <button onClick={() => setZen((v) => !v)} className="btn btn-ghost btn-sm" aria-pressed={zen} title={formatCombo(bindings['view.zen'] ?? '', isMac)}>Zen</button>
                 </div>
               </div>
-              {proposals.active ? (
-                <div className="min-h-0 flex-1">
-                  <ProposalView key={proposals.active.id} proposal={proposals.active} />
-                </div>
-              ) : (
-                <div className="flex min-h-0 flex-1 divide-x divide-border">
-                  {editorPane(active)}
-                  {split && editorPane(split, true)}
-                </div>
-              )}
+              <div className="flex min-h-0 flex-1">
+                {proposals.active ? (
+                  <div className="min-h-0 min-w-0 flex-1">
+                    <ProposalView key={proposals.active.id} proposal={proposals.active} />
+                  </div>
+                ) : (
+                  <div className="flex min-h-0 min-w-0 flex-1 divide-x divide-border">
+                    {editorPane(active)}
+                    {split && !showPreview && editorPane(split, true)}
+                  </div>
+                )}
+                {web && showPreview && <PreviewPane detected={web} server={devServer} onClose={() => setShowPreview(false)} />}
+              </div>
             </section>
 
             {showTerminal && (
@@ -726,10 +753,10 @@ export function Workspace() {
                   <button
                     key={p.id}
                     role="tab"
-                    aria-selected={panel === p.id}
+                    aria-selected={shownPanel === p.id}
                     onClick={() => setPanel(p.id)}
                     className={`flex h-10 shrink-0 items-center gap-1.5 px-2.5 text-[13px] transition-colors ${
-                      panel === p.id ? 'text-gray-100 shadow-[inset_0_-2px_0_var(--color-accent)]' : 'text-gray-400 hover:text-gray-100'
+                      shownPanel === p.id ? 'text-gray-100 shadow-[inset_0_-2px_0_var(--color-accent)]' : 'text-gray-400 hover:text-gray-100'
                     }`}
                   >
                     {p.label}
@@ -739,21 +766,21 @@ export function Workspace() {
                 ))}
               </div>
               <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto">
-                {panel === 'build' && (
+                {shownPanel === 'build' && (
                   <BuildPanel result={lastBuild} building={building} coverage={coverage} analyzing={analyzing} onCoverage={() => void analyze()} lastRun={lastRun} />
                 )}
-                {panel === 'git' && <GitPanel user={user} />}
-                {panel === 'ai' && <AiPanel diagnostics={diagnostics} getSelection={() => {
+                {shownPanel === 'git' && <GitPanel user={user} />}
+                {shownPanel === 'ai' && <AiPanel diagnostics={diagnostics} getSelection={() => {
                   const editor = editorRef.current;
                   const selection = editor?.getSelection();
                   return selection && !selection.isEmpty() ? editor?.getModel()?.getValueInRange(selection) ?? '' : '';
                 }} />}
-                {panel === 'agent' && <AgentPanel />}
-                {panel === 'history' && <HistoryPanel />}
-                {panel === 'graph' && <GraphPanel />}
-                {panel === 'package' && <PackagePanel />}
-                {panel === 'python' && <PythonPanel />}
-                {panel === 'languages' && <LanguagePanel key={`${project.name}:${project.entry}`} />}
+                {shownPanel === 'agent' && <AgentPanel />}
+                {shownPanel === 'history' && <HistoryPanel />}
+                {shownPanel === 'graph' && <GraphPanel />}
+                {shownPanel === 'package' && <PackagePanel />}
+                {shownPanel === 'python' && <PythonPanel />}
+                {shownPanel === 'languages' && <LanguagePanel key={`${project.name}:${project.entry}`} />}
               </div>
             </aside>
           )}
@@ -763,6 +790,11 @@ export function Workspace() {
         <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-border bg-[var(--bar)] px-3 font-mono text-[11px] text-gray-400" data-zen-hide>
           <span className="flex items-center gap-1.5"><span className="dot text-accent" aria-hidden="true" />{project.entry ? project.entry : 'no entry file'}</span>
           <span className="hidden sm:inline">{Object.keys(project.files).length} files</span>
+          {web && devState.status !== 'none' && (
+            <button onClick={() => setShowPreview((v) => !v)} className={`rounded px-1.5 hover:bg-white/[0.06] ${devState.status === 'ready' ? 'text-accent' : devState.status === 'failed' ? 'text-danger' : ''}`} title={devState.url ?? devState.error ?? ''}>
+              {devState.status === 'ready' ? `● ${web.label} · ${devState.url?.replace(/^https?:\/\//, '').replace(/\/$/, '')}` : `${web.label} · ${devState.status}`}
+            </button>
+          )}
           {lastBuild && <span className={lastBuild.success ? 'text-accent' : 'text-danger'}>{lastBuild.success ? `✓ built ${lastBuild.durationMs}ms` : `✕ ${diagnostics.length || 1} problem${diagnostics.length > 1 ? 's' : ''}`}</span>}
           {update?.canApply && (
             <button onClick={() => { setSettingsTab('maintenance'); setDialog('settings'); }} className="rounded px-1.5 text-accent hover:bg-[var(--accent-soft)]" title="A newer version of the studio is available">
