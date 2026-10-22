@@ -1,38 +1,43 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { CodeEditor, DiffView, type EditorInstance } from '@/components/CodeEditor';
 import { analyzeCoverageBrowser, compileTypeScriptBrowser, type CompileResult, type CoverageResult, type Diagnostic } from '@/lib/compiler-browser';
-import { TEMPLATES, templateFiles } from '@/lib/templates';
 import { WebSocketManager } from '@/lib/websocket';
 import type { CompileTarget, GitHubUserInfo } from '@/types';
 import { ActionsContext, type PanelId, type RunOutcome, type WorkspaceActions } from './actions';
 import { CommandPalette, type Command } from './components/CommandPalette';
 import { Dialog } from './components/Dialog';
 import { FileTree } from './components/FileTree';
-import { ProjectDialog } from './components/ProjectDialog';
-import { SettingsDialog, type SettingsTab } from './components/SettingsDialog';
+import type { SettingsTab } from './components/SettingsDialog';
 import { useUpdateStatus } from './maintenance-client';
-import { TemplatesDialog } from './components/TemplatesDialog';
 import { Terminal } from './components/Terminal';
 import { canFormat, formatSource } from './format';
-import { AgentPanel } from './panels/AgentPanel';
-import { AiPanel } from './panels/AiPanel';
 import { BuildPanel } from './panels/BuildPanel';
-import { GitPanel } from './panels/GitPanel';
-import { GraphPanel } from './panels/GraphPanel';
-import { HistoryPanel } from './panels/HistoryPanel';
-import { PackagePanel } from './panels/PackagePanel';
 import { basename, comboFromEvent, diffStatus, formatCombo, isPython, languageFor } from './project';
-import { PythonPanel } from './panels/PythonPanel';
 import { getPythonEnv, pythonProjectId, streamPython } from './python-client';
 import { base64ToArrayBuffer, runWasm } from './runner';
 import { OutputMenu } from './components/OutputMenu';
-import { ArtifactDialog } from './components/ArtifactDialog';
 import { TARGET_GROUPS, targetInfo } from './targets';
 import { useWorkspace } from './store';
 import { useToast } from './toasts';
+
+// Everything beyond the editor, terminal and Build panel loads the first time it is opened, so the studio starts with
+// only what it needs. The chunks are small and local, so opening one feels instant.
+const PanelLoading = () => <div className="p-4 font-mono text-xs text-gray-500">Loading…</div>;
+const AgentPanel = dynamic(() => import('./panels/AgentPanel').then((m) => m.AgentPanel), { ssr: false, loading: PanelLoading });
+const AiPanel = dynamic(() => import('./panels/AiPanel').then((m) => m.AiPanel), { ssr: false, loading: PanelLoading });
+const GitPanel = dynamic(() => import('./panels/GitPanel').then((m) => m.GitPanel), { ssr: false, loading: PanelLoading });
+const GraphPanel = dynamic(() => import('./panels/GraphPanel').then((m) => m.GraphPanel), { ssr: false, loading: PanelLoading });
+const HistoryPanel = dynamic(() => import('./panels/HistoryPanel').then((m) => m.HistoryPanel), { ssr: false, loading: PanelLoading });
+const PackagePanel = dynamic(() => import('./panels/PackagePanel').then((m) => m.PackagePanel), { ssr: false, loading: PanelLoading });
+const PythonPanel = dynamic(() => import('./panels/PythonPanel').then((m) => m.PythonPanel), { ssr: false, loading: PanelLoading });
+const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then((m) => m.SettingsDialog), { ssr: false });
+const TemplatesDialog = dynamic(() => import('./components/TemplatesDialog').then((m) => m.TemplatesDialog), { ssr: false });
+const ProjectDialog = dynamic(() => import('./components/ProjectDialog').then((m) => m.ProjectDialog), { ssr: false });
+const ArtifactDialog = dynamic(() => import('./components/ArtifactDialog').then((m) => m.ArtifactDialog), { ssr: false });
 
 const PANELS: { id: PanelId; label: string; glyph: string }[] = [
   { id: 'build', label: 'Build', glyph: '▶' },
@@ -128,12 +133,21 @@ export function Workspace() {
       notify({ kind: 'success', title: label });
       window.history.replaceState(null, '', window.location.pathname);
     };
+    const fail = () => notify({ kind: 'error', title: 'Could not read the link', detail: 'It may be truncated or from an older version.' });
+    if (params.get('template')) {
+      // The template catalogue is large; load it only when a link asks for it
+      import('@/lib/templates')
+        .then(({ TEMPLATES, templateFiles }) => {
+          const template = TEMPLATES.find((t) => t.id === params.get('template'));
+          if (!template) return;
+          const { files, entry } = templateFiles(template);
+          load(files, entry, template.id, `Opened template: ${template.name}`);
+        })
+        .catch(fail);
+      return;
+    }
     try {
-      const template = TEMPLATES.find((t) => t.id === params.get('template'));
-      if (template) {
-        const { files, entry } = templateFiles(template);
-        load(files, entry, template.id, `Opened template: ${template.name}`);
-      } else if (params.get('project')) {
+      if (params.get('project')) {
         const data = JSON.parse(decodeURIComponent(atob(params.get('project')!)));
         if (data && typeof data.files === 'object') {
           load(data.files, data.entry, typeof data.name === 'string' ? data.name : 'shared', 'Opened shared project');
@@ -146,7 +160,7 @@ export function Workspace() {
         }
       }
     } catch {
-      notify({ kind: 'error', title: 'Could not read the link', detail: 'It may be truncated or from an older version.' });
+      fail();
     }
   }, [hydrated, dispatch, notify, saveSnapshot]);
 

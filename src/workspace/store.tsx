@@ -7,7 +7,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
-import { DEFAULT_CODE } from '@/lib/templates';
+import { DEFAULT_CODE } from '@/lib/default-code';
 import type { CompileTarget } from '@/types';
 import { deletePath, isRunnable, isValidPath, movePath, type Project } from './project';
 import { DEFAULT_APPEARANCE, normalizeAppearance, type Appearance } from './appearance';

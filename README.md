@@ -195,6 +195,27 @@ Python is on by default, but:
 
 ---
 
+## Performance
+
+Measured on a Linux machine over loopback with a production build (`npm run build && npm start`), so treat the figures as a
+guide to proportions rather than promises:
+
+| | |
+|---|---|
+| App JavaScript on first load | **187 KB** gzip (down from 247 KB: Git, Python, Agent, History, Graph, Package panels and the Settings, Templates, Project and output dialogs now load the first time you open them) |
+| Code editor | ~570 KB brotli, served from this server and cached for a year (it used to come from a public CDN, which also meant no editor offline). Ready about 1.2 s after a cold load |
+| First paint | ~190 ms; the page is interactive before the editor arrives |
+| Server | starts serving in ~0.8 s, ~125 MB resident when idle |
+| Builds | ~0.6 s for a small program (type-check + IR, WASM or native), two at a time by default (`MAX_CONCURRENT_BUILDS`) |
+| Disk (`node_modules`) | ~1.6 GB, of which scriptc's compiler binaries ~410 MB, the bundled zig ~410 MB (offline WASM builds), Next.js ~200 MB and the editor ~105 MB (only its 25 MB `min/` folder is ever served) |
+
+Things that keep it light: the studio makes no request to any third party (models are the only exception, and only the
+one you choose); idle MCP sessions close after five minutes; compiled temp files, uv's cache and idle Python environments
+are cleaned up (Settings → Maintenance shows and trims them); connectors, the updater and the doctor load their code only when
+used. If disk matters more than offline WASM builds, remove `@zigc/*` after install (WASM builds then need zig on your `PATH`).
+
+---
+
 ## Maintenance
 
 The studio looks after itself, and asks before it changes anything.

@@ -33,20 +33,7 @@ export function templateFiles(template: Template): { files: Record<string, strin
   return { files: { [entry]: template.code, ...template.files }, entry };
 }
 
-export const DEFAULT_CODE = `// NanoCLI Studio — write TypeScript, get a native binary.
-// Click "Compile" to build it with scriptc.
-
-const args = process.argv.slice(2);
-const name = args[0] ?? 'World';
-
-console.log(\`Hello, \${name}!\`);
-
-function add(a: number, b: number): number {
-  return a + b;
-}
-
-console.log(\`3 + 5 = \${add(3, 5)}\`);
-`;
+export { DEFAULT_CODE } from './default-code.ts';
 
 export const TEMPLATES: Template[] = [
   {

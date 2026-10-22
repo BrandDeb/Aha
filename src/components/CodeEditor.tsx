@@ -2,10 +2,15 @@
 
 import { useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import loader from '@monaco-editor/loader';
 import type { BeforeMount, DiffOnMount, Monaco, OnMount } from '@monaco-editor/react';
 import type { Diagnostic } from '@/lib/compiler-browser';
 import { NODE_TYPES } from '@/lib/monaco-node-types';
 import { DEFAULT_APPEARANCE, accentTokens, syntaxColors } from '@/workspace/appearance';
+
+// Serve the editor from this server instead of a public CDN: it works offline, loads from the same
+// origin as the app, and never sends a request to a third party. (See src/app/monaco/.)
+loader.config({ paths: { vs: `/monaco/${process.env.NEXT_PUBLIC_MONACO_VERSION}/vs` } });
 
 const loading = (
   <div className="flex h-full items-center justify-center font-mono text-sm text-gray-500">Loading editor…</div>
