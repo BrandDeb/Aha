@@ -19,7 +19,7 @@
     "docker:down": "docker-compose down"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.131.0",
+    "@anthropic-ai/sdk": "^0.135.0",
     "@bjorn3/browser_wasi_shim": "^0.4.2",
     "@scriptc/runtime-wasm32-wasi": "^0.2.2",
     "fflate": "^0.8.3",
