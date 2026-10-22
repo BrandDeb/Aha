@@ -426,7 +426,8 @@ Maintenance only works when the studio listens on your own machine (the default)
 | Route | |
 |---|---|
 | `/` | Workspace |
-| `/landing` | Overview |
+| `/landing` | Product page |
+| `/pricing` | Plans (Free, Pro, Premium) and a comparison; edit them in `src/lib/pricing.ts` |
 | `/faq` | Searchable FAQ |
 | `/onboarding` | Three-step tour ending in the workspace with a template (`/?template=<id>`) |
 | `/?kit=<id>` | Opens a built-in [field kit](#field-kits) |
@@ -573,6 +574,12 @@ GET /api/download?filename=<filename>
 ```bash
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
 PORT=3000
+
+# Pricing page: checkout links for the paid plans (https only; until set, the buttons
+# say paid plans open soon and lead to the free studio)
+NEXT_PUBLIC_CHECKOUT_PRO_URL=
+NEXT_PUBLIC_CHECKOUT_PREMIUM_URL=
+NEXT_PUBLIC_SALES_URL=
 
 # GitHub OAuth (create an OAuth app with callback <base>/api/github/callback)
 GITHUB_CLIENT_ID=

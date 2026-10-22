@@ -170,11 +170,11 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
     if (!hydrated) return;
     const saved = load<Proposal[]>(STORE_KEY, []);
     /* eslint-disable react-hooks/set-state-in-effect -- storage is only readable after hydration */
-    setProposals(
-      saved
-        .filter((p) => p && typeof p.id === 'string' && Array.isArray(p.lanes))
-        .map((p) => (p.status === 'working' ? { ...p, status: 'review', pending: undefined, outcome: { reason: 'aborted', summary: 'Stopped when the page was reloaded.' }, lanes: p.lanes.map((l) => ({ ...l, status: 'done' })) } : { ...p, pending: undefined }))
-    );
+    const restored = saved
+      .filter((p) => p && typeof p.id === 'string' && Array.isArray(p.lanes))
+      .map((p) => (p.status === 'working' ? { ...p, status: 'review' as const, pending: undefined, outcome: { reason: 'aborted' as const, summary: 'Stopped when the page was reloaded.' }, lanes: p.lanes.map((l) => ({ ...l, status: 'done' as const })) } : { ...p, pending: undefined }));
+    // Anything started before this ran (the worker, auto-debug) stays, newest first
+    setProposals((prev) => [...prev, ...restored.filter((r) => !prev.some((p) => p.id === r.id))]);
     setPrefsState({ ...DEFAULT_PREFS, ...load<Partial<AgentPrefs>>(PREFS_KEY, {}) });
     setLoaded(true);
     /* eslint-enable react-hooks/set-state-in-effect */

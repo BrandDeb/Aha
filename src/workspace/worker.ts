@@ -68,7 +68,6 @@ export function useWorker({ projectName, files, entry, failure, onStart }: Optio
   const [tick, setTick] = useState(0);
   const [started, setStarted] = useState<number[]>([]);
   const lastEdit = useRef(0);
-  const firstFiles = useRef(true);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- storage is only readable in the browser */
@@ -78,12 +77,8 @@ export function useWorker({ projectName, files, entry, failure, onStart }: Optio
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [projectName]);
 
-  // Your edits: the worker waits until you pause
+  // Your edits, and opening the page: the worker waits until you pause
   useEffect(() => {
-    if (firstFiles.current) {
-      firstFiles.current = false;
-      return;
-    }
     lastEdit.current = Date.now();
   }, [files]);
 

@@ -2,9 +2,10 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 const NAV = [
-  { href: '/', label: 'Workspace' },
-  { href: '/landing', label: 'Overview' },
+  { href: '/landing', label: 'Product' },
+  { href: '/pricing', label: 'Pricing' },
   { href: '/faq', label: 'FAQ' },
+  { href: '/', label: 'Studio' },
 ] as const;
 
 export function Logo({ compact = false }: { compact?: boolean }) {
@@ -50,17 +51,17 @@ export function SiteHeader({ active, children, center, fluid = false }: SiteHead
         {center && <div className="hidden lg:flex min-w-0 flex-1 items-center justify-center">{center}</div>}
         <div className="ml-auto flex items-center gap-2">
           {children}
-          <a
-            href="https://scriptc.dev"
-            target="_blank"
-            rel="noreferrer"
-            className="hidden sm:inline-flex badge hover:text-gray-100 transition-colors"
-          >
-            <span className="dot text-accent" aria-hidden="true" />
-            scriptc 0.2
-          </a>
         </div>
       </div>
+      {!fluid && (
+        <nav className="flex gap-1 overflow-x-auto px-3 pb-2 text-sm md:hidden" aria-label="Main (mobile)">
+          {NAV.map((item) => (
+            <Link key={item.href} href={item.href} aria-current={active === item.href ? 'page' : undefined} className={`shrink-0 rounded-md px-2.5 py-1 ${active === item.href ? 'bg-white/[0.07] text-gray-100' : 'text-gray-400'}`}>
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      )}
     </header>
   );
 }
@@ -73,11 +74,12 @@ export function SiteFooter() {
           <Logo compact />
           <span>© 2026 BrandDeb. All rights reserved.</span>
         </div>
-        <div className="flex items-center gap-5">
-          <a href="https://scriptc.dev" className="hover:text-gray-100 transition-colors">scriptc docs</a>
-          <a href="https://github.com/vercel-labs/scriptc" className="hover:text-gray-100 transition-colors">scriptc on GitHub</a>
+        <nav className="flex flex-wrap items-center gap-x-5 gap-y-2" aria-label="Footer">
+          <Link href="/landing" className="hover:text-gray-100 transition-colors">Product</Link>
+          <Link href="/pricing" className="hover:text-gray-100 transition-colors">Pricing</Link>
           <Link href="/faq" className="hover:text-gray-100 transition-colors">FAQ</Link>
-        </div>
+          <a href="https://scriptc.dev" className="hover:text-gray-100 transition-colors">scriptc</a>
+        </nav>
       </div>
     </footer>
   );

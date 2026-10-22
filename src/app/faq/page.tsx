@@ -16,7 +16,7 @@ interface FAQItem {
   category: Category;
 }
 
-const CATEGORIES = ['General', 'Compiling', 'Workspace', 'Python', 'GitHub', 'Assistant', 'Self-hosting', 'Security'] as const;
+const CATEGORIES = ['General', 'Agent', 'Field kits', 'Plans', 'Compiling', 'Workspace', 'Python', 'GitHub', 'Assistant', 'Self-hosting', 'Security'] as const;
 type Category = (typeof CATEGORIES)[number];
 
 const FAQS: FAQItem[] = [
@@ -24,7 +24,43 @@ const FAQS: FAQItem[] = [
     id: 'what-is-nanocli',
     category: 'General',
     question: 'What is NanoCLI Studio?',
-    answer: 'A browser IDE for building command-line tools in TypeScript. You write code in a Monaco editor, the server compiles it with scriptc, and you download a native executable or a WebAssembly module.',
+    answer: 'An editor and an AI teammate in one workspace. You write code in 40+ languages and runtimes (smart contracts included) with toolchains installed for you; the agent and the worker make changes on a private copy and hand them back as proposals with the diff and evidence that they build and run. TypeScript can also be compiled by scriptc into a small native executable.',
+  },
+  {
+    id: 'proposals',
+    category: 'Agent',
+    question: 'What is a proposal?',
+    answer: 'Whatever the agent does arrives as a tab next to your files: its plan, the diff, and evidence from the builds and runs it did (“Verified · built ✓ ran ✓”). Your files change only when you press Ship; Discard throws the copy away.',
+  },
+  {
+    id: 'worker',
+    category: 'Agent',
+    question: 'What does the worker do, and can it run away?',
+    answer: 'It keeps a ranked list of useful tasks: the last failure, editor errors, the next step toward what you said you are building, your TODOs, and files no test covers. In Suggest mode you start each one; in Autonomous mode it starts the next about 12 seconds after you stop typing. It works one task at a time, within an hourly budget, never repeats a task, waits for you once three results need review, and pauses after three unverified results. Everything it does is a proposal.',
+  },
+  {
+    id: 'auto-debug',
+    category: 'Agent',
+    question: 'How does automatic debugging work?',
+    answer: 'Every failure (a build error, a crash in any language, a Python traceback, an error in the preview) shows in a bar under the editor with links to where it happened. Debug this hands the agent the error, the code it points at and what changed since the code last worked; it reproduces, fixes and runs it again to prove the fix. With automatic debugging on, that starts by itself once per distinct failure.',
+  },
+  {
+    id: 'kits',
+    category: 'Field kits',
+    question: 'What is a field kit?',
+    answer: 'A project plus its playbook, the environment variables and connectors it needs, checks that prove it works, and house rules for the agent, shared as one .nanokit.json file. Three are built in: a customer API integration, an MCP server for your product, and a data pipeline proof of concept. Each runs on sample data as soon as it opens.',
+  },
+  {
+    id: 'kit-secrets',
+    category: 'Field kits',
+    question: 'Can an exported kit leak our keys?',
+    answer: 'It is designed not to. Environment values are never part of a kit, .env files stay behind, and any file that looks like it holds a key (cloud, model, GitHub, Slack or Stripe keys, private keys, passwords in URLs) is left out and named when you export. Connectors use ${VARIABLE} placeholders instead of secrets.',
+  },
+  {
+    id: 'plans',
+    category: 'Plans',
+    question: 'What is free and what is paid?',
+    answer: 'The whole studio is free with your own model. Pro adds the worker in Autonomous mode, automatic debugging, best-of-three and the native app; Premium adds team features for forward-deployed, ISV and platform teams. See the pricing page for the full comparison.',
   },
   {
     id: 'what-is-scriptc',
