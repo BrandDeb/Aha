@@ -78,7 +78,9 @@ test('Stage: rebasing onto the accepted project keeps only what is still pending
 
 test('Stage: refuses bad paths, huge files and deleting what does not exist', () => {
   const stage = new Stage({});
-  for (const path of ['../evil.ts', '/abs.ts', '.env', 'a b.ts', '']) assert.match(stage.write(path, 'x') ?? '', /not a valid project path/, path);
+  for (const path of ['../evil.ts', '/abs.ts', '.git/config', 'a b.ts', '']) assert.match(stage.write(path, 'x') ?? '', /not a valid project path/, path);
+  for (const path of ['.env', 'app/.env.local', '.env.production']) assert.match(stage.write(path, 'x') ?? '', /holds secrets/, path);
+  assert.equal(stage.write('.env.example', 'API_KEY='), null);
   assert.match(stage.write('big.ts', 'x'.repeat(600 * 1024)) ?? '', /larger than/);
   assert.match(stage.delete('nope.ts') ?? '', /does not exist/);
 });

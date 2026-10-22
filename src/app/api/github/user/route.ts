@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isSameOrigin } from '@/lib/github-session';
 import { safeJsonParse } from '@/lib/utils';
 
 export async function GET(request: NextRequest) {
@@ -14,7 +15,9 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ user: parsed, authenticated: true });
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
+  // Another site must not be able to sign you out
+  if (!isSameOrigin(request)) return NextResponse.json({ error: 'Cross-origin request rejected' }, { status: 403 });
   const response = NextResponse.json({ message: 'Logged out successfully' });
   
   response.cookies.delete('github_token');

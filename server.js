@@ -52,6 +52,32 @@ function isOriginAllowed(origin, host) {
   }
 }
 
+/**
+ * DNS-rebinding defence (mirrors src/lib/host.ts): a page on evil.example can
+ * point its domain at 127.0.0.1, and then its Origin and Host agree. The Host
+ * header still names evil.example, so only this machine's names and the
+ * configured site are accepted.
+ */
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+const hostnameOf = (host) => (host.startsWith('[') ? host.slice(0, host.indexOf(']') + 1) : host.replace(/:\d+$/, ''));
+function isTrustedHost(hostHeader) {
+  if (!hostHeader) return false;
+  const name = hostnameOf(hostHeader.toLowerCase());
+  if (LOCAL_HOSTS.has(name)) return true;
+  const allowed = (process.env.ALLOWED_HOSTS || '').split(',').map((h) => hostnameOf(h.trim().toLowerCase())).filter(Boolean);
+  if (allowed.includes(name)) return true;
+  try {
+    return new URL(process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000').hostname.toLowerCase() === name;
+  } catch {
+    return false;
+  }
+}
+
+const MAX_CLIENTS_PER_ROOM = Number(process.env.WS_MAX_CLIENTS_PER_ROOM) || 16;
+const MAX_ROOMS = Number(process.env.WS_MAX_ROOMS) || 1000;
+/** Messages per second a connection may send (bursts up to twice that); edits are sent per keystroke batch */
+const MESSAGES_PER_SECOND = 40;
+
 function isValidId(value) {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_ID_LENGTH && ID_PATTERN.test(value);
 }
@@ -79,7 +105,7 @@ wsServer.on('request', (request) => {
   const clientId = url.searchParams.get('clientId');
   const clientName = (url.searchParams.get('name') || 'Anonymous').slice(0, MAX_NAME_LENGTH);
   
-  if (!isOriginAllowed(request.origin, request.httpRequest.headers.host)) {
+  if (!isOriginAllowed(request.origin, request.httpRequest.headers.host) || !isTrustedHost(request.httpRequest.headers.host)) {
     request.reject(403, 'Origin not allowed');
     return;
   }
@@ -91,6 +117,10 @@ wsServer.on('request', (request) => {
 
   if (projects.get(projectId)?.has(clientId)) {
     request.reject(409, 'clientId already connected');
+    return;
+  }
+  if ((projects.get(projectId)?.size ?? 0) >= MAX_CLIENTS_PER_ROOM || (!projects.has(projectId) && projects.size >= MAX_ROOMS)) {
+    request.reject(503, 'Too many connections');
     return;
   }
   
@@ -127,9 +157,16 @@ wsServer.on('request', (request) => {
     name: clientName,
   }, clientId);
   
-  // Handle incoming messages
+  // Handle incoming messages: a token bucket per connection, so one client can't flood a room
+  let tokens = MESSAGES_PER_SECOND * 2;
+  let refilled = Date.now();
   connection.on('message', (message) => {
     if (message.type !== 'utf8') return;
+    const now = Date.now();
+    tokens = Math.min(MESSAGES_PER_SECOND * 2, tokens + ((now - refilled) / 1000) * MESSAGES_PER_SECOND);
+    refilled = now;
+    if (tokens < 1) return;
+    tokens -= 1;
     try {
       const data = JSON.parse(message.utf8Data);
       if (!data || typeof data !== 'object' || Array.isArray(data)) return;

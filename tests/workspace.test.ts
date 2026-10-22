@@ -111,13 +111,14 @@ test('describeBinary recognises the artifacts scriptc produces', () => {
 import { normalizeName, parseLockVersions, parsePyproject, requirementName } from '../src/workspace/pyproject.ts';
 import { isPython, isRunnable, isValidPath, languageFor } from '../src/workspace/project.ts';
 
-test('Python files are runnable, highlighted, and .python-version is the one allowed dotfile', () => {
+test('Python files are runnable and highlighted; dotfiles are allowed but tool-owned folders are not', () => {
   assert.ok(isPython('src/app/main.py') && !isPython('main.pyc') && !isPython('main.ts'));
   assert.ok(isRunnable('main.py') && isRunnable('main.ts') && !isRunnable('notes.md'));
   assert.equal(languageFor('x.py'), 'python');
   assert.equal(languageFor('pyproject.toml'), 'ini');
   assert.ok(isValidPath('.python-version'));
-  assert.ok(!isValidPath('.env') && !isValidPath('.venv/bin/x') && !isValidPath('../x.py'));
+  assert.ok(isValidPath('.env'), 'web frameworks read .env');
+  assert.ok(!isValidPath('.venv/bin/x') && !isValidPath('.git/config') && !isValidPath('../x.py'));
 });
 
 test('parsePyproject reads name, version, python and dependencies (multi-line, comments, dev group)', () => {

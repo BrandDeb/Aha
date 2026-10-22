@@ -21,11 +21,19 @@ export interface TreeNode {
   children: TreeNode[];
 }
 
-/** Same rules the server enforces (see isValidProjectPath in lib/compiler.ts) */
+/**
+ * Same rules the runners enforce (isSafeRelativePath in lib/proc.ts): no escaping the project, no odd
+ * characters; dotfiles (.npmrc, .env.example) and framework names (+page.svelte, @scope) are fine
+ */
 export function isValidPath(filePath: string): boolean {
-  // .python-version is the one dotfile: `uv python pin` writes it
-  return filePath === '.python-version' || (filePath.length > 0 && filePath.length <= 200 &&
-    /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(filePath));
+  return (
+    filePath.length > 0 &&
+    filePath.length <= 200 &&
+    /^(?:[A-Za-z0-9_@+-][A-Za-z0-9_.@+-]*\/|\.[A-Za-z0-9_][A-Za-z0-9_.@+-]*\/)*\.?[A-Za-z0-9_@+-][A-Za-z0-9_.@+-]*$/.test(filePath) &&
+    !filePath.split('/').some((part) => part === '..' || part === '.') &&
+    // Tool-owned folders never belong in the project: a virtualenv, git's own database
+    !/^(?:\.venv|\.git)\//.test(filePath)
+  );
 }
 
 /** Resolve `target` against a working directory like a shell would */

@@ -501,6 +501,8 @@ NANOCLI_RUN=                 # 0 = don't run other languages, 1 = force on; unse
 NANOCLI_RUN_JOBS=3           # concurrent runs
 NANOCLI_DEV=                 # web app dev servers: 0 = off, 1 = force on; unset = on only when HOST is loopback
 NANOCLI_DEV_SERVERS=3        # dev servers running at once
+TRUST_PROXY_HOPS=1           # reverse proxies in front of the studio (rate limits use the address the last one saw)
+COMPILE_REQUESTS_PER_10_MIN=300
 NANOCLI_RUN_REQUESTS_PER_10_MIN=150
 NANOCLI_CONNECTORS=          # 0 = off, 1 = force on; unset = on only when HOST is loopback
 NANOCLI_CONNECTOR_CALLS_PER_10_MIN=400  # per client
@@ -558,6 +560,11 @@ pull request; contributions are assigned to the owner (see [LICENSE](LICENSE), s
 
 New templates go in `src/lib/templates.ts`; the test suite compiles each one with scriptc, so keep them
 inside scriptc's supported surface (narrow `catch` bindings, no `eval`, ES modules).
+
+## Security
+
+What protects each part of the studio, what it deliberately does not (running a project is not a sandbox), and the
+latest audit: [SECURITY.md](SECURITY.md).
 
 ## License
 

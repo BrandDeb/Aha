@@ -46,6 +46,8 @@ export class Stage {
 
   write(path: string, content: string): string | null {
     if (!isValidPath(path)) return `“${path}” is not a valid project path (use relative paths like src/util.ts).`;
+    // .env files hold secrets: the agent leaves them to you (.env.example is fine)
+    if (/(?:^|\/)\.env(?:\.(?!example$)[^/]*)?$/.test(path)) return `“${path}” holds secrets, so the agent does not write it. Ask the user to change it, or use .env.example.`;
     if (new TextEncoder().encode(content).length > MAX_FILE_BYTES) return `The file is larger than ${MAX_FILE_BYTES / 1024} KB.`;
     if (!this.edits.has(path) && !(path in this.base) && this.edits.size >= MAX_STAGED_FILES) return `Too many changed files (limit ${MAX_STAGED_FILES}).`;
     if (this.base[path] === content) this.edits.delete(path);

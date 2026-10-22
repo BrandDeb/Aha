@@ -19,7 +19,7 @@ import { canFormat, formatSource } from './format';
 import { BuildPanel } from './panels/BuildPanel';
 import { detectFramework } from '@/lib/frameworks';
 import { detectLanguage } from '@/lib/languages';
-import { basename, comboFromEvent, diffStatus, formatCombo, isPython, languageFor } from './project';
+import { basename, comboFromEvent, diffStatus, formatCombo, isPython, isValidPath, languageFor } from './project';
 import { getPythonEnv, pythonProjectId, streamPython } from './python-client';
 import { runProject } from './run-client';
 import { base64ToArrayBuffer, runWasm } from './runner';
@@ -81,6 +81,12 @@ const DEFAULT_KEYS: Record<string, string> = {
   'prefs.settings': 'Mod+,',
   'agent.ask': 'Mod+L',
 };
+
+/** 128 random bits, URL-safe: a live session's room can't be guessed */
+function newRoomId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -210,7 +216,14 @@ export function Workspace() {
   // Live collaboration: relay edits of the active file
   useEffect(() => {
     if (!collab) return;
-    const room = new URLSearchParams(window.location.search).get('room') ?? project.name.replace(/[^\w-]/g, '') ?? 'room';
+    // Rooms are unguessable and shared by link: joining one means trusting its edits
+    const requested = new URLSearchParams(window.location.search).get('room');
+    const room = requested && /^[A-Za-z0-9_-]{16,64}$/.test(requested) ? requested : newRoomId();
+    if (room !== requested) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('room', room);
+      window.history.replaceState(null, '', url);
+    }
     const manager = new WebSocketManager(room, clientId, user?.login ?? 'Guest');
     wsRef.current = manager;
     manager.connect();
@@ -222,9 +235,12 @@ export function Workspace() {
     manager.on('collaborator_left', (m) => setCollaborators((prev) => prev.filter((c) => c.id !== m.clientId)));
     manager.on('content_update', (m) => {
       const path = typeof m.path === 'string' ? m.path : null;
-      if (path && typeof m.content === 'string') {
-        if (path in projectRef.current.files) dispatch({ type: 'write', path, content: m.content });
-        else dispatch({ type: 'create', path, content: m.content });
+      // Edits from others go through the same rules as your own: a valid path, a sane size
+      if (!path || !isValidPath(path) || typeof m.content !== 'string' || m.content.length > 1024 * 1024) return;
+      if (path in projectRef.current.files) dispatch({ type: 'write', path, content: m.content });
+      else if (Object.keys(projectRef.current.files).length < 500) {
+        dispatch({ type: 'create', path, content: m.content });
+        notify({ kind: 'info', title: `A collaborator added ${path}` });
       }
     });
     return () => {
@@ -586,9 +602,15 @@ export function Workspace() {
             </button>
           )}
           {collab && (
-            <span className="badge hidden md:inline-flex" title={collaborators.map((c) => c.name).join(', ') || 'Waiting for others'}>
+            <button
+              className="badge hidden md:inline-flex"
+              title={`${collaborators.map((c) => c.name).join(', ') || 'Waiting for others'}. Click to copy the invite link.`}
+              onClick={() => {
+                void navigator.clipboard?.writeText(window.location.href).then(() => notify({ kind: 'success', title: 'Invite link copied', detail: 'Anyone with the link can edit this project with you.' }));
+              }}
+            >
               <span className="dot animate-pulse" aria-hidden="true" /> Live · {collaborators.length + 1}
-            </span>
+            </button>
           )}
 
           <div className="hidden min-w-0 flex-1 px-2 md:block">
