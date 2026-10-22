@@ -10,6 +10,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import { DEFAULT_CODE } from '@/lib/templates';
 import type { CompileTarget } from '@/types';
 import { deletePath, isRunnable, isValidPath, movePath, type Project } from './project';
+import { DEFAULT_APPEARANCE, normalizeAppearance, type Appearance } from './appearance';
+import { applyAppearance } from './appearance-dom';
 import { DEFAULT_BUILD_OPTIONS, type BuildOptions } from './targets';
 
 // ---------------------------------------------------------------------------
@@ -30,12 +32,15 @@ export interface Settings {
   keybindings: Record<string, string>;
   /** Built-in extensions that are switched on */
   extensions: Record<string, boolean>;
+  /** Accent colour, background tone and corner radius */
+  appearance: Appearance;
   /** Output target and compiler options for builds */
   target: CompileTarget;
   build: BuildOptions;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  appearance: DEFAULT_APPEARANCE,
   target: 'exe',
   build: DEFAULT_BUILD_OPTIONS,
   theme: 'dark',
@@ -268,6 +273,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         ...storedSettings,
         extensions: { ...DEFAULT_SETTINGS.extensions, ...storedSettings.extensions },
         build: { ...DEFAULT_BUILD_OPTIONS, ...storedSettings.build },
+        appearance: normalizeAppearance(storedSettings.appearance),
       });
     }
     setSnapshots(load<Snapshot[]>(HISTORY_KEY) ?? []);
@@ -290,6 +296,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     root.toggle('dark', settings.theme === 'dark');
     root.toggle('light', settings.theme === 'light');
     root.toggle('hc', settings.highContrast);
+    applyAppearance(settings.appearance, settings.theme === 'light' ? 'light' : 'dark');
   }, [settings, hydrated]);
 
   const updateSettings = useCallback((patch: Partial<Settings>) => {

@@ -21,7 +21,7 @@ export const viewport: Viewport = {
  * Applies the saved theme before first paint so there is no flash.
  * Kept tiny and dependency-free on purpose.
  */
-const themeScript = `try{var s=JSON.parse(localStorage.getItem('nanocli:settings')||'{}');var c=document.documentElement.classList;if(s.theme==='light'){c.remove('dark');c.add('light')}if(s.highContrast)c.add('hc')}catch(e){}`;
+const themeScript = `try{var s=JSON.parse(localStorage.getItem('nanocli:settings')||'{}');var c=document.documentElement.classList;if(s.theme==='light'){c.remove('dark');c.add('light')}if(s.highContrast)c.add('hc');var v=JSON.parse(localStorage.getItem('nanocli:appearance-vars')||'null');if(v){var m=v[s.theme==='light'?'light':'dark'];for(var k in m)document.documentElement.style.setProperty(k,m[k])}}catch(e){}`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

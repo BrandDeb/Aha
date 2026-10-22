@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { ACCENT_PRESETS, DEFAULT_APPEARANCE, accentTokens, isHex, type Radius, type Tone } from '../appearance';
 import { comboFromEvent, formatCombo } from '../project';
 import { DEFAULT_SETTINGS, useWorkspace, type Settings } from '../store';
 import { useToast } from '../toasts';
@@ -16,13 +17,15 @@ export const EXTENSIONS: { id: keyof Settings['extensions'] | string; name: stri
   { id: 'todoHighlights', name: 'TODO highlights', description: 'Underline TODO, FIXME, HACK and NOTE comments.' },
 ];
 
-type Tab = 'general' | 'ai' | 'keys' | 'extensions';
+type Tab = 'general' | 'appearance' | 'ai' | 'keys' | 'extensions';
+const TAB_LABELS: Record<Tab, string> = { general: 'General', appearance: 'Appearance', ai: 'AI models', keys: 'Keyboard shortcuts', extensions: 'Extensions' };
 
 export function SettingsDialog({ commands, isMac, onClose }: { commands: Command[]; isMac: boolean; onClose: () => void }) {
   const { settings, updateSettings } = useWorkspace();
   const { notify } = useToast();
   const [tab, setTab] = useState<Tab>('general');
   const [recording, setRecording] = useState<string | null>(null);
+  const [hexDraft, setHexDraft] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -82,9 +85,9 @@ export function SettingsDialog({ commands, isMac, onClose }: { commands: Command
   return (
     <Dialog title="Settings" onClose={onClose} width="max-w-2xl" tall>
       <div className="segmented mb-4 self-start" role="tablist" aria-label="Settings sections">
-        {(['general', 'ai', 'keys', 'extensions'] as Tab[]).map((t) => (
+        {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
           <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-            {t === 'general' ? 'General' : t === 'ai' ? 'AI models' : t === 'keys' ? 'Keyboard shortcuts' : 'Extensions'}
+            {TAB_LABELS[t]}
           </button>
         ))}
       </div>
@@ -123,6 +126,75 @@ export function SettingsDialog({ commands, isMac, onClose }: { commands: Command
             </label>
             <div className="py-3">
               <button onClick={() => updateSettings({ ...DEFAULT_SETTINGS, keybindings: settings.keybindings })} className="btn btn-ghost btn-sm -ml-3">Reset general settings</button>
+            </div>
+          </div>
+        )}
+
+        {tab === 'appearance' && (
+          <div className="divide-y divide-border">
+            <div className="py-3">
+              <div className="text-sm text-gray-100">Accent colour</div>
+              <p className="mt-0.5 text-xs text-gray-400">Pick any colour. It is adjusted automatically where needed so text stays readable.</p>
+              <div className="mt-3 flex flex-wrap items-center gap-2" role="group" aria-label="Accent presets">
+                {ACCENT_PRESETS.map((preset) => (
+                  <button
+                    key={preset.hex}
+                    title={preset.name}
+                    aria-label={preset.name}
+                    aria-pressed={settings.appearance.accent === preset.hex}
+                    onClick={() => { setHexDraft(null); updateSettings({ appearance: { ...settings.appearance, accent: preset.hex } }); }}
+                    className="h-7 w-7 rounded-full border border-border-strong transition-transform hover:scale-110 aria-pressed:ring-2 aria-pressed:ring-offset-2 aria-pressed:ring-offset-[var(--panel)] aria-pressed:ring-[var(--color-accent)]"
+                    style={{ background: preset.hex }}
+                  />
+                ))}
+                <label className="ml-2 flex items-center gap-2 text-xs text-gray-400">
+                  Custom
+                  <input
+                    type="color"
+                    value={settings.appearance.accent}
+                    onChange={(e) => { setHexDraft(null); updateSettings({ appearance: { ...settings.appearance, accent: e.target.value } }); }}
+                    className="h-7 w-9 cursor-pointer rounded border border-border bg-transparent p-0.5"
+                    aria-label="Custom accent colour"
+                  />
+                  <input
+                    value={hexDraft ?? settings.appearance.accent}
+                    onChange={(e) => {
+                      const value = e.target.value.startsWith('#') ? e.target.value : `#${e.target.value}`;
+                      setHexDraft(value);
+                      if (isHex(value)) updateSettings({ appearance: { ...settings.appearance, accent: value.toLowerCase() } });
+                    }}
+                    onBlur={() => setHexDraft(null)}
+                    spellCheck={false}
+                    maxLength={7}
+                    className="input h-8 w-24 font-mono text-xs"
+                    aria-label="Accent hex value"
+                    aria-invalid={hexDraft !== null && !isHex(hexDraft)}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
+                <span className="rounded px-2 py-1 font-medium" style={{ background: accentTokens(settings.appearance.accent, settings.theme).accent, color: accentTokens(settings.appearance.accent, settings.theme).foreground }}>Preview</span>
+                <span>Buttons, links and highlights use this colour.</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-2.5">
+              <span className="text-sm text-gray-100">Background tone</span>
+              <div className="segmented" role="group" aria-label="Background tone">
+                {(['neutral', 'cool', 'warm'] as Tone[]).map((tone) => (
+                  <button key={tone} aria-pressed={settings.appearance.tone === tone} onClick={() => updateSettings({ appearance: { ...settings.appearance, tone } })} className="capitalize">{tone}</button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-2.5">
+              <span className="text-sm text-gray-100">Corners</span>
+              <div className="segmented" role="group" aria-label="Corner radius">
+                {(['sharp', 'default', 'round'] as Radius[]).map((radius) => (
+                  <button key={radius} aria-pressed={settings.appearance.radius === radius} onClick={() => updateSettings({ appearance: { ...settings.appearance, radius } })} className="capitalize">{radius}</button>
+                ))}
+              </div>
+            </div>
+            <div className="py-3">
+              <button onClick={() => { setHexDraft(null); updateSettings({ appearance: DEFAULT_APPEARANCE }); }} className="btn btn-ghost btn-sm -ml-3">Reset appearance</button>
             </div>
           </div>
         )}

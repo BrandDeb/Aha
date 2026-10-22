@@ -77,6 +77,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Graph** | Import graph from the entry, cycle detection, unused files, unresolved imports, external modules |
 | **Export** | ZIP export/import, secret GitHub Gist, share links that carry the whole project |
 | **Editing** | Split view, zen mode, command palette (⌘K), remappable shortcuts with export/import, built-in extensions (minimap, word wrap, bracket pairs, sticky scroll, TODO highlights, byte field) |
+| **Appearance** | Any accent colour (presets, colour picker or hex), background tone and corner radius in Settings → Appearance; the accent is adjusted automatically so text stays readable in light and dark, and the editor's syntax colours follow it |
 | **Accessibility** | Light, dark and high-contrast themes; ARIA tree, tabs and dialogs with focus management; skip link; live regions for builds and toasts; reduced motion respected |
 | **Python (uv)** | Python projects managed with [uv](https://docs.astral.sh/uv/): run files, add/remove/sync/lock/tree from a Packages panel or the terminal, pin a Python version, inline-script dependencies, environment variables for API keys, files your program writes land in the explorer. uv is detected, or downloaded from the official release with a checksum |
 | **Templates** | Eleven TypeScript starters (CI compiles every one with scriptc) and six Python/AI starters: LLM agent with tool calling, embeddings + search (RAG), local models (Ollama), pandas data analysis, an MCP server, a single-file uv script |

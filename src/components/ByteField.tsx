@@ -28,7 +28,7 @@ export function ByteField({ intensity = 'ambient' }: { intensity?: 'ambient' | '
     const cell = 24; // width of one "xx " byte column
     const gutter = 92; // offset column
 
-    let ink = '52 232 138';
+    let ink = '90 162 255';
     let width = 0;
     let height = 0;
     let frame = 0;
@@ -36,7 +36,7 @@ export function ByteField({ intensity = 'ambient' }: { intensity?: 'ambient' | '
     let scan = -200;
 
     const readInk = () => {
-      ink = getComputedStyle(document.documentElement).getPropertyValue('--byte-ink').trim() || '52 232 138';
+      ink = getComputedStyle(document.documentElement).getPropertyValue('--byte-ink').trim() || '90 162 255';
     };
 
     const resize = () => {

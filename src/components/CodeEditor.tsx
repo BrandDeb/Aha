@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import type { BeforeMount, DiffOnMount, Monaco, OnMount } from '@monaco-editor/react';
 import type { Diagnostic } from '@/lib/compiler-browser';
 import { NODE_TYPES } from '@/lib/monaco-node-types';
+import { DEFAULT_APPEARANCE, accentTokens, syntaxColors } from '@/workspace/appearance';
 
 const loading = (
   <div className="flex h-full items-center justify-center font-mono text-sm text-gray-500">Loading editor…</div>
@@ -75,33 +76,9 @@ function registerCompilerOutputLanguages(monaco: Monaco) {
   });
 }
 
-export const configureMonaco: BeforeMount = (monaco) => {
-  // scriptc programs target Node, not the browser: no DOM lib, Node globals,
-  // and every file is its own module so top-level names don't collide.
-  if (!languageConfigured) {
-    languageConfigured = true;
-    const ts = monaco.languages.typescript;
-    const options = {
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.NodeJs,
-      lib: ['es2023'],
-      strict: true,
-      noEmit: true,
-      allowNonTsExtensions: true,
-      allowJs: true,
-      moduleDetection: 3, // force: treat every file as a module
-    };
-    ts.typescriptDefaults.setCompilerOptions(options);
-    ts.javascriptDefaults.setCompilerOptions(options);
-    // Without this the worker only sees the open file, so imports between project files can't resolve
-    ts.typescriptDefaults.setEagerModelSync(true);
-    ts.javascriptDefaults.setEagerModelSync(true);
-    ts.typescriptDefaults.addExtraLib(NODE_TYPES, 'file:///node_modules/@types/node-lite/index.d.ts');
-    registerCompilerOutputLanguages(monaco);
-  }
-
-  const colors = (dark: boolean) => dark
+/** Editor chrome colours for a mode, with the accent on the cursor and selection */
+function colors(dark: boolean, accent: string) {
+  return dark
     ? {
         'editor.background': '#00000000',
         'editor.foreground': '#f5f5f4',
@@ -109,9 +86,9 @@ export const configureMonaco: BeforeMount = (monaco) => {
         'editorLineNumber.activeForeground': '#d4d4d9',
         'editor.lineHighlightBackground': '#ffffff08',
         'editor.lineHighlightBorder': '#00000000',
-        'editor.selectionBackground': '#34e88a33',
+        'editor.selectionBackground': `${accent}33`,
         'editor.inactiveSelectionBackground': '#ffffff14',
-        'editorCursor.foreground': '#34e88a',
+        'editorCursor.foreground': accent,
         'editorIndentGuide.background1': '#ffffff10',
         'editorIndentGuide.activeBackground1': '#ffffff30',
         'editorWidget.background': '#141418',
@@ -138,7 +115,7 @@ export const configureMonaco: BeforeMount = (monaco) => {
         'editor.lineHighlightBackground': '#0000000a',
         'editor.lineHighlightBorder': '#00000000',
         'editor.selectionBackground': '#00000024',
-        'editorCursor.foreground': '#0a8a4a',
+        'editorCursor.foreground': accent,
         'editorWidget.background': '#fafaf9',
         'editorWidget.border': '#00000024',
         'editorHoverWidget.background': '#fafaf9',
@@ -147,22 +124,29 @@ export const configureMonaco: BeforeMount = (monaco) => {
         'diffEditor.insertedTextBackground': '#0000001a',
         'diffEditor.removedTextBackground': '#c6282826',
       };
+}
 
-  // Restrained syntax colours: the accent marks keywords and strings, everything else stays neutral
+/** The accent the editor themes are built from; the appearance settings change it */
+let editorAccent = DEFAULT_APPEARANCE.accent;
+
+function defineThemes(monaco: Monaco) {
+  const dark = { ...syntaxColors(editorAccent, 'dark'), accent: accentTokens(editorAccent, 'dark').accent };
+  const light = { ...syntaxColors(editorAccent, 'light'), accent: accentTokens(editorAccent, 'light').accent };
+  const strip = (hex: string) => hex.replace('#', '');
   monaco.editor.defineTheme('nanocli-dark', {
     base: 'vs-dark',
     inherit: true,
     rules: [
       { token: '', foreground: 'ededf0' },
       { token: 'comment', foreground: '6b6b76', fontStyle: 'italic' },
-      { token: 'keyword', foreground: '34e88a' },
-      { token: 'string', foreground: '9fd9b8' },
-      { token: 'number', foreground: 'f2c879' },
+      { token: 'keyword', foreground: strip(dark.keyword) },
+      { token: 'string', foreground: strip(dark.string) },
+      { token: 'number', foreground: strip(dark.number) },
       { token: 'type', foreground: 'b9b9c0', fontStyle: 'italic' },
       { token: 'delimiter', foreground: '8a8a93' },
-      { token: 'regexp', foreground: '9fd9b8', fontStyle: 'underline' },
+      { token: 'regexp', foreground: strip(dark.string), fontStyle: 'underline' },
     ],
-    colors: colors(true),
+    colors: colors(true, dark.accent),
   });
   monaco.editor.defineTheme('nanocli-light', {
     base: 'vs',
@@ -170,14 +154,58 @@ export const configureMonaco: BeforeMount = (monaco) => {
     rules: [
       { token: '', foreground: '0e0e10' },
       { token: 'comment', foreground: '8a8a93', fontStyle: 'italic' },
-      { token: 'keyword', foreground: '0a7a43' },
-      { token: 'string', foreground: '1c6b49' },
-      { token: 'number', foreground: '9a5b00' },
+      { token: 'keyword', foreground: strip(light.keyword) },
+      { token: 'string', foreground: strip(light.string) },
+      { token: 'number', foreground: strip(light.number) },
       { token: 'type', foreground: '43434a', fontStyle: 'italic' },
       { token: 'delimiter', foreground: '6e6e78' },
     ],
-    colors: colors(false),
+    colors: colors(false, light.accent),
   });
+}
+
+let monacoInstance: Monaco | null = null;
+
+/**
+ * Re-colour every editor for a new accent. Before Monaco has loaded this only
+ * remembers the accent (the themes are built from it when it does), so
+ * changing the look never downloads the editor.
+ */
+export function setEditorAccent(hex: string): void {
+  editorAccent = hex;
+  if (!monacoInstance) return;
+  defineThemes(monacoInstance);
+  monacoInstance.editor.setTheme(document.documentElement.classList.contains('light') ? 'nanocli-light' : 'nanocli-dark');
+}
+
+export const configureMonaco: BeforeMount = (monaco) => {
+  // scriptc programs target Node, not the browser: no DOM lib, Node globals,
+  // and every file is its own module so top-level names don't collide.
+  if (!languageConfigured) {
+    languageConfigured = true;
+    const ts = monaco.languages.typescript;
+    const options = {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.NodeJs,
+      lib: ['es2023'],
+      strict: true,
+      noEmit: true,
+      allowNonTsExtensions: true,
+      allowJs: true,
+      moduleDetection: 3, // force: treat every file as a module
+    };
+    ts.typescriptDefaults.setCompilerOptions(options);
+    ts.javascriptDefaults.setCompilerOptions(options);
+    // Without this the worker only sees the open file, so imports between project files can't resolve
+    ts.typescriptDefaults.setEagerModelSync(true);
+    ts.javascriptDefaults.setEagerModelSync(true);
+    ts.typescriptDefaults.addExtraLib(NODE_TYPES, 'file:///node_modules/@types/node-lite/index.d.ts');
+    registerCompilerOutputLanguages(monaco);
+  }
+
+  monacoInstance = monaco;
+  defineThemes(monaco);
 };
 
 function editorOptions(fontSize: number, extensions: EditorExtensions) {
