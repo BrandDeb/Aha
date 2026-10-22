@@ -12,6 +12,8 @@ import { useActions } from '../actions';
 import { createAgentHost } from '../agent-host';
 import { useAiConfig } from '../ai-config';
 import { AiModelSettings } from '../components/AiModelSettings';
+import { buildConnectorTools } from '../connectors-client';
+import { getConnectors } from '../connectors-config';
 import { useWorkspace } from '../store';
 import { useToast } from '../toasts';
 
@@ -138,24 +140,32 @@ export function AgentPanel() {
     setOutcome(null);
     setEntries((prev) => [...prev, { id: ++idRef.current, kind: 'text', text: `**You:** ${task}` }]);
     setGoal('');
-    let trusted = trustCommands;
+    // Tools the user said to allow for the rest of this run
+    const trustedTools = new Set<string>();
+    const notice = (text: string) => setEntries((prev) => [...prev, { id: ++idRef.current, kind: 'notice', text }]);
 
     try {
+      const connected = await buildConnectorTools(getConnectors(), controller.signal);
+      if (connected.connected.length) notice(`Connected: ${connected.connected.map((c) => `${c.name} (${c.tools} tool${c.tools === 1 ? '' : 's'})`).join(', ')}`);
+      for (const failure of connected.failed) notice(`${failure.name} is not available: ${failure.error}`);
+
       const result = await runAgent({
         goal: task,
         system: systemPromptFor(stage.files()),
-        tools: workspaceTools(host),
+        tools: [...workspaceTools(host), ...connected.tools],
         callModel: callModelFor(target),
         budget: BUDGETS[budgetId].budget,
-        autoApprove: trusted ? ['read', 'stage', 'build', 'exec'] : ['read', 'stage', 'build'],
+        autoApprove: trustCommands ? ['read', 'stage', 'build', 'exec'] : ['read', 'stage', 'build'],
         history: historyRef.current,
         signal: controller.signal,
         onEvent: handleEvent,
         approve: (call, spec) =>
-          new Promise<boolean>((resolve) => {
+          trustedTools.has(call.name)
+            ? Promise.resolve(true)
+            : new Promise<boolean>((resolve) => {
             setPending({ call, risk: spec.risk });
             answerRef.current = (allowed, always) => {
-              if (always) trusted = true;
+              if (always) trustedTools.add(call.name);
               setPending(null);
               answerRef.current = null;
               resolve(allowed);
@@ -163,6 +173,8 @@ export function AgentPanel() {
           }),
       });
       historyRef.current = result.messages;
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') setOutcome({ reason: 'error', summary: (error as Error).message });
     } finally {
       setRunning(false);
       setPending(null);
@@ -301,11 +313,13 @@ export function AgentPanel() {
 
         {pending && (
           <div role="alertdialog" aria-label="Allow this action?" className="space-y-2 rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] p-3">
-            <div className="text-sm font-medium text-gray-100">The agent wants to run a command on this machine</div>
-            <pre className="overflow-auto rounded-md bg-black/30 p-2 font-mono text-xs text-gray-200">{pending.call.name} {JSON.stringify(pending.call.args)}</pre>
+            <div className="text-sm font-medium text-gray-100">
+              {pending.risk === 'exec' ? 'The agent wants to run a command on this machine' : 'The agent wants to use a connector'}
+            </div>
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-black/30 p-2 font-mono text-xs text-gray-200">{pending.call.name} {JSON.stringify(pending.call.args, null, 1)}</pre>
             <div className="flex flex-wrap gap-1.5">
               <button className="btn btn-primary btn-sm" onClick={() => answerRef.current?.(true)}>Allow once</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => answerRef.current?.(true, true)}>Allow for this run</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => answerRef.current?.(true, true)}>Allow {pending.call.name.length > 18 ? 'this tool' : pending.call.name} this run</button>
               <button className="btn btn-ghost btn-sm" onClick={() => answerRef.current?.(false)}>Decline</button>
             </div>
           </div>

@@ -6,6 +6,7 @@ import { comboFromEvent, formatCombo } from '../project';
 import { DEFAULT_SETTINGS, useWorkspace, type Settings } from '../store';
 import { useToast } from '../toasts';
 import { AiModelSettings } from './AiModelSettings';
+import { ConnectorSettings } from './ConnectorSettings';
 import type { Command } from './CommandPalette';
 import { Dialog } from './Dialog';
 
@@ -17,8 +18,8 @@ export const EXTENSIONS: { id: keyof Settings['extensions'] | string; name: stri
   { id: 'todoHighlights', name: 'TODO highlights', description: 'Underline TODO, FIXME, HACK and NOTE comments.' },
 ];
 
-type Tab = 'general' | 'appearance' | 'ai' | 'keys' | 'extensions';
-const TAB_LABELS: Record<Tab, string> = { general: 'General', appearance: 'Appearance', ai: 'AI models', keys: 'Keyboard shortcuts', extensions: 'Extensions' };
+type Tab = 'general' | 'appearance' | 'ai' | 'connectors' | 'keys' | 'extensions';
+const TAB_LABELS: Record<Tab, string> = { general: 'General', appearance: 'Appearance', ai: 'AI models', connectors: 'Connectors', keys: 'Keyboard shortcuts', extensions: 'Extensions' };
 
 export function SettingsDialog({ commands, isMac, onClose }: { commands: Command[]; isMac: boolean; onClose: () => void }) {
   const { settings, updateSettings } = useWorkspace();
@@ -200,6 +201,8 @@ export function SettingsDialog({ commands, isMac, onClose }: { commands: Command
         )}
 
         {tab === 'ai' && <AiModelSettings />}
+
+        {tab === 'connectors' && <ConnectorSettings />}
 
         {tab === 'keys' && (
           <div>

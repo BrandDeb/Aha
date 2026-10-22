@@ -72,6 +72,8 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
 | **Assistant** | Any model you choose — free tiers (Gemini, Groq, OpenRouter, Cerebras, Mistral), local (Ollama, LM Studio) or your own Anthropic/OpenAI key: explain, fix build errors, generate tests, chat — with one-click Apply that versions the previous file first |
+| **Agent** | Give it a goal; it reads your project, edits a private copy, builds and runs it to check its work, and retries within a budget. You review diffs and accept or discard; see [Agent](#agent) |
+| **Connectors** | MCP servers, GitHub, SQLite/PostgreSQL, web pages and search, and your own commands as agent tools, asked about before use |
 | **Formatting** | Prettier in the browser, format on save, configurable rules |
 | **History** | Versions on save, on successful builds and before pulls/restores/assistant edits; compare and restore |
 | **Graph** | Import graph from the entry, cycle detection, unused files, unresolved imports, external modules |
@@ -110,6 +112,54 @@ The model list loads by itself from each provider (OpenRouter's needs no key) an
 first; a saved model the provider has dropped is swapped for a current one. **Test connection** sends a one-word prompt and
 reports latency. A pasted key that doesn't look like that provider's gets a hint. Ollama accepts requests from `localhost` pages by default; when the
 studio is hosted elsewhere, start it with `OLLAMA_ORIGINS=https://your-studio.example ollama serve`.
+
+---
+
+## Agent
+
+The **Agent** tab takes a goal ("fix the build", "add tests", "add a `--help` flag") and works on it in a loop with
+your own model (the same keys and local models as the assistant; it needs a model that supports tool calling).
+
+- **It edits a private copy.** Every change the agent makes is staged, builds and runs use the staged files, and
+  nothing reaches your project until you accept it, per file or all at once, after reading the diff. Accepting saves a
+  **History** snapshot first, so rolling back is one click. Discarding is free.
+- **It fixes in a loop, within a budget.** It reads and searches your files, writes a plan, edits, runs `build`
+  (scriptc type-check) and `run_program` (WASM sandbox in the tab), reads the diagnostics and tries again. Each run has
+  a step, tool-call, time and fix-attempt budget (Quick, Standard or Long); a call that keeps failing the same way is
+  stopped, and when a budget runs out the model gets one last tool-free turn to say honestly what is done and what isn't.
+- **It asks before anything lasting.** Python and package commands run on your machine and connector tools reach
+  outside the project, so each asks first (Allow once, allow that tool for the run, or decline). Reads, staged edits and
+  sandboxed builds don't need asking.
+- **It keeps notes.** If the project has an `AGENTS.md`, the agent follows it, and may propose additions at the end of a
+  task (a convention, a gotcha, a command that works) as an ordinary change you accept or reject. That is the whole
+  "self-improving" loop: supervised, written in plain text, and reversible.
+
+### Connectors
+
+**Settings → Connectors** gives the agent tools beyond the project. Their settings (and any keys) live in your browser
+and travel to the studio server only with the call that needs them.
+
+| Connector | What the agent gets |
+|---|---|
+| **MCP server** (local process or HTTP) | Any [Model Context Protocol](https://modelcontextprotocol.io) server's tools. Presets for filesystem, git, memory, Context7 docs and Playwright; or point it at your own, including the Python MCP template from the project list |
+| **GitHub** | Search code, read files, issues and pull requests (your sign-in or a token) |
+| **Web pages** | Fetch a public URL as readable text |
+| **Web search** | Brave, Tavily or your own SearXNG |
+| **SQLite / PostgreSQL** | Schema and read-only queries (a single `SELECT`/`WITH` statement, rows capped, read-only connection) |
+| **Custom command** | Any command of yours as a tool, with named parameters passed as plain arguments (never through a shell). Always asks |
+
+Safety model, since the agent reads untrusted text (web pages, issues, query results):
+
+- Connector results are marked as untrusted data, and the agent is told never to follow instructions inside them or to
+  put your files or keys into URLs and queries. Tools that reach outside ask first unless you tick **Don't ask before
+  read-only tools** for that connector.
+- Web fetching resolves the host, refuses private, loopback, link-local and metadata addresses, pins the connection to
+  the address it checked, re-checks every redirect, and caps size and time.
+- Connectors that run programs or read files on the server (MCP over a local process, SQLite, custom commands) work only
+  when the studio listens on your own machine (the default). If it is exposed (`HOST=0.0.0.0`, as in the Docker image)
+  they switch off by themselves; `NANOCLI_CONNECTORS=0` turns every connector off, `NANOCLI_CONNECTORS=1` forces them on.
+- The same origin, trusted-host and rate-limit checks as the Python route apply. Processes get an allow-listed
+  environment (never the server's secrets) and a private `HOME`; idle MCP sessions are closed after five minutes.
 
 ---
 
@@ -224,6 +274,12 @@ requests never touch this route.
 names must be plain requirements (no URLs or paths); environment variables can't override `PATH`, `UV_*`,
 `PYTHON*` or loader variables.
 
+### `/api/connectors`
+
+`GET` → `{ mode: "local" | "hosted" | "off", node, sqlite }`.
+`POST { action: "tools" | "call", connector, tool?, args? }` → `{ ok, tools }` or `{ ok, text, isError }`. The connector's
+configuration is validated on every request and travels with it; the server keeps only warm MCP sessions.
+
 ### `POST /api/coverage`
 
 ```json
@@ -287,6 +343,10 @@ NANOCLI_PY_TIMEOUT_MS=300000          # per program run
 NANOCLI_PY_INSTALL_TIMEOUT_MS=1200000 # per install / sync / lock
 NANOCLI_PY_JOBS=3                     # concurrent Python commands
 NANOCLI_PY_REQUESTS_PER_10_MIN=120    # per client
+
+# Connectors (agent tools: MCP, databases, web, GitHub)
+NANOCLI_CONNECTORS=          # 0 = off, 1 = force on; unset = on only when HOST is loopback
+NANOCLI_CONNECTOR_CALLS_PER_10_MIN=400  # per client
 
 # Compiler
 MAX_CONCURRENT_BUILDS=2
