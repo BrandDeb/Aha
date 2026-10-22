@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NanoCLI Studio</title>
+  <style>
+    :root { color-scheme: dark; --accent: #4f9dff; }
+    html, body { height: 100%; margin: 0; background: #0a0a0b; color: #e8e8ea; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+    main { height: 100%; display: grid; place-items: center; text-align: center; }
+    .mark { font: 600 28px/1 ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: .28em; }
+    .bar { width: 160px; height: 2px; margin: 22px auto 14px; background: #1f1f23; overflow: hidden; border-radius: 2px; }
+    .bar::after { content: ""; display: block; width: 40%; height: 100%; background: var(--accent); animation: slide 1.1s ease-in-out infinite; }
+    @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+    @media (prefers-reduced-motion: reduce) { .bar::after { animation: none; width: 100%; opacity: .6; } }
+    p { margin: 0; color: #8b8b93; }
+    #error { display: none; max-width: 32rem; padding: 0 24px; }
+    #error h1 { font-size: 16px; font-weight: 600; margin: 18px 0 6px; color: #ff6b6b; }
+    #error code { display: block; margin-top: 10px; color: #8b8b93; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <main>
+    <div>
+      <div class="mark">NANOCLI</div>
+      <div id="loading" role="status"><div class="bar" aria-hidden="true"></div><p>Starting the studio…</p></div>
+      <div id="error" role="alert"><h1>The studio couldn’t start</h1><p id="message"></p><code id="detail"></code></div>
+    </div>
+  </main>
+  <script>
+    // Called by the app if the studio's server fails to start
+    window.showError = function (message, detail) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'block';
+      document.getElementById('message').textContent = message;
+      document.getElementById('detail').textContent = detail || '';
+    };
+  </script>
+</body>
+</html>

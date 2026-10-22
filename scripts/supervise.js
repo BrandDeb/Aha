@@ -88,5 +88,16 @@ if (require.main === module) {
   const root = path.join(__dirname, '..');
   const run = supervise({ command: process.execPath, args: [path.join(root, 'server.js')], env: process.env });
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, run.stop);
+  // Started by the desktop app: if the app goes away without stopping us (a crash, a force quit), stop too
+  const parent = Number(process.env.NANOCLI_PARENT_PID);
+  if (parent > 0) {
+    setInterval(() => {
+      try {
+        process.kill(parent, 0);
+      } catch {
+        run.stop();
+      }
+    }, 2000).unref();
+  }
   run.done.then((code) => process.exit(code));
 }

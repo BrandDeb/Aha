@@ -6,15 +6,33 @@
 
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { zigHome, zigPackage, zigVersion } from './zig-install.ts';
+
+const ZIG_EXE = process.platform === 'win32' ? 'zig.exe' : 'zig';
+const hasZig = (root: string) => existsSync(path.join(root, 'node_modules', zigPackage(), 'bin', ZIG_EXE));
+
+/** Where the studio's zig is: installed with its node_modules, or fetched on demand (lib/zig-install.ts) */
+export function zigRoot(): string {
+  const cwd = process.cwd();
+  if (hasZig(cwd)) return cwd;
+  const version = zigVersion(cwd);
+  return version && hasZig(zigHome(version)) ? zigHome(version) : cwd;
+}
+
+/** A zig of your own on PATH (it takes priority over the studio's) */
+export function hasSystemZig(env: Record<string, string | undefined>): boolean {
+  const key = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
+  return (env[key] ?? '').split(path.delimiter).filter(Boolean).some((entry) => existsSync(path.join(entry, ZIG_EXE)));
+}
 
 /** Directory holding the bundled zig binary, or null when it wasn't installed */
-export function bundledZigDir(root: string = process.cwd()): string | null {
+export function bundledZigDir(root: string = zigRoot()): string | null {
   const dir = path.join(root, 'node_modules', '@zigc', `${process.platform}-${process.arch}`, 'bin');
   return existsSync(path.join(dir, process.platform === 'win32' ? 'zig.exe' : 'zig')) ? dir : null;
 }
 
 /** zig's standard library and libc headers, shipped separately as `@zigc/lib` */
-export function bundledZigLib(root: string = process.cwd()): string | null {
+export function bundledZigLib(root: string = zigRoot()): string | null {
   const dir = path.join(root, 'node_modules', '@zigc', 'lib');
   return existsSync(path.join(dir, 'compiler_rt.zig')) ? dir : null;
 }
@@ -33,8 +51,7 @@ export function withBundledZig<T extends Record<string, string | undefined>>(env
   const current = env[key] ?? '';
   const entries = current.split(path.delimiter).filter(Boolean);
   if (entries.includes(dir)) return env;
-  const exe = process.platform === 'win32' ? 'zig.exe' : 'zig';
-  const systemZig = entries.some((entry) => existsSync(path.join(entry, exe)));
+  const systemZig = entries.some((entry) => existsSync(path.join(entry, ZIG_EXE)));
   const lib = systemZig ? null : bundledZigLib(root);
   return {
     ...env,

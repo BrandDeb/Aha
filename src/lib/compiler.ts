@@ -8,7 +8,8 @@ import { promisify } from 'util';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
-import { withBundledZig, ZIG_MISSING_MESSAGE } from './zig.ts';
+import { bundledZigDir, hasSystemZig, withBundledZig, ZIG_MISSING_MESSAGE } from './zig.ts';
+import { ensureZig } from './zig-install.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -98,7 +99,8 @@ interface ExecError extends Error {
   killed?: boolean;
 }
 
-export const TEMP_DIR = path.join(process.cwd(), 'temp');
+// The desktop app points this at its cache folder: the install folder is read-only there
+export const TEMP_DIR = process.env.NANOCLI_TEMP_DIR ? path.resolve(/* turbopackIgnore: true */ process.env.NANOCLI_TEMP_DIR) : path.join(process.cwd(), 'temp');
 
 /** Maximum accepted source size (bytes) */
 export const MAX_CODE_SIZE = 512 * 1024;
@@ -567,6 +569,10 @@ export async function compileTypeScript(options: CompileOptions): Promise<Compil
       success: false,
       error: 'Library builds need a scriptc profile: add a scriptc.profile.json that names the entry module and the exported functions (see the “Library” template).',
     };
+  }
+  // WebAssembly needs zig: the desktop app fetches it the first time (outside the build slot)
+  if (spec.env?.SCRIPTC_TARGET === 'wasm32-wasi' && !bundledZigDir() && !hasSystemZig(process.env)) {
+    await ensureZig().catch((error) => console.warn(`> Could not fetch zig: ${(error as Error).message}`));
   }
   const queuedAt = Date.now();
 
