@@ -228,6 +228,13 @@ function shutdown() {
   }, 5000).unref();
 }
 
+// A crash is better restarted than limped along: log it, then exit so the supervisor
+// (npm run dev / npm start) or the container runtime starts a clean process
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+  process.exit(1);
+});
+
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 

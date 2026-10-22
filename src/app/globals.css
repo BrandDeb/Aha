@@ -87,6 +87,7 @@
   --color-success: var(--color-accent);
   --color-warning: var(--color-gray-300);
   --color-danger: #ff6b6b;
+  --color-warn: #f5b84a;
   --color-green-400: var(--color-accent);
   --color-green-500: var(--color-accent);
   --color-green-600: var(--color-accent);
@@ -143,6 +144,7 @@ html.light {
   --color-accent-hover: #1a60c2;
   --color-accent-fg: #ffffff;
   --color-danger: #c62828;
+  --color-warn: #a35d00;
   --color-red-300: #c62828;
   --color-red-400: #c62828;
   --color-red-500: #c62828;

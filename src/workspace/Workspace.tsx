@@ -12,7 +12,8 @@ import { CommandPalette, type Command } from './components/CommandPalette';
 import { Dialog } from './components/Dialog';
 import { FileTree } from './components/FileTree';
 import { ProjectDialog } from './components/ProjectDialog';
-import { SettingsDialog } from './components/SettingsDialog';
+import { SettingsDialog, type SettingsTab } from './components/SettingsDialog';
+import { useUpdateStatus } from './maintenance-client';
 import { TemplatesDialog } from './components/TemplatesDialog';
 import { Terminal } from './components/Terminal';
 import { canFormat, formatSource } from './format';
@@ -90,6 +91,8 @@ export function Workspace() {
   const [terminalHeight, setTerminalHeight] = useState(220);
   const [zen, setZen] = useState(false);
   const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project'>(null);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
+  const { status: update, refresh: refreshUpdate } = useUpdateStatus();
   const [diff, setDiff] = useState<{ title: string; path: string; original: string; modified: string } | null>(null);
   const [user, setUser] = useState<GitHubUserInfo | null>(null);
   const [collab, setCollab] = useState(false);
@@ -392,7 +395,8 @@ export function Workspace() {
     { id: 'panel.python', category: 'Python', title: 'Open Python (uv) panel', run: () => openPanel('python') },
     { id: 'panel.package', category: 'Package', title: 'Edit package.json', run: () => openPanel('package') },
     { id: 'collab.toggle', category: 'Collaboration', title: collab ? 'Leave live session' : 'Start live session', run: () => setCollab((v) => !v) },
-    { id: 'prefs.settings', category: 'Preferences', title: 'Settings', keys: DEFAULT_KEYS['prefs.settings'], run: () => setDialog('settings') },
+    { id: 'prefs.settings', category: 'Preferences', title: 'Settings', keys: DEFAULT_KEYS['prefs.settings'], run: () => { setSettingsTab('general'); setDialog('settings'); } },
+    { id: 'prefs.maintenance', category: 'Preferences', title: 'Updates and health checks', run: () => { setSettingsTab('maintenance'); setDialog('settings'); } },
   ], [compileOrRun, runInTerminal, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, collab]);
 
   const bindings = useMemo(() => {
@@ -536,7 +540,7 @@ export function Workspace() {
               <span className="kbd border-black/25 text-[10px] text-[var(--color-accent-fg)]/70">{formatCombo(bindings['build.compile'] ?? '', isMac)}</span>
             </button>}
             <button onClick={() => setDialog('palette')} className="btn btn-ghost btn-icon" aria-label="Command palette" title={formatCombo(bindings['view.palette'] ?? '', isMac)}>⌘</button>
-            <button onClick={() => setDialog('settings')} className="btn btn-ghost btn-icon" aria-label="Settings">⚙</button>
+            <button onClick={() => { setSettingsTab('general'); setDialog('settings'); }} className="btn btn-ghost btn-icon" aria-label="Settings">⚙</button>
             {user ? (
               // eslint-disable-next-line @next/next/no-img-element -- remote avatar, no optimisation needed
               <img src={user.avatar_url} alt={`Signed in as ${user.login}`} className="h-7 w-7 rounded-full border border-border-strong" />
@@ -677,6 +681,11 @@ export function Workspace() {
           <span className="flex items-center gap-1.5"><span className="dot text-accent" aria-hidden="true" />{project.entry ? project.entry : 'no entry file'}</span>
           <span className="hidden sm:inline">{Object.keys(project.files).length} files</span>
           {lastBuild && <span className={lastBuild.success ? 'text-accent' : 'text-danger'}>{lastBuild.success ? `✓ built ${lastBuild.durationMs}ms` : `✕ ${diagnostics.length || 1} problem${diagnostics.length > 1 ? 's' : ''}`}</span>}
+          {update?.canApply && (
+            <button onClick={() => { setSettingsTab('maintenance'); setDialog('settings'); }} className="rounded px-1.5 text-accent hover:bg-[var(--accent-soft)]" title="A newer version of the studio is available">
+              ↑ {update.behind} update{update.behind > 1 ? 's' : ''}
+            </button>
+          )}
           <span className="ml-auto hidden sm:inline">scriptc 0.2 · {formatCombo(bindings['view.palette'] ?? '', isMac)} for commands</span>
           <span className="hidden md:inline">© 2026 BrandDeb</span>
         </footer>
@@ -692,7 +701,7 @@ export function Workspace() {
           onClose={() => setDialog(null)}
         />
       )}
-      {dialog === 'settings' && <SettingsDialog commands={commands} isMac={isMac} onClose={() => setDialog(null)} />}
+      {dialog === 'settings' && <SettingsDialog commands={commands} isMac={isMac} onClose={() => setDialog(null)} initialTab={settingsTab} update={update} refreshUpdate={refreshUpdate} />}
       {dialog === 'templates' && <TemplatesDialog onClose={() => setDialog(null)} />}
       {viewer && <ArtifactDialog result={viewer} theme={settings.theme} onClose={() => setViewer(null)} />}
       {dialog === 'project' && <ProjectDialog user={user} onClose={() => setDialog(null)} />}

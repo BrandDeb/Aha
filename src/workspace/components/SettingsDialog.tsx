@@ -7,6 +7,8 @@ import { DEFAULT_SETTINGS, useWorkspace, type Settings } from '../store';
 import { useToast } from '../toasts';
 import { AiModelSettings } from './AiModelSettings';
 import { ConnectorSettings } from './ConnectorSettings';
+import { MaintenanceSettings } from './MaintenanceSettings';
+import type { UpdateStatus } from '../maintenance-client';
 import type { Command } from './CommandPalette';
 import { Dialog } from './Dialog';
 
@@ -18,13 +20,14 @@ export const EXTENSIONS: { id: keyof Settings['extensions'] | string; name: stri
   { id: 'todoHighlights', name: 'TODO highlights', description: 'Underline TODO, FIXME, HACK and NOTE comments.' },
 ];
 
-type Tab = 'general' | 'appearance' | 'ai' | 'connectors' | 'keys' | 'extensions';
-const TAB_LABELS: Record<Tab, string> = { general: 'General', appearance: 'Appearance', ai: 'AI models', connectors: 'Connectors', keys: 'Keyboard shortcuts', extensions: 'Extensions' };
+export type SettingsTab = 'general' | 'appearance' | 'ai' | 'connectors' | 'maintenance' | 'keys' | 'extensions';
+type Tab = SettingsTab;
+const TAB_LABELS: Record<Tab, string> = { general: 'General', appearance: 'Appearance', ai: 'AI models', connectors: 'Connectors', maintenance: 'Maintenance', keys: 'Shortcuts', extensions: 'Extensions' };
 
-export function SettingsDialog({ commands, isMac, onClose }: { commands: Command[]; isMac: boolean; onClose: () => void }) {
+export function SettingsDialog({ commands, isMac, onClose, initialTab = 'general', update, refreshUpdate }: { commands: Command[]; isMac: boolean; onClose: () => void; initialTab?: SettingsTab; update: UpdateStatus | null; refreshUpdate: (force?: boolean) => Promise<void> }) {
   const { settings, updateSettings } = useWorkspace();
   const { notify } = useToast();
-  const [tab, setTab] = useState<Tab>('general');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [recording, setRecording] = useState<string | null>(null);
   const [hexDraft, setHexDraft] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -203,6 +206,8 @@ export function SettingsDialog({ commands, isMac, onClose }: { commands: Command
         {tab === 'ai' && <AiModelSettings />}
 
         {tab === 'connectors' && <ConnectorSettings />}
+
+        {tab === 'maintenance' && <MaintenanceSettings update={update} refresh={refreshUpdate} />}
 
         {tab === 'keys' && (
           <div>

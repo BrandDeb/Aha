@@ -11,6 +11,7 @@ import { DEFAULT_CODE } from '@/lib/templates';
 import type { CompileTarget } from '@/types';
 import { deletePath, isRunnable, isValidPath, movePath, type Project } from './project';
 import { DEFAULT_APPEARANCE, normalizeAppearance, type Appearance } from './appearance';
+import { markHealthy } from './recovery';
 import { applyAppearance } from './appearance-dom';
 import { DEFAULT_BUILD_OPTIONS, type BuildOptions } from './targets';
 
@@ -287,6 +288,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const timer = setTimeout(() => save(STORAGE_KEY, state), 400);
     return () => clearTimeout(timer);
   }, [state, hydrated]);
+
+  // Once the workspace has loaded and stayed up for a few seconds, keep a copy to fall back to after a crash
+  useEffect(() => {
+    if (!hydrated) return;
+    const timer = setTimeout(() => markHealthy(localStorage), 8000);
+    return () => clearTimeout(timer);
+  }, [hydrated]);
 
   // Persist and apply settings
   useEffect(() => {

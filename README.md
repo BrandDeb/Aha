@@ -195,6 +195,32 @@ Python is on by default, but:
 
 ---
 
+## Maintenance
+
+The studio looks after itself, and asks before it changes anything.
+
+- **Restarts itself.** `npm run dev` and `npm start` run the server under a small supervisor
+  (`scripts/supervise.js`): a crash restarts it after a pause that grows to 30 s, an update restarts it at once, and a crash
+  loop (more than six in two minutes) stops with a message instead of spinning. Use `npm run start:plain` to run without it;
+  the Docker image leaves restarts to the container runtime.
+- **Updates, with your approval.** **Settings → Maintenance** checks the git remote (at most every six hours, or **Check now**)
+  and lists what is new; the footer shows `↑ N updates`. **Update now** only fast-forwards a clean checkout, reinstalls
+  dependencies only if `package.json` or the lock file changed, rebuilds when the server is a production one, and puts the previous
+  commit back if any step fails. Nothing updates on its own. A copy without git (or in a container) just says so.
+- **Health checks.** The same tab tests the scriptc compiler with a real build, zig, a C toolchain, uv and Python, `npx`/`uvx`
+  for the MCP presets, and how much disk the studio uses, and offers one-click fixes that only touch the studio's own folders
+  (download uv, prune its cache, remove idle Python environments, clear build leftovers). **Copy report** gives you something to
+  paste into a bug report; it holds no keys or project files.
+- **Crash recovery.** If the interface crashes you get a screen that explains it instead of a blank page. It always offers a
+  download of your project; after a repeat crash it also offers to reset settings and appearance, or to restore the last copy of
+  the workspace that loaded and stayed up (the current one is kept aside, never deleted).
+- **The agent's fix loop** is the same idea at the code level: it retries builds within a budget, stops when it is going in
+  circles, and its edits are only a proposal until you accept them.
+
+Maintenance only works when the studio listens on your own machine (the default); on an exposed server the routes refuse.
+
+---
+
 ## Pages
 
 | Route | |
@@ -280,6 +306,14 @@ names must be plain requirements (no URLs or paths); environment variables can't
 `POST { action: "tools" | "call", connector, tool?, args? }` → `{ ok, tools }` or `{ ok, text, isError }`. The connector's
 configuration is validated on every request and travels with it; the server keeps only warm MCP sessions.
 
+### `/api/doctor` and `/api/update` (local only)
+
+`GET /api/doctor` → `{ checks: [{ id, label, status, detail, fix? }], server }`; `POST { fix }` applies one. `GET /api/update`
+→ `{ supported, behind, ahead, dirty, commits, canApply, supervised, … }` (`?refresh=1` contacts the remote);
+`POST { action: "apply" }` streams `{ t: "out" }` lines then `{ t: "done", ok, from, to, restartRequired, rolledBack?, error? }`;
+`POST { action: "restart" }` asks the supervisor to restart. Same-origin and trusted-host checks apply, and all of it is refused
+when the server listens beyond localhost.
+
 ### `POST /api/coverage`
 
 ```json
@@ -359,9 +393,10 @@ SCRIPTC_LINKER=          # optional: linker driver scriptc uses for executables
 
 | Command | |
 |---|---|
-| `npm run dev` | Custom server in development (Next.js + collaboration) |
+| `npm run dev` | Custom server in development (Next.js + collaboration), supervised: restarts after a crash |
 | `npm run build` | Production build |
-| `npm start` | Production server |
+| `npm start` | Production server, supervised |
+| `npm run start:plain` | Production server without the supervisor (containers, process managers) |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | Generate route types and run `tsc` |
 | `npm test` | Unit + scriptc and uv integration tests (`node --test`) |

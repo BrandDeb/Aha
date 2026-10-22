@@ -28,3 +28,11 @@ export function isTrustedHost(hostHeader: string | null, baseUrl: string, allowe
     return false;
   }
 }
+
+/**
+ * Whether the server accepts connections from this machine only. Features that
+ * run programs or touch local files (connectors, maintenance) switch on only then.
+ */
+export function listensOnLoopbackOnly(env: Record<string, string | undefined> = process.env): boolean {
+  return LOCAL.has((env.HOST ?? '127.0.0.1').toLowerCase());
+}

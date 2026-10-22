@@ -4,9 +4,10 @@
   "description": "Zero-Runtime TypeScript CLI Generator - Write TypeScript, Get Native Binaries",
   "private": true,
   "scripts": {
-    "dev": "node server.js",
+    "dev": "node scripts/supervise.js",
     "build": "next build",
-    "start": "node server.js",
+    "start": "node scripts/supervise.js",
+    "start:plain": "node server.js",
     "start:next": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",

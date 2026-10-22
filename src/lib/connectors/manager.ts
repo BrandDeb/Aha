@@ -6,14 +6,13 @@
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import { listensOnLoopbackOnly } from '../host.ts';
 import { builtinFor, type Context } from './builtin.ts';
 import { CONNECTOR_HOME, CONNECTOR_WORK, connectorEnv } from './env.ts';
 import { HttpTransport, McpClient, StdioTransport } from './mcp.ts';
 import { LOCAL_KINDS, type Connector, type ConnectorCallResult, type ConnectorKind, type ConnectorTool } from './types.ts';
 
 export type Mode = 'off' | 'local' | 'hosted';
-
-const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 
 /**
  * off:    NANOCLI_CONNECTORS=0
@@ -24,7 +23,7 @@ const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 export function connectorsMode(env: Record<string, string | undefined> = process.env): Mode {
   if (env.NANOCLI_CONNECTORS === '0') return 'off';
   if (env.NANOCLI_CONNECTORS === '1') return 'local';
-  return LOOPBACK.has((env.HOST ?? '127.0.0.1').toLowerCase()) ? 'local' : 'hosted';
+  return listensOnLoopbackOnly(env) ? 'local' : 'hosted';
 }
 
 /** A message when this kind can't run in this mode, otherwise null */

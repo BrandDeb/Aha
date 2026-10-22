@@ -23,7 +23,7 @@ export function connectorEnv(host: NodeJS.ProcessEnv, user: Record<string, strin
     HOME: CONNECTOR_HOME,
     USERPROFILE: CONNECTOR_HOME,
     XDG_CACHE_HOME: path.join(CONNECTOR_DIR, 'cache'),
-    UV_CACHE_DIR: path.join(NANOCLI_DIR, 'python', '.cache', 'uv'),
+    UV_CACHE_DIR: path.join(NANOCLI_DIR, 'cache', 'uv'), // the same cache the Python runner uses
     NO_COLOR: '1',
     ...user,
   };
