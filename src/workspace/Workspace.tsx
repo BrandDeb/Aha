@@ -31,6 +31,7 @@ import { TARGET_GROUPS, targetInfo } from './targets';
 import { outputRecorder, useFailureTracker } from './debugging';
 import { useDevServer } from './devserver-client';
 import { useProposals } from './proposals';
+import { useWorker } from './worker';
 import { useWorkspace } from './store';
 import { useToast } from './toasts';
 
@@ -45,6 +46,7 @@ const HistoryPanel = dynamic(() => import('./panels/HistoryPanel').then((m) => m
 const PackagePanel = dynamic(() => import('./panels/PackagePanel').then((m) => m.PackagePanel), { ssr: false, loading: PanelLoading });
 const LanguagePanel = dynamic(() => import('./panels/LanguagePanel').then((m) => m.LanguagePanel), { ssr: false, loading: PanelLoading });
 const PythonPanel = dynamic(() => import('./panels/PythonPanel').then((m) => m.PythonPanel), { ssr: false, loading: PanelLoading });
+const WorkerPanel = dynamic(() => import('./panels/WorkerPanel').then((m) => m.WorkerPanel), { ssr: false, loading: PanelLoading });
 const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then((m) => m.SettingsDialog), { ssr: false });
 const TemplatesDialog = dynamic(() => import('./components/TemplatesDialog').then((m) => m.TemplatesDialog), { ssr: false });
 const ProjectDialog = dynamic(() => import('./components/ProjectDialog').then((m) => m.ProjectDialog), { ssr: false });
@@ -57,6 +59,7 @@ const PANELS: { id: PanelId; label: string; glyph: string }[] = [
   { id: 'git', label: 'Git', glyph: '⑂' },
   { id: 'ai', label: 'Assistant', glyph: '✦' },
   { id: 'agent', label: 'Agent', glyph: '⚙' },
+  { id: 'worker', label: 'Worker', glyph: '◎' },
   { id: 'python', label: 'Python', glyph: 'Py' },
   { id: 'languages', label: 'Run', glyph: '▷' },
   { id: 'history', label: 'History', glyph: '↺' },
@@ -486,7 +489,7 @@ export function Workspace() {
     (auto = false) => {
       if (!failure) return;
       const brief = debugBrief(failure, projectRef.current.files, lastGood());
-      const id = proposals.ask(brief, { approaches: 0, label: `Fix: ${failure.title.slice(0, 90)}`, quiet: auto });
+      const id = proposals.ask(brief, { approaches: 0, label: `Fix: ${failure.title.slice(0, 90)}`, quiet: auto, origin: 'debug' });
       if (id) setDebugProposals((prev) => ({ ...prev, [failure.signature]: id }));
       else if (!auto) openPanel('agent');
     },
@@ -501,6 +504,22 @@ export function Workspace() {
     startDebug(true);
   }, [failure, proposals.prefs.autoDebug, anyWorking, startDebug]);
   const debugging = failure && debugProposals[failure.signature] ? proposals.proposals.find((p) => p.id === debugProposals[failure.signature]) : undefined;
+
+  // The worker: an AI teammate that takes the next useful task while you code
+  const workerFailure = useMemo(
+    () => (failure && !debugProposals[failure.signature] && !proposals.prefs.autoDebug ? { signature: failure.signature, title: failure.title, brief: debugBrief(failure, project.files, lastGood()) } : null),
+    [failure, debugProposals, proposals.prefs.autoDebug, lastGood, project.files]
+  );
+  const worker = useWorker({
+    projectName: project.name,
+    files: project.files,
+    entry: project.entry,
+    failure: workerFailure,
+    onStart: useCallback((task: { kind: string; key: string }, id: string) => {
+      // A failure the worker took on shows in the debug bar like any other
+      if (task.kind === 'failure') setDebugProposals((prev) => ({ ...prev, [task.key.slice('failure:'.length)]: id }));
+    }, []),
+  });
 
   const openLocation = useCallback(
     (location: SourceLocation) => {
@@ -691,6 +710,17 @@ export function Workspace() {
               }}
             >
               <span className="dot animate-pulse" aria-hidden="true" /> Live · {collaborators.length + 1}
+            </button>
+          )}
+
+          {(worker.status.kind === 'working' || worker.status.kind === 'waiting-for-you') && (
+            <button
+              onClick={() => openPanel('worker')}
+              className={`badge hidden max-w-[16rem] lg:inline-flex ${worker.status.kind === 'waiting-for-you' ? 'text-warn' : ''}`}
+              title={worker.status.kind === 'working' ? `The worker is on: ${worker.status.proposal.goal.replace(/^Worker · /, '')}` : worker.status.reason}
+            >
+              <span className="dot animate-pulse" aria-hidden="true" />
+              <span className="truncate">{worker.status.kind === 'working' ? `Worker · ${worker.status.proposal.goal.replace(/^Worker · /, '')}` : 'Worker needs you'}</span>
             </button>
           )}
 
@@ -901,6 +931,7 @@ export function Workspace() {
                   return selection && !selection.isEmpty() ? editor?.getModel()?.getValueInRange(selection) ?? '' : '';
                 }} />}
                 {shownPanel === 'agent' && <AgentPanel />}
+                {shownPanel === 'worker' && <WorkerPanel worker={worker} />}
                 {shownPanel === 'history' && <HistoryPanel />}
                 {shownPanel === 'graph' && <GraphPanel />}
                 {shownPanel === 'package' && <PackagePanel />}

@@ -5,17 +5,7 @@ import { maxModelCalls } from '@/lib/agent/harness';
 import { getProvider } from '@/lib/ai-providers';
 import { useAiConfig } from '../ai-config';
 import { AiModelSettings } from '../components/AiModelSettings';
-import { ago, BUDGETS, laneOf, useProposals, verdict, type AgentPrefs, type Proposal } from '../proposals';
-
-function stateOf(p: Proposal): { label: string; tone: string } {
-  if (p.pending) return { label: 'waiting for you', tone: 'text-warn' };
-  if (p.status === 'working') return { label: 'working', tone: 'text-gray-300' };
-  if (p.status === 'accepted') return { label: 'accepted', tone: 'text-gray-500' };
-  if (p.status === 'discarded') return { label: 'discarded', tone: 'text-gray-500' };
-  const evidence = laneOf(p)?.evidence;
-  const judged = evidence && verdict(evidence);
-  return judged?.verified ? { label: 'verified', tone: 'text-accent' } : { label: 'review', tone: 'text-warn' };
-}
+import { ago, BUDGETS, laneOf, stateOf, useProposals, type AgentPrefs } from '../proposals';
 
 /** The Agent tab: which model, how it works, and every proposal so far */
 export function AgentPanel() {

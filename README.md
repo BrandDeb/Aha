@@ -73,6 +73,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
 | **Assistant** | Any model you choose — free tiers (Gemini, Groq, OpenRouter, Cerebras, Mistral), local (Ollama, LM Studio) or your own Anthropic/OpenAI key: explain, fix build errors, generate tests, chat — with one-click Apply that versions the previous file first |
 | **Agent** | Give it a goal; it reads your project, edits a private copy, builds and runs it to check its work, and retries within a budget. You review diffs and accept or discard; see [Agent](#agent) |
+| **Worker** | An AI teammate that codes alongside you: fixes failures and editor errors, resolves TODOs, adds tests and takes the next step toward your goal, on its own while you pause (Autonomous) or when you say (Suggest); see [the worker](#the-worker-an-ai-teammate-that-codes-alongside-you) |
 | **Connectors** | MCP servers, GitHub, SQLite/PostgreSQL, web pages and search, and your own commands as agent tools, asked about before use |
 | **Formatting** | Prettier in the browser, format on save, configurable rules |
 | **History** | Versions on save, on successful builds and before pulls/restores/assistant edits; compare and restore |
@@ -163,6 +164,24 @@ fix arrives as a proposal with its evidence ("Verified · ran ✓"), and nothing
 
 Turn on **Debug failures automatically** in the Agent tab and a debugging proposal starts on its own for each new failure
 (once per distinct failure, one at a time). If it needs to run something, the bar says **Approve to continue**.
+
+### The worker: an AI teammate that codes alongside you
+
+The **Worker** tab turns the agent into a colleague who keeps going while you code. It looks at the project the way a good
+teammate would and keeps a ranked list of what is worth doing next:
+
+1. **Fix what broke**: the last failure, with the same debugging brief as *Debug this*
+2. **Clear editor errors**: type errors and the like, file by file (fix the cause, no `any` casts)
+3. **Take the next step toward your goal**: tell it what you are building, and it does one verifiable step at a time
+4. **Resolve your TODOs and FIXMEs**: in any language, never in dependencies or build output
+5. **Add missing tests**: for files with real logic that no test mentions
+
+**Suggest** shows the list and you start each task. **Autonomous** takes the next task by itself whenever you pause typing
+(about 12 s), one at a time, in the background: the result opens as a tab without taking the editor from you, and a pill in
+the header says what it is on. Every task runs on a private copy and arrives as a proposal with evidence; nothing reaches
+your files until you accept it. It keeps itself in check: a per-hour budget, never the same task twice, waiting for you once
+three of its results need review, and pausing after three results that didn't come out verified. **Best of 3** quality runs
+each task Harness²-style (the current setup against two variations) and recommends the one that verified.
 
 ### Try several approaches (Harness²-style)
 

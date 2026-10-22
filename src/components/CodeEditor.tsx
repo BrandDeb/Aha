@@ -214,6 +214,15 @@ function applyProjectKind(monaco: Parameters<BeforeMount>[0]) {
   }
 }
 
+/** Errors the editor currently shows, across the project's files (for the worker) */
+export function editorProblems(): { file: string; line: number; message: string }[] {
+  if (!monacoInstance) return [];
+  type Marker = { severity: number; resource: { scheme: string; path: string }; startLineNumber: number; message: string };
+  return (monacoInstance.editor.getModelMarkers({}) as Marker[])
+    .filter((m) => m.severity === monacoInstance!.MarkerSeverity.Error && m.resource.scheme === 'file')
+    .map((m) => ({ file: decodeURIComponent(m.resource.path.replace(/^\//, '')), line: m.startLineNumber, message: m.message.split('\n')[0].slice(0, 200) }));
+}
+
 /** Switch the editor's TypeScript setup between scriptc (Node) and a web app */
 export function setEditorProjectKind(web: { jsxImportSource: string } | null): void {
   if (JSON.stringify(web) === JSON.stringify(webProject)) return;

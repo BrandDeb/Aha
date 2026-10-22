@@ -81,6 +81,8 @@ export interface Proposal {
   pending?: { call: ToolCall; risk: Risk };
   /** Hidden from the editor tabs (still listed in the Agent tab) */
   closed?: boolean;
+  /** Who started it: you, the debugger, or the worker */
+  origin?: 'you' | 'debug' | 'worker';
 }
 
 export interface AgentPrefs {
@@ -121,7 +123,7 @@ interface ProposalsValue {
   setPrefs: (patch: Partial<AgentPrefs>) => void;
   /** Start a new proposal; returns its id, or null when no model is set up */
   /** `label` is what the tab shows when the task itself is long (a debugging brief); `quiet` skips the "choose a model" toast */
-  ask: (goal: string, options?: { approaches?: number; label?: string; quiet?: boolean }) => string | null;
+  ask: (goal: string, options?: { approaches?: number; label?: string; quiet?: boolean; background?: boolean; origin?: Proposal['origin'] }) => string | null;
   followUp: (id: string, text: string) => void;
   stop: (id: string) => void;
   answer: (id: string, allowed: boolean, always?: boolean) => void;
@@ -402,9 +404,11 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
         lanes: k ? [] : [{ id: 'main', label: 'Changes', status: 'running', steps: 0, files: [], saved: { edits: [], before: {} } }],
         laneId: k ? '' : 'main',
         lessons: [],
+        origin: options.origin ?? 'you',
       };
       setProposals((prev) => [proposal, ...prev]);
-      setActiveId(id);
+      // Background work (the worker) opens as a tab but doesn't take the editor from you
+      if (!options.background) setActiveId(id);
       if (k) void runApproaches(id, text, k, target);
       else void runSingle(id, 'main', text, target);
       return id;
@@ -546,3 +550,14 @@ export function ago(at: number, now = Date.now()): string {
 export const laneOf = (p: Proposal): Lane | undefined => p.lanes.find((l) => l.id === p.laneId) ?? p.lanes[0];
 
 export { verdict };
+
+/** Where a proposal stands, in a word, for lists */
+export function stateOf(p: Proposal): { label: string; tone: string } {
+  if (p.pending) return { label: 'waiting for you', tone: 'text-warn' };
+  if (p.status === 'working') return { label: 'working', tone: 'text-gray-300' };
+  if (p.status === 'accepted') return { label: 'accepted', tone: 'text-gray-500' };
+  if (p.status === 'discarded') return { label: 'discarded', tone: 'text-gray-500' };
+  const evidence = laneOf(p)?.evidence;
+  const judged = evidence && verdict(evidence);
+  return judged?.verified ? { label: 'verified', tone: 'text-accent' } : { label: 'review', tone: 'text-warn' };
+}
