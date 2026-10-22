@@ -149,6 +149,21 @@ A proposal opens in the editor area as a tab next to your files, like a small pu
   task (a convention, a gotcha, a command that works) as an ordinary change you accept or reject. That is the whole
   "self-improving" loop: supervised, written in plain text, and reversible.
 
+### Debugging, on autopilot
+
+Every failure lands in one place, whatever produced it: a build error, a crash or non-zero exit in any language, a Python
+traceback, a runtime error or failed bundle in the preview, a dev server that won't start. A bar under the editor shows what
+broke and where: error locations are parsed from each toolchain's output (TypeScript, Node, Python, Rust, Go, Java and Kotlin,
+C#, C/C++, Ruby, PHP, Solidity and more), and each one opens the file at that line.
+
+**Debug this** hands it to the agent with everything a good debugger starts from: the error, the code it points at, and
+**what changed since the code last worked** (the studio remembers the last version that built or ran cleanly). The agent
+follows a fixed method: reproduce, locate, find the root cause, make the smallest fix, then run it again to prove it. The
+fix arrives as a proposal with its evidence ("Verified · ran ✓"), and nothing changes until you accept it.
+
+Turn on **Debug failures automatically** in the Agent tab and a debugging proposal starts on its own for each new failure
+(once per distinct failure, one at a time). If it needs to run something, the bar says **Approve to continue**.
+
 ### Try several approaches (Harness²-style)
 
 Choose **Compare 3** in the ask bar (or more in the Agent tab) and the agent improves its own *harness* while the model stays the same, an idea

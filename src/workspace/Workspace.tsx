@@ -9,6 +9,7 @@ import { WebSocketManager } from '@/lib/websocket';
 import type { CompileTarget, GitHubUserInfo } from '@/types';
 import { ActionsContext, type PanelId, type RunOutcome, type WorkspaceActions } from './actions';
 import { CommandBar } from './components/CommandBar';
+import { DebugBar } from './components/DebugBar';
 import { CommandPalette, type Command } from './components/CommandPalette';
 import { Dialog } from './components/Dialog';
 import { FileTree } from './components/FileTree';
@@ -18,6 +19,7 @@ import { Terminal } from './components/Terminal';
 import { canFormat, formatSource } from './format';
 import { BuildPanel } from './panels/BuildPanel';
 import { browserPreviewSupport } from '@/lib/browser-preview';
+import { debugBrief, type SourceLocation } from '@/lib/debug';
 import { detectFramework } from '@/lib/frameworks';
 import { detectLanguage } from '@/lib/languages';
 import { basename, comboFromEvent, diffStatus, formatCombo, isPython, isValidPath, languageFor } from './project';
@@ -26,6 +28,7 @@ import { runProject } from './run-client';
 import { base64ToArrayBuffer, runWasm } from './runner';
 import { OutputMenu } from './components/OutputMenu';
 import { TARGET_GROUPS, targetInfo } from './targets';
+import { outputRecorder, useFailureTracker } from './debugging';
 import { useDevServer } from './devserver-client';
 import { useProposals } from './proposals';
 import { useWorkspace } from './store';
@@ -119,6 +122,9 @@ export function Workspace() {
   const web = useMemo(() => detectFramework(project.files), [project.files]);
   const usesScriptc = !isPython(project.entry) && !entryLanguage && !web;
   const [showPreview, setShowPreview] = useState(false);
+  // Failures from every run path, and the last version that worked: what "Debug this" starts from
+  const tracker = useFailureTracker(project.name, project.files);
+  const { report: reportFailure, markGood } = tracker;
   const devServer = useDevServer(project.name, project.files, !!web);
   // Vite-style apps can also run entirely in the browser (esbuild-wasm): the only way where dev servers are off
   const inBrowser = useMemo(() => (web ? browserPreviewSupport(project.files) : null), [web, project.files]);
@@ -266,23 +272,38 @@ export function Workspace() {
 
   const python = useCallback<WorkspaceActions['python']>(async (command, onOutput = () => {}, signal) => {
     const p = projectRef.current;
+    const recorded = outputRecorder();
     const done = await streamPython(
       { ...command, name: command.name ?? p.name, projectId: pythonProjectId(p.name), files: p.files, env: getPythonEnv() },
-      onOutput,
+      (stream, text) => {
+        recorded.push(text);
+        onOutput(stream, text);
+      },
       signal
     );
+    if (command.action === 'run') {
+      if (done.code === 0) markGood('python');
+      else if (done.error !== 'stopped') reportFailure('python', `${recorded.text()}${done.error ? `\n${done.error}` : ''}`, 'python');
+    }
     // pyproject.toml, uv.lock and files the program wrote come back into the explorer
     if (Object.keys(done.changed).length || done.removed.length) dispatch({ type: 'put', files: done.changed, removed: done.removed });
     return { ...done, ok: done.code === 0 };
-  }, [dispatch]);
+  }, [dispatch, markGood, reportFailure]);
 
   const runLanguage = useCallback<WorkspaceActions['runLanguage']>(async (options, onOutput = () => {}, signal) => {
     const p = projectRef.current;
-    const outcome = await runProject(p.name, p.files, options, onOutput, signal);
+    const recorded = outputRecorder();
+    const outcome = await runProject(p.name, p.files, options, (stream, text) => {
+      if (stream !== 'info') recorded.push(text);
+      onOutput(stream, text);
+    }, signal);
+    const language = outcome.language ?? (options.entry ? detectLanguage(options.entry, Object.keys(p.files))?.id : undefined);
+    if (outcome.ok) markGood('run');
+    else if (outcome.error !== 'stopped') reportFailure('run', `${recorded.text()}${outcome.error ? `\n${outcome.error}` : ''}`, language);
     // Cargo.lock, go.sum and files the program wrote come back into the explorer
     if (Object.keys(outcome.changed).length || outcome.removed.length) dispatch({ type: 'put', files: outcome.changed, removed: outcome.removed });
     return outcome;
-  }, [dispatch]);
+  }, [dispatch, markGood, reportFailure]);
 
   const compile = useCallback<WorkspaceActions['compile']>(async (options = {}) => {
     const p = projectRef.current;
@@ -297,11 +318,13 @@ export function Workspace() {
       const result = await compileTypeScriptBrowser({ files: p.files, entry, target: buildTarget, ...settings.build });
       setLastBuild(result);
       if (result.success) {
+        markGood('build');
         saveSnapshot(`Build succeeded (${buildTarget})`);
         if (!options.quiet) notify({ kind: 'success', title: 'Build succeeded', detail: `${result.filename?.replace(/^[0-9a-f]{32}-/, '')} · ${result.durationMs}ms` });
         // IR, assembly and similar outputs are only useful when you can read them
         if (!options.quiet && targetInfo(buildTarget).inspect) setViewer(result);
       } else {
+        reportFailure('build', result.diagnostics?.length ? result.diagnostics.map((d) => `${d.file ?? entry}:${d.line}:${d.column} - error ${d.code}: ${d.message}`).join('\n') : (result.error ?? 'The build failed'), 'typescript');
         if (!options.quiet) notify({ kind: 'error', title: 'Build failed', detail: result.error });
         setPanel('build');
         setShowPanel(true);
@@ -313,7 +336,7 @@ export function Workspace() {
     } finally {
       setBuilding(false);
     }
-  }, [target, settings.build, notify, saveSnapshot]);
+  }, [target, settings.build, notify, saveSnapshot, markGood, reportFailure]);
 
   /** The toolbar's Compile: Python has no compile step, so it runs the program in the terminal instead */
   const compileOrRun = useCallback(() => {
@@ -349,15 +372,20 @@ export function Workspace() {
     if (!result.filename?.endsWith('.wasm') || !result.output) {
       return { ok: false, message: result.error ?? 'The server could not produce a WASM module' };
     }
+    const recorded = outputRecorder();
     const handle = runWasm(
       { wasm: base64ToArrayBuffer(result.output), args, env: ['TERM=xterm-256color'], files: projectRef.current.files },
-      onOutput
+      (stream, line) => {
+        recorded.push(`${line}\n`);
+        onOutput(stream, line);
+      }
     );
     options.signal?.addEventListener('abort', handle.stop);
     const message = await handle.done;
     if (message.type === 'error') {
       const outcome = { ok: false, message: message.message === 'Stopped' ? 'stopped' : `runtime error: ${message.message}` };
       setLastRun({ ...outcome, entry });
+      if (outcome.message !== 'stopped') reportFailure('run', `${recorded.text()}\n${outcome.message}`, 'typescript');
       return outcome;
     }
     for (const [path, content] of Object.entries(message.changed)) {
@@ -367,8 +395,10 @@ export function Workspace() {
     }
     const outcome = { ok: true, code: message.code, ms: message.ms, memoryBytes: message.memoryBytes };
     setLastRun({ ...outcome, entry });
+    if (message.code === 0) markGood('run');
+    else reportFailure('run', `${recorded.text()}\nExited with code ${message.code}`, 'typescript');
     return outcome;
-  }, [compile, dispatch]);
+  }, [compile, dispatch, markGood, reportFailure]);
 
   const format = useCallback<WorkspaceActions['format']>(async (path) => {
     const file = path ?? active;
@@ -445,6 +475,49 @@ export function Workspace() {
     if (previewMode === 'server' && devState.status !== 'ready' && devState.status !== 'installing' && devState.status !== 'starting') startDevServer();
   }, [devState.status, startDevServer, previewMode]);
   const runApp = web ? runPreview : runInTerminal;
+
+  // ---------------------------------------------------------------------------
+  // Debugging: a failure becomes a proposal that reproduces, fixes and proves it
+  // ---------------------------------------------------------------------------
+
+  const { failure, lastGood, dismiss: dismissFailure } = tracker;
+  const [debugProposals, setDebugProposals] = useState<Record<string, string>>({});
+  const startDebug = useCallback(
+    (auto = false) => {
+      if (!failure) return;
+      const brief = debugBrief(failure, projectRef.current.files, lastGood());
+      const id = proposals.ask(brief, { approaches: 0, label: `Fix: ${failure.title.slice(0, 90)}`, quiet: auto });
+      if (id) setDebugProposals((prev) => ({ ...prev, [failure.signature]: id }));
+      else if (!auto) openPanel('agent');
+    },
+    [failure, lastGood, proposals, openPanel]
+  );
+  // Auto-debug: once per distinct failure, one at a time, never applied without you
+  const autoDebugged = useRef(new Set<string>());
+  const anyWorking = proposals.proposals.some((p) => p.status === 'working');
+  useEffect(() => {
+    if (!failure || !proposals.prefs.autoDebug || anyWorking || autoDebugged.current.has(failure.signature)) return;
+    autoDebugged.current.add(failure.signature);
+    startDebug(true);
+  }, [failure, proposals.prefs.autoDebug, anyWorking, startDebug]);
+  const debugging = failure && debugProposals[failure.signature] ? proposals.proposals.find((p) => p.id === debugProposals[failure.signature]) : undefined;
+
+  const openLocation = useCallback(
+    (location: SourceLocation) => {
+      if (!(location.file in projectRef.current.files)) return;
+      dispatch({ type: 'open', path: location.file });
+      openProposal(null);
+      // The editor swaps to the file's model on the next render; then go to the line
+      setTimeout(() => {
+        const editor = editorRef.current;
+        if (!editor) return;
+        editor.revealLineInCenter(location.line);
+        editor.setPosition({ lineNumber: location.line, column: location.column ?? 1 });
+        editor.focus();
+      }, 60);
+    },
+    [dispatch, openProposal]
+  );
 
   // ---------------------------------------------------------------------------
   // Commands & shortcuts
@@ -754,10 +827,22 @@ export function Workspace() {
                     mode={previewMode}
                     browserSupport={inBrowser}
                     onMode={setPreviewChoice}
+                    onFailure={(source, text) => reportFailure(source, text, web.framework.name)}
+                    onWorking={() => markGood('preview')}
                     onClose={() => setShowPreview(false)}
                   />
                 )}
               </div>
+              {failure && (
+                <DebugBar
+                  failure={failure}
+                  proposal={debugging ? { id: debugging.id, working: debugging.status === 'working', waiting: !!debugging.pending } : null}
+                  onDebug={() => startDebug(false)}
+                  onOpenProposal={openProposal}
+                  onOpenLocation={openLocation}
+                  onDismiss={dismissFailure}
+                />
+              )}
             </section>
 
             {showTerminal && (

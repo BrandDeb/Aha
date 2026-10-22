@@ -88,6 +88,8 @@ export interface AgentPrefs {
   trustCommands: boolean;
   /** 0 = one run; 1-3 = compare that many variants against the current setup */
   approaches: number;
+  /** Start a debugging proposal by itself when something fails (once per distinct failure) */
+  autoDebug: boolean;
 }
 
 export const BUDGETS: Record<AgentPrefs['budget'], { label: string; budget: Partial<Budget> }> = {
@@ -99,7 +101,7 @@ export const BUDGETS: Record<AgentPrefs['budget'], { label: string; budget: Part
 const STORE_KEY = 'nanocli:proposals';
 const PREFS_KEY = 'nanocli:agent-prefs';
 const MAX_KEPT = 15;
-const DEFAULT_PREFS: AgentPrefs = { budget: 'standard', trustCommands: false, approaches: 0 };
+const DEFAULT_PREFS: AgentPrefs = { budget: 'standard', trustCommands: false, approaches: 0, autoDebug: false };
 
 /** Plain data the interface renders from */
 export function snapshotFiles(stage: Stage, hide: (p: string) => boolean = () => false): FileChange[] {
@@ -118,7 +120,8 @@ interface ProposalsValue {
   prefs: AgentPrefs;
   setPrefs: (patch: Partial<AgentPrefs>) => void;
   /** Start a new proposal; returns its id, or null when no model is set up */
-  ask: (goal: string, options?: { approaches?: number }) => string | null;
+  /** `label` is what the tab shows when the task itself is long (a debugging brief); `quiet` skips the "choose a model" toast */
+  ask: (goal: string, options?: { approaches?: number; label?: string; quiet?: boolean }) => string | null;
   followUp: (id: string, text: string) => void;
   stop: (id: string) => void;
   answer: (id: string, allowed: boolean, always?: boolean) => void;
@@ -366,14 +369,14 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
     [finish, log, update]
   );
 
-  const targetOrExplain = useCallback(() => {
+  const targetOrExplain = useCallback((quiet = false) => {
     const target = resolveProvider(config);
     if ('error' in target) {
-      notify({ kind: 'error', title: 'Choose a model first', detail: `${target.error} Open the Agent tab to pick one; free and local options are listed.` });
+      if (!quiet) notify({ kind: 'error', title: 'Choose a model first', detail: `${target.error} Open the Agent tab to pick one; free and local options are listed.` });
       return null;
     }
     if (target.provider.kind === 'server') {
-      notify({ kind: 'error', title: 'The agent needs your own model', detail: 'Pick a provider with a key, or a local model such as Ollama, in the Agent tab.' });
+      if (!quiet) notify({ kind: 'error', title: 'The agent needs your own model', detail: 'Pick a provider with a key, or a local model such as Ollama, in the Agent tab.' });
       return null;
     }
     return target;
@@ -383,13 +386,13 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
     (goal, options = {}) => {
       const text = goal.trim();
       if (!text) return null;
-      const target = targetOrExplain();
+      const target = targetOrExplain(options.quiet);
       if (!target) return null;
       const k = options.approaches ?? prefs.approaches;
       const id = `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
       const proposal: Proposal = {
         id,
-        goal: text,
+        goal: options.label?.trim() || text,
         createdAt: Date.now(),
         status: 'working',
         model: `${target.provider.name} · ${target.model}`,

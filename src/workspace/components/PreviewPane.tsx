@@ -102,15 +102,48 @@ interface Props {
   mode: 'server' | 'browser';
   browserSupport: { ok: true } | { ok: false; reason: string } | null;
   onMode: (mode: 'server' | 'browser') => void;
+  /** Build errors, the app's runtime errors and a dev server that fails, for debugging */
+  onFailure?: (source: 'preview' | 'devserver', text: string) => void;
+  /** The app built and runs */
+  onWorking?: () => void;
   onClose: () => void;
 }
 
-export function PreviewPane({ detected, server, files, mode, browserSupport, onMode, onClose }: Props) {
+export function PreviewPane({ detected, server, files, mode, browserSupport, onMode, onFailure, onWorking, onClose }: Props) {
   const { state, log, enabled, start, stop } = server;
   const [browser, setBrowser] = useState<BrowserState>({ status: 'loading' });
   const [consoleLines, setConsoleLines] = useState<ConsoleLine[]>([]);
   const consoleId = useRef(0);
   const inBrowser = mode === 'browser';
+
+  // Report what fails to the studio's debugger: a failed bundle, runtime errors (gathered for a moment, so a burst
+  // is one failure), a dev server that won't start
+  const failureRef = useRef(onFailure);
+  const workingRef = useRef(onWorking);
+  useEffect(() => {
+    failureRef.current = onFailure;
+    workingRef.current = onWorking;
+  });
+  useEffect(() => {
+    if (!inBrowser) return;
+    if (browser.status === 'failed' && browser.error) failureRef.current?.('preview', browser.error);
+    else if (browser.status === 'ready') workingRef.current?.();
+  }, [inBrowser, browser.status, browser.error]);
+  const errorCount = consoleLines.filter((l) => l.level === 'error').length;
+  useEffect(() => {
+    if (!errorCount) return;
+    const timer = setTimeout(() => {
+      const recent = consoleLines.filter((l) => l.level === 'error').slice(-8).map((l) => l.text);
+      failureRef.current?.('preview', recent.join('\n'));
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a new error matters
+  }, [errorCount]);
+  useEffect(() => {
+    if (inBrowser || state.status !== 'failed') return;
+    failureRef.current?.('devserver', `${log.slice(-40).map((l) => l.d).join('')}\n${state.error ?? ''}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per failure
+  }, [inBrowser, state.status, state.error]);
   const [route, setRoute] = useState('/');
   const [draft, setDraft] = useState('/');
   const [device, setDevice] = useState<(typeof DEVICES)[number]['id']>('full');

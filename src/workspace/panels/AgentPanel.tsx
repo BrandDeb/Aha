@@ -103,6 +103,10 @@ export function AgentPanel() {
             <input type="checkbox" checked={prefs.trustCommands} onChange={(e) => setPrefs({ trustCommands: e.target.checked })} />
             Run commands without asking
           </label>
+          <label className="flex items-center gap-1.5 text-xs text-gray-400" title="When a build, run or the preview fails, the agent starts debugging it on its own: once per distinct failure, one at a time. The fix arrives as a proposal; nothing changes until you accept.">
+            <input type="checkbox" checked={prefs.autoDebug} onChange={(e) => setPrefs({ autoDebug: e.target.checked })} />
+            Debug failures automatically
+          </label>
         </section>
 
         <section className="p-4">
