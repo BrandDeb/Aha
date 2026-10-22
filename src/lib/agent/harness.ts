@@ -240,6 +240,8 @@ export function scoreSignals(s: Signals, budget: Budget): { score: number; evide
 export interface ProbeResult {
   variant: Variant;
   run: AgentRun;
+  /** Everything the probe did, for evidence */
+  events: AgentEvent[];
   stage: Stage;
   score: number;
   evidence: string[];
@@ -337,7 +339,7 @@ export async function runHarnessLoop(options: HarnessLoopOptions): Promise<Harne
     });
     const { score, evidence } = scoreSignals(signalsFrom(run, events, stage), full);
     emit({ type: 'probe-done', id: variant.id, score, evidence });
-    return { variant, run, stage, score, evidence, summary: run.summary.slice(0, 600) };
+    return { variant, run, events, stage, score, evidence, summary: run.summary.slice(0, 600) };
   };
 
   const baselineVariant: Variant = { id: 'baseline', rationale: 'The harness as it is now', edits: {} };

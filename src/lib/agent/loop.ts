@@ -94,17 +94,21 @@ export async function runAgent(options: AgentOptions): Promise<AgentRun> {
   const failures = new Map<string, number>();
   let epoch = 0; // bumps whenever a tool changes the project or the host
   let lastText = '';
+  const usage = { input: 0, output: 0 };
 
   const finish = (reason: StopReason, summary: string): AgentRun => {
     emit({ type: 'done', reason, summary });
-    return { reason, summary, steps, toolCalls, messages };
+    return { reason, summary, steps, toolCalls, messages, usage, ms: now() - started };
   };
 
   const turn = async (withTools: boolean) => {
     let attempt = 0;
     for (;;) {
       try {
-        return await options.callModel({ system: options.system, messages: compactMessages(messages), tools: withTools ? specs : [], signal: options.signal });
+        const reply = await options.callModel({ system: options.system, messages: compactMessages(messages), tools: withTools ? specs : [], signal: options.signal });
+        usage.input += reply.usage?.input ?? 0;
+        usage.output += reply.usage?.output ?? 0;
+        return reply;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const transient = /rate limit|\b429\b|\b50\d\b|overloaded|temporar/i.test(message);

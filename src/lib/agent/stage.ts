@@ -11,6 +11,11 @@ export type StageChange = 'added' | 'modified' | 'deleted';
 export const MAX_FILE_BYTES = 512 * 1024;
 export const MAX_STAGED_FILES = 200;
 
+export interface SerializedStage {
+  edits: [string, string | null][];
+  before: Record<string, string | null>;
+}
+
 export class Stage {
   private base: Record<string, string>;
   private readonly edits = new Map<string, string | null>(); // null = deleted
@@ -90,6 +95,29 @@ export class Stage {
     for (const [path, content] of [...this.edits]) {
       if ((content ?? null) === (this.base[path] ?? null)) this.edits.delete(path);
     }
+  }
+
+  /** A compact form for storage: the edits, and what each edited file looked like before */
+  serialize(): SerializedStage {
+    return { edits: [...this.edits], before: Object.fromEntries([...this.edits.keys()].map((p) => [p, this.base[p] ?? null])) };
+  }
+
+  /**
+   * Rebuild a stage saved earlier, on top of the project as it is now. Files the
+   * user changed since keep their saved "before" text, so conflicts are still detected.
+   */
+  static restore(current: Record<string, string>, saved: SerializedStage): Stage {
+    const base = { ...current };
+    for (const [path, before] of Object.entries(saved.before ?? {})) {
+      if (before === null) delete base[path];
+      else base[path] = before;
+    }
+    const stage = new Stage(base);
+    for (const [path, content] of saved.edits ?? []) {
+      if (content === null) stage.edits.set(path, null);
+      else if (typeof content === 'string') stage.edits.set(path, content);
+    }
+    return stage;
   }
 
   get size(): number {

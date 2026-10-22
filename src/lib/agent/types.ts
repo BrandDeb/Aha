@@ -87,4 +87,7 @@ export interface AgentRun {
   steps: number;
   toolCalls: number;
   messages: Message[];
+  /** Tokens the model reported using, when the provider says (local models often don't) */
+  usage: { input: number; output: number };
+  ms: number;
 }

@@ -117,8 +117,23 @@ studio is hosted elsewhere, start it with `OLLAMA_ORIGINS=https://your-studio.ex
 
 ## Agent
 
-The **Agent** tab takes a goal ("fix the build", "add tests", "add a `--help` flag") and works on it in a loop with
-your own model (the same keys and local models as the assistant; it needs a model that supports tool calling).
+Type a goal into the bar at the top of the workspace (**Ctrl/⌘ + L**): "fix the build", "add tests", "add a `--help`
+flag". The agent works on it in a loop with your own model (the same keys and local models as the assistant; it needs a
+model that supports tool calling), and its work comes back as a **proposal**.
+
+A proposal opens in the editor area as a tab next to your files, like a small pull request:
+
+- **One decision at the top.** The goal, the agent's summary and **evidence** chips: did the last build pass, did the
+  program run, how many attempts failed on the way, how big the change is, how many steps, how long and how many tokens.
+  When the work is finished and the last check passed it is marked **Verified** and the main button is **Ship N
+  changes**; otherwise it says why to look closer ("Not checked", "The last check failed", "Unfinished") and offers
+  **Accept anyway**.
+- **The diff, file by file**, with accept or reject per file, next to the plan, what the agent did step by step, and any
+  question it is waiting on.
+- **Follow-ups** ("also handle empty input") continue the same proposal.
+- **Several at once.** Each proposal runs on its own private copy, so you can start another and keep coding. Proposals are
+  kept across reloads; the **Agent** tab lists them all, with the model and preferences (budget, approaches, whether
+  commands may run without asking).
 
 - **It edits a private copy.** Every change the agent makes is staged, builds and runs use the staged files, and
   nothing reaches your project until you accept it, per file or all at once, after reading the diff. Accepting saves a
@@ -136,7 +151,7 @@ your own model (the same keys and local models as the assistant; it needs a mode
 
 ### Try several approaches (Harness²-style)
 
-Tick **Try several approaches** in the Agent tab and the agent improves its own *harness* while the model stays the same, an idea
+Choose **Compare 3** in the ask bar (or more in the Agent tab) and the agent improves its own *harness* while the model stays the same, an idea
 from [Harness²](https://github.com/google-research/harness2) (Google Research, Apache-2.0), rebuilt here as a small, supervised loop for
 coding:
 
@@ -148,8 +163,8 @@ coding:
 3. **Compose.** A model reads the outcomes and keeps only edits that beat the baseline, with lessons that cite the evidence
    (`agent/lessons.md`).
 
-You get the best run's changes plus the harness edits as ordinary proposed changes to review, accept or discard. The panel shows the cost
-up front (runs × steps). If nothing beats the current setup, nothing is proposed. The harness files are part of your project, so they are
+Each approach is a lane in the proposal, with its score and why; the recommended lane holds the best run's changes plus the harness edits
+that earned them, to review, accept or discard like any other change. The Agent tab shows the cost up front (runs × steps). If nothing beats the current setup, nothing is proposed. The harness files are part of your project, so they are
 versioned with it and every later run (including normal ones) reads them.
 
 ### Connectors

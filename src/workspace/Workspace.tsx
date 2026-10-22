@@ -8,6 +8,7 @@ import { analyzeCoverageBrowser, compileTypeScriptBrowser, type CompileResult, t
 import { WebSocketManager } from '@/lib/websocket';
 import type { CompileTarget, GitHubUserInfo } from '@/types';
 import { ActionsContext, type PanelId, type RunOutcome, type WorkspaceActions } from './actions';
+import { CommandBar } from './components/CommandBar';
 import { CommandPalette, type Command } from './components/CommandPalette';
 import { Dialog } from './components/Dialog';
 import { FileTree } from './components/FileTree';
@@ -23,6 +24,7 @@ import { runProject } from './run-client';
 import { base64ToArrayBuffer, runWasm } from './runner';
 import { OutputMenu } from './components/OutputMenu';
 import { TARGET_GROUPS, targetInfo } from './targets';
+import { useProposals } from './proposals';
 import { useWorkspace } from './store';
 import { useToast } from './toasts';
 
@@ -41,6 +43,7 @@ const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then(
 const TemplatesDialog = dynamic(() => import('./components/TemplatesDialog').then((m) => m.TemplatesDialog), { ssr: false });
 const ProjectDialog = dynamic(() => import('./components/ProjectDialog').then((m) => m.ProjectDialog), { ssr: false });
 const ArtifactDialog = dynamic(() => import('./components/ArtifactDialog').then((m) => m.ArtifactDialog), { ssr: false });
+const ProposalView = dynamic(() => import('./components/ProposalView').then((m) => m.ProposalView), { ssr: false, loading: PanelLoading });
 
 const PANELS: { id: PanelId; label: string; glyph: string }[] = [
   { id: 'build', label: 'Build', glyph: '▶' },
@@ -72,6 +75,7 @@ const DEFAULT_KEYS: Record<string, string> = {
   'panel.ai': 'Mod+I',
   'panel.history': 'Mod+Alt+H',
   'prefs.settings': 'Mod+,',
+  'agent.ask': 'Mod+L',
 };
 
 function errorMessage(err: unknown): string {
@@ -82,6 +86,17 @@ export function Workspace() {
   const ws = useWorkspace();
   const { project, tabs, active, split, git, settings, dispatch, hydrated, updateSettings, saveSnapshot } = ws;
   const { notify } = useToast();
+  const proposals = useProposals();
+  const { open: openProposal, close: closeProposal } = proposals;
+  const askRef = useRef<HTMLInputElement | null>(null);
+
+  // Opening a file (from the tree, a tab, the palette) brings the editor back in front of a proposal
+  const shownFile = useRef(active);
+  useEffect(() => {
+    if (shownFile.current === active) return;
+    shownFile.current = active;
+    openProposal(null);
+  }, [active, openProposal]);
 
   const target = settings.target;
   const setTarget = useCallback((next: CompileTarget) => updateSettings({ target: next }), [updateSettings]);
@@ -421,7 +436,8 @@ export function Workspace() {
     { id: 'panel.ai', category: 'Assistant', title: 'Open assistant', keys: DEFAULT_KEYS['panel.ai'], run: () => openPanel('ai') },
     { id: 'panel.history', category: 'History', title: 'Open version history', keys: DEFAULT_KEYS['panel.history'], run: () => openPanel('history') },
     { id: 'panel.graph', category: 'Graph', title: 'Open dependency graph', run: () => openPanel('graph') },
-    { id: 'panel.agent', category: 'Assistant', title: 'Open agent', run: () => openPanel('agent') },
+    { id: 'agent.ask', category: 'Assistant', title: 'Ask the agent…', keys: DEFAULT_KEYS['agent.ask'], run: () => askRef.current?.focus() },
+    { id: 'panel.agent', category: 'Assistant', title: 'Open agent (proposals, model, preferences)', run: () => openPanel('agent') },
     { id: 'panel.languages', category: 'Run', title: 'Open languages panel (Go, Rust, Java, C…)', run: () => openPanel('languages') },
     { id: 'panel.python', category: 'Python', title: 'Open Python (uv) panel', run: () => openPanel('python') },
     { id: 'panel.package', category: 'Package', title: 'Edit package.json', run: () => openPanel('package') },
@@ -557,6 +573,10 @@ export function Workspace() {
             </span>
           )}
 
+          <div className="hidden min-w-0 flex-1 px-2 md:block">
+            <CommandBar inputRef={askRef} shortcut={formatCombo(bindings['agent.ask'] ?? '', isMac)} onNeedModel={() => openPanel('agent')} />
+          </div>
+
           <div className="ml-auto flex items-center gap-2">
             {usesScriptc && <OutputMenu target={target} options={settings.build} onTarget={setTarget} onOptions={(patch) => updateSettings({ build: { ...settings.build, ...patch } })} />}
             <button
@@ -609,10 +629,10 @@ export function Workspace() {
                     <div
                       key={tab}
                       className={`group flex h-10 shrink-0 items-center gap-2 border-r border-border pl-3.5 pr-2 font-mono text-xs ${
-                        tab === active ? 'bg-[var(--color-background)] text-gray-100 shadow-[inset_0_-2px_0_var(--color-accent)]' : 'bg-[var(--bar)] text-gray-400 hover:text-gray-100'
+                        tab === active && !proposals.active ? 'bg-[var(--color-background)] text-gray-100 shadow-[inset_0_-2px_0_var(--color-accent)]' : 'bg-[var(--bar)] text-gray-400 hover:text-gray-100'
                       }`}
                     >
-                      <button role="tab" aria-selected={tab === active} onClick={() => dispatch({ type: 'open', path: tab })} title={tab}>
+                      <button role="tab" aria-selected={tab === active && !proposals.active} onClick={() => { dispatch({ type: 'open', path: tab }); openProposal(null); }} title={tab}>
                         {basename(tab)}
                         {changes[tab] && <span className="ml-1 text-gray-400" aria-label={changes[tab]}>•</span>}
                         {errorCounts[tab] ? <span className="ml-1 text-danger">✕</span> : null}
@@ -624,6 +644,31 @@ export function Workspace() {
                       >✕</button>
                     </div>
                   ))}
+                  {proposals.proposals.filter((p) => !p.closed).map((p) => {
+                    const selected = proposals.activeId === p.id;
+                    return (
+                      <div
+                        key={p.id}
+                        className={`group flex h-10 max-w-[16rem] shrink-0 items-center gap-2 border-r border-border pl-3 pr-2 text-xs ${
+                          selected ? 'bg-[var(--color-background)] text-gray-100 shadow-[inset_0_-2px_0_var(--color-accent)]' : 'bg-[var(--bar)] text-gray-400 hover:text-gray-100'
+                        }`}
+                      >
+                        <button role="tab" aria-selected={selected} onClick={() => openProposal(p.id)} title={`Proposal: ${p.goal}`} className="flex min-w-0 items-center gap-1.5">
+                          {p.status === 'working' ? (
+                            p.pending ? <span className="h-2 w-2 shrink-0 rounded-full bg-warn" aria-label="waiting for you" /> : <span className="h-2.5 w-2.5 shrink-0 animate-spin rounded-full border border-gray-600 border-t-gray-100" aria-label="working" />
+                          ) : (
+                            <span aria-hidden="true" className="text-accent">✦</span>
+                          )}
+                          <span className="truncate">{p.goal}</span>
+                        </button>
+                        <button
+                          onClick={() => closeProposal(p.id)}
+                          className="text-gray-600 opacity-0 hover:text-gray-100 group-hover:opacity-100 focus:opacity-100"
+                          aria-label={`Close proposal ${p.goal}`}
+                        >✕</button>
+                      </div>
+                    );
+                  })}
                 </div>
                 <div className="flex shrink-0 items-center gap-1 px-2">
                   <button onClick={() => void format()} disabled={!active || !canFormat(active)} className="btn btn-ghost btn-sm" title={formatCombo(bindings['file.format'] ?? '', isMac)}>Format</button>
@@ -636,10 +681,16 @@ export function Workspace() {
                   <button onClick={() => setZen((v) => !v)} className="btn btn-ghost btn-sm" aria-pressed={zen} title={formatCombo(bindings['view.zen'] ?? '', isMac)}>Zen</button>
                 </div>
               </div>
-              <div className="flex min-h-0 flex-1 divide-x divide-border">
-                {editorPane(active)}
-                {split && editorPane(split, true)}
-              </div>
+              {proposals.active ? (
+                <div className="min-h-0 flex-1">
+                  <ProposalView key={proposals.active.id} proposal={proposals.active} />
+                </div>
+              ) : (
+                <div className="flex min-h-0 flex-1 divide-x divide-border">
+                  {editorPane(active)}
+                  {split && editorPane(split, true)}
+                </div>
+              )}
             </section>
 
             {showTerminal && (

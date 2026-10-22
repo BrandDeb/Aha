@@ -395,6 +395,13 @@ interface DiffViewProps {
 export function DiffView({ original, modified, language = 'typescript', theme = 'dark', fontSize = 13 }: DiffViewProps) {
   const handleMount: DiffOnMount = (editor) => {
     editor.updateOptions({ renderSideBySide: true });
+    // The wrapper disposes the models before the editor on unmount, which Monaco reports as an error;
+    // keep them (below) and dispose them here once the editor itself is gone
+    const { original: before, modified: after } = editor.getModel() ?? {};
+    editor.onDidDispose(() => {
+      before?.dispose();
+      after?.dispose();
+    });
   };
   return (
     <MonacoDiffEditor
@@ -405,6 +412,8 @@ export function DiffView({ original, modified, language = 'typescript', theme = 
       theme={theme === 'light' ? 'nanocli-light' : 'nanocli-dark'}
       beforeMount={configureMonaco}
       onMount={handleMount}
+      keepCurrentOriginalModel
+      keepCurrentModifiedModel
       options={{ ...editorOptions(fontSize, { wordWrap: false }), readOnly: true, originalEditable: false, renderOverviewRuler: false }}
     />
   );
