@@ -14,6 +14,7 @@ import { PROJECT_TEMPLATES } from './project-templates.ts';
 import { PYTHON_TEMPLATES } from './python-templates.ts';
 import { WEB_STARTERS } from './web-templates.ts';
 import { CSS_STARTERS } from './css-templates.ts';
+import { APP_STARTERS } from './app-templates.ts';
 
 export interface Template {
   id: string;
@@ -31,6 +32,8 @@ export interface Template {
   library?: boolean;
   /** Default is typescript. Every other language keeps its files at the project root (uv expects pyproject.toml there, go.mod and Cargo.toml too). Values: typescript, python, web (a framework with its own dev server, see frameworks.ts), or an id from languages.ts */
   language?: string;
+  /** A full app (a page and an API) served by its own server, with a live preview */
+  app?: boolean;
 }
 
 /** All files of a template as a project, entry under src/ */
@@ -429,6 +432,7 @@ countdown(Number(process.argv[2] ?? '3'));
     return { id, name, description, filename, code, files: { ...rest, ...ciFor(files) }, language };
   }),
   ...LANGUAGE_STARTERS.map(({ id, name, description, filename, code, files, language }): Template => ({ id, name, description, filename, code, files, language })),
+  ...APP_STARTERS.map(({ id, name, description, filename, code, files, language }): Template => ({ id, name, description, filename, code, files, language, app: true })),
   ...[...WEB_STARTERS, ...CSS_STARTERS].map(({ id, name, description, filename, code, files }): Template => ({ id, name, description, filename, code, files, language: 'web' })),
 ];
 

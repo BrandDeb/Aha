@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { Detected } from '@/lib/frameworks';
+import type { WebApp } from '@/lib/app-servers';
 import type { DevServerHandle } from '../devserver-client';
 
 const DEVICES = [
@@ -96,7 +96,7 @@ function BrowserPreview({ files, reloads, width, onState, onConsole }: { files: 
 }
 
 interface Props {
-  detected: Detected;
+  detected: WebApp;
   server: DevServerHandle;
   files: Record<string, string>;
   mode: 'server' | 'browser';

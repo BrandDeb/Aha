@@ -20,7 +20,7 @@ import { canFormat, formatSource } from './format';
 import { BuildPanel } from './panels/BuildPanel';
 import { browserPreviewSupport } from '@/lib/browser-preview';
 import { debugBrief, isUsageExit, type SourceLocation } from '@/lib/debug';
-import { detectFramework } from '@/lib/frameworks';
+import { detectWebApp } from '@/lib/app-servers';
 import { KIT_FILE } from '@/lib/kits';
 import { detectLanguage } from '@/lib/languages';
 import { basename, comboFromEvent, diffStatus, formatCombo, isPython, isValidPath, languageFor } from './project';
@@ -171,7 +171,7 @@ export function Workspace() {
   // Which engine runs the entry file: uv (Python), scriptc (TypeScript), or one of the other languages
   const entryLanguage = useMemo(() => (project.entry ? detectLanguage(project.entry, Object.keys(project.files)) : null), [project.entry, project.files]);
   // Web apps (Vite, Next.js, Nuxt…) run with their own dev server in the Preview pane
-  const web = useMemo(() => detectFramework(project.files), [project.files]);
+  const web = useMemo(() => detectWebApp(project.files), [project.files]);
   const usesScriptc = !isPython(project.entry) && !entryLanguage && !web;
   const [showPreview, setShowPreview] = useState(false);
   // Failures from every run path, and the last version that worked: what "Debug this" starts from
@@ -192,10 +192,10 @@ export function Workspace() {
   );
   const devServer = useDevServer(project.name, project.files, !!web);
   // Vite-style apps can also run entirely in the browser (esbuild-wasm): the only way where dev servers are off
-  const inBrowser = useMemo(() => (web ? browserPreviewSupport(project.files) : null), [web, project.files]);
+  const inBrowser = useMemo(() => (web?.kind === 'framework' ? browserPreviewSupport(project.files) : null), [web, project.files]);
   const [previewChoice, setPreviewChoice] = useState<'server' | 'browser' | null>(null);
   // The editor's TypeScript follows the project: Node for scriptc, DOM and JSX for web apps
-  const jsxSource = web ? (/"preact"/.test(project.files['package.json'] ?? '') ? 'preact' : 'react') : null;
+  const jsxSource = web?.kind === 'framework' ? (/"preact"/.test(project.files['package.json'] ?? '') ? 'preact' : 'react') : null;
   useEffect(() => {
     setEditorProjectKind(jsxSource ? { jsxImportSource: jsxSource } : null);
   }, [jsxSource]);

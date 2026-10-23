@@ -530,6 +530,29 @@ it on. At most three dev servers run at once (the least recently viewed stops fi
 (`NANOCLI_TEST_NETWORK=1 npm test`).
 
 
+### Full apps in every language
+
+**New project → Full apps** has the same small app (a page, and a JSON API it talks to) in twelve stacks, each
+served by its own server with a live preview the moment you press Run:
+
+| Stack | Served by | Reloads |
+|---|---|---|
+| Python · FastAPI, Flask (and Django projects) | `uv run uvicorn … --reload` / `flask run --debug` | by itself |
+| Go | `go run .` (net/http, standard library) | restarted on change |
+| Rust · axum (and actix, rocket, warp) | `cargo build`, then `cargo run` | restarted on change |
+| Ruby · Sinatra | `bundle install`, then `bundle exec ruby app.rb` | restarted on change |
+| PHP | PHP's built-in server | every request |
+| Java | `java Main.java` (the JDK's HTTP server, from source) | restarted on change |
+| Node.js · Express (Fastify, Hono, Koa) | `npm install`, then `node --watch` | by itself |
+| Bun | `bun --hot` | by itself |
+| Deno | `deno run --watch` | by itself |
+| C# · ASP.NET Core | `dotnet build`, then `dotnet run` | restarted on change |
+| Elixir · Plug | `mix deps.get`, then `mix run --no-halt` | restarted on change |
+
+Your own projects in these stacks are recognised the same way. Dependencies are installed only when a manifest
+changes (`pyproject.toml`, `Cargo.toml`, `Gemfile`, `mix.exs`…); a missing toolchain is one click away in
+Run → Language. `npm run verify:apps` runs all twelve for real: start, page, API, and an edit served live.
+
 ### CSS frameworks
 
 Every popular way to style a web app works out of the box, in the in-browser preview (no install) and with the

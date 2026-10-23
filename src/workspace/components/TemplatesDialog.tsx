@@ -11,14 +11,14 @@ import { useWorkspace } from '../store';
 import { useToast } from '../toasts';
 import { Dialog } from './Dialog';
 
-export function TemplatesDialog({ onClose, initial = 'all' }: { onClose: () => void; initial?: 'all' | 'typescript' | 'web' | 'python' | 'other' | 'kits' }) {
+export function TemplatesDialog({ onClose, initial = 'all' }: { onClose: () => void; initial?: 'all' | 'typescript' | 'web' | 'apps' | 'python' | 'other' | 'kits' }) {
   const { project, dispatch, saveSnapshot } = useWorkspace();
   const { notify } = useToast();
   const actions = useActions();
-  const [language, setLanguage] = useState<'all' | 'typescript' | 'web' | 'python' | 'other' | 'kits'>(initial);
+  const [language, setLanguage] = useState<'all' | 'typescript' | 'web' | 'apps' | 'python' | 'other' | 'kits'>(initial);
   const importRef = useRef<HTMLInputElement>(null);
   const groupOf = (t: Template) => ((t.language ?? 'typescript') === 'typescript' || t.language === 'python' || t.language === 'web' ? (t.language ?? 'typescript') : 'other');
-  const shown = language === 'kits' ? [] : TEMPLATES.filter((t) => language === 'all' || groupOf(t) === language);
+  const shown = language === 'kits' ? [] : TEMPLATES.filter((t) => language === 'all' || (language === 'apps' ? t.app : groupOf(t) === language));
 
   const openKit = (kit: Kit, files: Record<string, string>) => {
     saveSnapshot(`Before opening kit: ${kit.name}`);
@@ -48,9 +48,9 @@ export function TemplatesDialog({ onClose, initial = 'all' }: { onClose: () => v
   };
 
   return (
-    <Dialog title="New project" description="TypeScript templates compile with scriptc as-is. Web apps run with their framework's dev server and a live preview. Python runs with uv. Other languages run with their own toolchain on this machine." onClose={onClose} width="max-w-3xl">
+    <Dialog title="New project" description="Full apps (a page and an API) run in their own language with a live preview. TypeScript templates compile with scriptc as-is. Web apps run with their framework's dev server and a live preview. Python runs with uv. Other languages run with their own toolchain on this machine." onClose={onClose} width="max-w-3xl">
       <div className="segmented mb-3 self-start" role="group" aria-label="Language">
-        {([['all', 'All'], ['typescript', 'TypeScript'], ['web', 'Web apps'], ['python', 'Python · AI'], ['other', 'Other languages'], ['kits', 'Field kits']] as const).map(([value, label]) => (
+        {([['all', 'All'], ['apps', 'Full apps'], ['typescript', 'TypeScript'], ['web', 'Web apps'], ['python', 'Python · AI'], ['other', 'Other languages'], ['kits', 'Field kits']] as const).map(([value, label]) => (
           <button key={value} aria-pressed={language === value} onClick={() => setLanguage(value)}>{label}</button>
         ))}
       </div>

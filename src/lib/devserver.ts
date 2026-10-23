@@ -16,6 +16,9 @@ import path from 'node:path';
 import { atLeast, dependencyKey, detectFramework, GENERATED_DIRS, INSTALL_ARGS, localUrlIn, packageManagerFor, type Framework } from './frameworks.ts';
 import { isRunEnabled, NANOCLI_DIR, runEnv, which } from './polyglot.ts';
 import { capture, isSafeRelativePath, killTree, runStep, writeProject } from './proc.ts';
+import { detectAppServer, manifestKey, type AppServer } from './app-servers.ts';
+import { shellFor } from './pipelines/run.ts';
+import { refreshBinPaths } from './toolchains.ts';
 
 export const DEV_PROJECTS = path.join(NANOCLI_DIR, 'dev');
 export const MAX_DEV_SERVERS = Number(process.env.NANOCLI_DEV_SERVERS) || 3;
@@ -25,6 +28,12 @@ const MAX_LOG_LINES = 600;
 const IDLE_MS = 20 * 60_000;
 const INSTALL_MS = 10 * 60_000;
 const READY_MS = 3 * 60_000;
+/** Servers in compiled languages build before they answer */
+const APP_READY_MS = 6 * 60_000;
+/** Build output and dependencies of servers in other languages: kept between runs, never synced */
+const APP_DIRS = ['vendor', 'target', '.venv', '_build', 'deps', 'obj', 'bin', '__pycache__', '.bundle'];
+/** Lockfiles the install step writes: a sync must not delete them (mix refuses to run without its lock) */
+const APP_LOCKS = ['mix.lock', 'Cargo.lock', 'go.sum', 'Gemfile.lock', 'uv.lock', 'package-lock.json', 'bun.lock', 'deno.lock', 'composer.lock'];
 
 /** On wherever the language runner is (this machine only, by default); NANOCLI_DEV=0 turns it off, =1 forces it on */
 export function isDevEnabled(env: Record<string, string | undefined> = process.env): boolean {
@@ -46,6 +55,9 @@ interface DevServer {
   dir: string;
   status: DevStatus;
   framework?: Framework;
+  /** A server in another language (FastAPI, Go, Sinatra…) */
+  app?: AppServer;
+  restartTimer?: NodeJS.Timeout;
   label?: string;
   url?: string;
   error?: string;
@@ -115,7 +127,7 @@ export function stateOf(id: string, since = 0): DevState {
   server.lastSeen = Date.now();
   return {
     status: server.status,
-    framework: server.framework?.id,
+    framework: server.framework?.id ?? server.app?.id,
     label: server.label,
     url: server.url,
     error: server.error,
@@ -182,9 +194,10 @@ async function reapStale(dir: string): Promise<void> {
   }
 }
 
-function devEnv(dir: string, port: number): Record<string, string> {
+function devEnv(dir: string, port: number, PATH?: string): Record<string, string> {
   return {
     ...runEnv(process.env, dir, {}),
+    ...(PATH ? { PATH } : {}),
     NODE_ENV: 'development',
     PORT: String(port),
     HOST: '127.0.0.1',
@@ -194,12 +207,17 @@ function devEnv(dir: string, port: number): Record<string, string> {
     NUXT_TELEMETRY_DISABLED: '1',
     ASTRO_TELEMETRY_DISABLED: '1',
     NG_CLI_ANALYTICS: 'false',
+    DOTNET_CLI_TELEMETRY_OPTOUT: '1',
+    DOTNET_NOLOGO: '1',
+    // Elixir expects UTF-8 file names whatever the machine's locale
+    ELIXIR_ERL_OPTIONS: '+fnu',
     // Prompts would hang a server nobody can type into
     CI: 'true',
   };
 }
 
 function stopChild(server: DevServer) {
+  clearTimeout(server.restartTimer);
   server.install?.abort();
   server.install = undefined;
   if (server.child) {
@@ -222,7 +240,7 @@ export function stopServer(id: string): boolean {
 }
 
 /** Write the files, install when needed and start the dev server; resolves when it answers or fails */
-export async function startServer(id: string, files: Record<string, string>): Promise<DevState> {
+export async function startServer(id: string, files: Record<string, string>, options: { relaunch?: boolean } = {}): Promise<DevState> {
   let server = registry.get(id);
   if (!server) {
     // Make room: the server nobody has looked at for longest goes first
@@ -247,7 +265,12 @@ export async function startServer(id: string, files: Record<string, string>): Pr
   };
 
   const detected = detectFramework(files);
-  if (!detected) return fail('No web framework found: package.json needs one of Vite, Next.js, Nuxt, SvelteKit, Astro, React Router or Angular.');
+  if (!detected) {
+    const app = detectAppServer(files);
+    if (!app) return fail('No web app found: a JavaScript framework in package.json (Vite, Next.js, Nuxt, SvelteKit, Astro, React Router, Angular), or a server in another language (FastAPI, Flask, Django, Go, Rust, Sinatra, PHP, Java, Express, Bun, Deno, ASP.NET, Elixir).');
+    return startApp(server, app, files, current, fail, options.relaunch === true);
+  }
+  server.app = undefined;
   const { framework, label } = detected;
   server.framework = framework;
   server.label = label;
@@ -290,45 +313,57 @@ export async function startServer(id: string, files: Record<string, string>): Pr
   if (!script) return fail(`${framework.pkg} is not installed in this project: add it to package.json.`);
   const port = await freePort();
   if (!current()) return stateOf(id);
-  server.status = 'starting';
   say(server, 'info', `${framework.bin} ${framework.args(port).join(' ')}`);
-  const child = spawn(process.execPath, [script, ...framework.args(port)], {
+  return launch(server, { file: process.execPath, args: [script, ...framework.args(port)], env: devEnv(server.dir, port), port, readyMs: READY_MS }, current, fail);
+}
+
+/** Start the server process and wait until it answers HTTP (on the port asked, or the one it prints) */
+async function launch(
+  server: DevServer,
+  run: { file: string; args: string[]; env: Record<string, string>; port: number; readyMs: number },
+  current: () => boolean,
+  fail: (message: string) => DevState
+): Promise<DevState> {
+  const id = server.id;
+  server.status = 'starting';
+  const child = spawn(run.file, run.args, {
     cwd: server.dir,
-    env: devEnv(server.dir, port) as NodeJS.ProcessEnv,
+    env: run.env as NodeJS.ProcessEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: process.platform !== 'win32',
     windowsHide: true,
   });
   server.child = child;
-  if (child.pid) void fs.writeFile(path.join(server.dir, PID_FILE), String(child.pid)).catch(() => {});
+  if (child.pid) void fs.mkdir(path.join(server.dir, '.home'), { recursive: true }).then(() => fs.writeFile(path.join(server.dir, PID_FILE), String(child.pid))).catch(() => {});
   // The tool may pick another port than asked (or print where it is); believe the first local URL it prints
   let printedPort: number | null = null;
   const onData = (s: 'out' | 'err') => (chunk: Buffer) => {
     const text = chunk.toString('utf8');
-    say(server!, s, text);
+    say(server, s, text);
     const url = printedPort === null ? localUrlIn(text) : null;
     if (url) printedPort = Number(new URL(url.replace('[::1]', '127.0.0.1')).port) || null;
   };
   child.stdout?.on('data', onData('out'));
   child.stderr?.on('data', onData('err'));
+  child.on('error', (error) => say(server, 'info', `Could not start: ${error.message}`));
   child.on('exit', (code) => {
-    if (registry.get(id) !== server || server!.child !== child) return;
-    server!.child = undefined;
-    server!.url = undefined;
-    if (server!.status === 'ready') {
-      server!.status = 'stopped';
-      say(server!, 'info', `The dev server exited (code ${code}).`);
+    if (registry.get(id) !== server || server.child !== child) return;
+    server.child = undefined;
+    server.url = undefined;
+    if (server.status === 'ready') {
+      server.status = 'stopped';
+      say(server, 'info', `The server exited (code ${code}).`);
     } else {
-      server!.status = 'failed';
-      server!.error = `The dev server exited before it was ready (code ${code}). The output above says why.`;
-      say(server!, 'info', server!.error);
+      server.status = 'failed';
+      server.error = `The server exited before it was ready (code ${code}). The output above says why.`;
+      say(server, 'info', server.error);
     }
   });
 
-  const deadline = Date.now() + READY_MS;
+  const deadline = Date.now() + run.readyMs;
   while (Date.now() < deadline) {
     if (!current() || server.child !== child) return stateOf(id);
-    const target = printedPort ?? port;
+    const target = printedPort ?? run.port;
     if (await answers(target)) {
       if (!current()) return stateOf(id);
       server.status = 'ready';
@@ -339,7 +374,63 @@ export async function startServer(id: string, files: Record<string, string>): Pr
     await new Promise((r) => setTimeout(r, 400));
   }
   stopChild(server);
-  return fail('The dev server did not answer within 3 minutes.');
+  return fail(`The server did not answer within ${Math.round(run.readyMs / 60_000)} minutes.`);
+}
+
+/** A server in another language: its toolchain, its install step when the manifests changed, then its own serve command */
+async function startApp(server: DevServer, app: AppServer, files: Record<string, string>, current: () => boolean, fail: (message: string) => DevState, relaunch: boolean): Promise<DevState> {
+  server.app = app;
+  server.framework = undefined;
+  server.label = app.label;
+  await fs.mkdir(server.dir, { recursive: true });
+  // A restart after an edit: the edit is already on disk, and so is what the install step made
+  if (!relaunch) await writeProject(server.dir, files, { keep: new Set([...GENERATED_DIRS, ...APP_DIRS, ...APP_LOCKS]) });
+  if (!current()) return stateOf(server.id);
+  await refreshBinPaths();
+  const env = devEnv(server.dir, 0);
+  // uv may live in the studio's own folder rather than on PATH
+  if (app.tool === 'uv') {
+    const { resolveUv } = await import('./python.ts');
+    const uv = await resolveUv();
+    if (uv) env.PATH = `${path.dirname(uv.bin)}${path.delimiter}${env.PATH ?? env.Path ?? ''}`;
+  }
+  const PATH = env.PATH ?? env.Path ?? '';
+  if (!which(app.tool, PATH)) return fail(`${app.label} needs ${app.tool}, which is not installed on this machine. Open Run → Language and install ${app.language}, or run \`${app.tool}\` from your own install, then start again.`);
+  const shell = (command: string) => shellFor(undefined, command, PATH);
+
+  const install = app.install?.(files);
+  const key = `app:${app.id}:${manifestKey(app, files)}`;
+  if (install && server.depsKey !== key) {
+    const sh = shell(install);
+    if ('error' in sh) return fail(sh.error);
+    server.status = 'installing';
+    say(server, 'info', install);
+    const controller = new AbortController();
+    server.install = controller;
+    const outcome = await runStep({
+      file: sh.file,
+      args: sh.args,
+      cwd: server.dir,
+      env,
+      timeoutMs: INSTALL_MS,
+      budget: { left: 4 * 1024 * 1024 },
+      maxOutputBytes: 4 * 1024 * 1024,
+      onOutput: (s, d) => say(server, s === 'stdout' ? 'out' : s === 'stderr' ? 'err' : 'info', d),
+      signal: controller.signal,
+    });
+    server.install = undefined;
+    if (!current()) return stateOf(server.id);
+    if (outcome.code !== 0) return fail(outcome.timedOut ? 'Installing took too long.' : outcome.spawnError ? `Could not run “${install}”: ${outcome.spawnError.message}` : `“${install}” failed; the output above says why.`);
+  }
+  server.depsKey = key;
+
+  const port = await freePort();
+  if (!current()) return stateOf(server.id);
+  const command = app.start(files, port);
+  const sh = shell(command);
+  if ('error' in sh) return fail(sh.error);
+  say(server, 'info', command);
+  return launch(server, { file: sh.file, args: sh.args, env: devEnv(server.dir, port, env.PATH), port, readyMs: APP_READY_MS }, current, fail);
 }
 
 /** Apply edits to a running project; a dependency change reinstalls and restarts */
@@ -349,7 +440,9 @@ export async function syncServer(id: string, changed: Record<string, string>, re
   server.lastSeen = Date.now();
   const next = { ...server.files, ...changed };
   for (const p of removed) delete next[p];
-  const restart = dependencyKey(next) !== server.depsKey;
+  // A server in another language: reinstall when its manifests change, restart (debounced) when it doesn't reload by itself
+  const app = server.app;
+  const restart = app ? `app:${app.id}:${manifestKey(app, next)}` !== server.depsKey : dependencyKey(next) !== server.depsKey;
   server.files = next;
   for (const [relative, content] of Object.entries(changed)) {
     const target = path.resolve(server.dir, relative);
@@ -365,6 +458,12 @@ export async function syncServer(id: string, changed: Record<string, string>, re
   if (restart && (server.status === 'ready' || server.status === 'starting')) {
     say(server, 'info', 'Dependencies changed: installing and restarting.');
     void startServer(id, next);
+  } else if (app?.reload === 'restart' && server.status !== 'stopped' && server.status !== 'installing' && (Object.keys(changed).length || removed.length)) {
+    clearTimeout(server.restartTimer);
+    server.restartTimer = setTimeout(() => {
+      say(server, 'info', 'Files changed: restarting.');
+      void startServer(id, server.files, { relaunch: true });
+    }, 700);
   }
   return stateOf(id);
 }
