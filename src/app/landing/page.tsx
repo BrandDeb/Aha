@@ -6,6 +6,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ByteField } from '@/components/ByteField';
+import { Downloads } from '@/components/Downloads';
 import { SiteFooter, SiteHeader } from '@/components/SiteHeader';
 import { AUDIENCE_LABEL, KIT_LIBRARY } from '@/lib/kit-library';
 import { LANGUAGES } from '@/lib/languages';
@@ -88,7 +89,7 @@ export default function LandingPage() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link href="/" className="btn btn-primary h-11 px-6 text-[15px]">Open the studio, free</Link>
-              <Link href="/pricing" className="btn btn-secondary h-11 px-6 text-[15px]">See plans</Link>
+              <Link href="#download" className="btn btn-secondary h-11 px-6 text-[15px]">Download the app</Link>
             </div>
             <p className="mt-3 text-sm text-gray-500">No sign-up. Your model, your machine.</p>
 
@@ -213,6 +214,11 @@ export default function LandingPage() {
               ))}
             </ul>
           </div>
+        </section>
+
+        {/* Download */}
+        <section id="download" className="mx-auto max-w-6xl scroll-mt-20 px-4 pb-24" aria-labelledby="download-title">
+          <Downloads />
         </section>
 
         {/* Plans */}

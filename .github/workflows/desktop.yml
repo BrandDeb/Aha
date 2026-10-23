@@ -1,7 +1,9 @@
 name: Desktop apps
 
 # Builds NanoCLI Studio for macOS (Apple silicon) and Windows with Tauri: on pull requests that touch
-# the desktop app, on version tags, and on demand. Installers are uploaded as workflow artifacts.
+# the desktop app, on pushes to main, on version tags, and on demand. Installers are uploaded as workflow
+# artifacts and published with stable names (the download page links to them): a version tag gets its
+# own release, every other build replaces the files of the rolling `desktop-latest` pre-release.
 on:
   pull_request:
     paths:
@@ -10,6 +12,14 @@ on:
       - 'scripts/supervise.js'
       - '.github/workflows/desktop.yml'
   push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package-lock.json'
+      - 'src-tauri/**'
+      - 'scripts/**'
+      - '.github/workflows/desktop.yml'
     tags: ['v*']
   workflow_dispatch:
 
@@ -102,3 +112,56 @@ jobs:
           path: ${{ matrix.artifact }}
           if-no-files-found: error
           retention-days: 14
+
+  publish:
+    name: Publish downloads
+    needs: build
+    # Not for pull requests from forks: their builds stay workflow artifacts
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    concurrency:
+      group: desktop-publish
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: nanocli-studio-*
+          path: built
+
+      - name: Stable file names and checksums
+        run: |
+          mkdir out
+          cp built/nanocli-studio-aarch64-apple-darwin/*.dmg out/NanoCLI-Studio-macOS-arm64.dmg
+          cp built/nanocli-studio-x86_64-pc-windows-msvc/*.exe out/NanoCLI-Studio-Windows-x64-setup.exe
+          (cd out && sha256sum NanoCLI-Studio-* > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+      - name: Publish to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SOURCE: ${{ github.event.pull_request.head.ref || github.ref_name }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"; TITLE="NanoCLI Studio $TAG"; PRE=""
+          else
+            TAG=desktop-latest; TITLE="NanoCLI Studio (latest build)"; PRE="--prerelease"
+            # The rolling tag follows the build it carries
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" -f sha="$SHA" -F force=true >/dev/null 2>&1 \
+              || gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$SHA" >/dev/null
+          fi
+          NOTES="Built from $SHA ($SOURCE) by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID.
+
+          - macOS: Apple silicon, macOS 11 or newer (NanoCLI-Studio-macOS-arm64.dmg)
+          - Windows: 10 or 11, x64 (NanoCLI-Studio-Windows-x64-setup.exe)
+
+          Unsigned builds: on macOS right-click the app and choose Open the first time; on Windows choose More info, then Run anyway. SHA-256 checksums are in SHA256SUMS.txt."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" $PRE
+          else
+            gh release create "$TAG" --verify-tag --title "$TITLE" --notes "$NOTES" $PRE
+          fi
+          gh release upload "$TAG" out/* --clobber

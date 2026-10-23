@@ -486,9 +486,16 @@ node scripts/desktop-prepare.mjs     # the studio build + production dependencie
 npx tauri build                      # installers in src-tauri/target/release/bundle/
 ```
 
+**Download:** the [/download](/download) page (also the Download section on the landing page) links to the latest
+installers, highlights the one for the visitor's system and shows how to install it: `NanoCLI-Studio-macOS-arm64.dmg` and
+`NanoCLI-Studio-Windows-x64-setup.exe` in the `desktop-latest` release, with `SHA256SUMS.txt`. Point it at another repository
+with `NEXT_PUBLIC_DOWNLOADS_REPO=owner/repo`.
+
 CI (`.github/workflows/desktop.yml`) builds the macOS (Apple silicon) `.dmg` and the Windows installer on pull requests that
-touch the app, on version tags, and on demand. Builds are unsigned unless the `APPLE_*` signing secrets are set; macOS then
-asks you to confirm the first launch (right-click → Open).
+touch the app, on pushes to main, on version tags, and on demand, then publishes them under those stable names: a `v*` tag
+gets its own release, and every other build replaces the files of the rolling `desktop-latest` pre-release (builds from
+forks stay workflow artifacts). Builds are unsigned unless the `APPLE_*` signing secrets are set; macOS then asks you to
+confirm the first launch (right-click → Open).
 
 ## Maintenance
 

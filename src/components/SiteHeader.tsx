@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 const NAV = [
   { href: '/landing', label: 'Product' },
   { href: '/pricing', label: 'Pricing' },
+  { href: '/download', label: 'Download' },
   { href: '/faq', label: 'FAQ' },
   { href: '/', label: 'Studio' },
 ] as const;
