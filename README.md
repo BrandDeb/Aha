@@ -463,6 +463,23 @@ of them.
 
 ---
 
+## Signing in with GitHub
+
+Sign-in (and sign-up: GitHub's page offers a free account) needs one GitHub OAuth app and **no domain**:
+
+1. GitHub → Settings → Developer settings → OAuth Apps → **New OAuth App**. Any homepage URL (the repository's is fine);
+   callback URL `http://127.0.0.1/api/github/callback`.
+2. In the new app's settings, tick **Enable Device Flow**. You don't need a client secret.
+3. Give the studio its client ID: `GITHUB_CLIENT_ID=…` for a server, and the repository variable
+   `NANOCLI_GITHUB_CLIENT_ID` (Settings → Secrets and variables → Actions → Variables) so the desktop builds include it.
+   A client ID is public; it is not a secret.
+
+**Sign in** then shows a one-time code: open github.com/login/device, enter it, authorize, and the studio signs you in by
+itself. That works on localhost, in the desktop app (whatever port it picked) and on a server reached by IP. With a
+domain later, add `GITHUB_CLIENT_SECRET` and `GITHUB_REDIRECT_URI` on that host and sign-in switches to the usual redirect
+for visitors of that host. The token lives in an httpOnly cookie on the studio's server (Secure when served over HTTPS)
+and never reaches the page; your avatar's menu signs out.
+
 ## Desktop app (Windows and macOS)
 
 NanoCLI Studio also ships as a native app built with [Tauri](https://tauri.app). The shell is deliberately thin (a 4.5 MB
@@ -716,8 +733,8 @@ NEXT_PUBLIC_CHECKOUT_PREMIUM_URL=
 NEXT_PUBLIC_SALES_URL=
 
 # GitHub OAuth (create an OAuth app with callback <base>/api/github/callback)
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
+GITHUB_CLIENT_ID=             # enough on its own: sign-in with a one-time code (see Signing in)
+GITHUB_CLIENT_SECRET=         # optional: the redirect flow, for a host with a fixed address
 GITHUB_REDIRECT_URI=http://localhost:3000/api/github/callback
 
 # Collaboration: origins allowed to open sockets (defaults to NEXT_PUBLIC_BASE_URL;

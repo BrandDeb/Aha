@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'crypto';
 import { exchangeCodeForToken, getGitHubUser } from '@/lib/github';
-import { GITHUB_COOKIE_OPTIONS, getBaseUrl } from '@/lib/github-session';
+import { getBaseUrl, setSession } from '@/lib/github-session';
 
 function redirectWithError(message: string): NextResponse {
   const response = NextResponse.redirect(`${getBaseUrl()}?error=${encodeURIComponent(message)}`);
@@ -39,23 +39,7 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.redirect(getBaseUrl());
     // State is single-use
     response.cookies.delete('github_oauth_state');
-    
-    response.cookies.set('github_token', token.access_token, {
-      ...GITHUB_COOKIE_OPTIONS,
-      maxAge: 60 * 60 * 24 * 30, // 30 days
-    });
-    
-    response.cookies.set('github_user', JSON.stringify({
-      id: user.id,
-      login: user.login,
-      avatar_url: user.avatar_url,
-      name: user.name,
-    }), {
-      ...GITHUB_COOKIE_OPTIONS,
-      maxAge: 60 * 60 * 24 * 30,
-    });
-    
-    return response;
+    return setSession(response, request, token.access_token, user);
   } catch (err) {
     console.error('GitHub OAuth callback error:', err);
     return redirectWithError('Authentication failed');

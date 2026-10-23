@@ -38,6 +38,8 @@ export interface WorkspaceActions {
   runLanguage: (options: RunOptions, onOutput?: (stream: PythonStream, text: string) => void, signal?: AbortSignal) => Promise<LanguageOutcome>;
   /** Open a build artifact in the output viewer (defaults to the last build) */
   inspect: (result?: CompileResult | null) => void;
+  /** Sign in (or sign up) with GitHub: the redirect flow when this server has one, else a one-time code */
+  signIn: () => void;
 }
 
 export type PanelId = 'build' | 'git' | 'ai' | 'agent' | 'history' | 'graph' | 'package' | 'python' | 'languages' | 'worker' | 'kit' | 'ci';

@@ -1,10 +1,11 @@
 import Link from 'next/link';
-import { downloadUrl, fetchRelease, formatSize, PLATFORMS, releaseUrl } from '@/lib/downloads';
+import { buildsUrl, downloadUrl, fetchRelease, formatSize, PLATFORMS, releaseUrl } from '@/lib/downloads';
 import { PlatformHighlight } from './PlatformHighlight';
 
 /** One card per platform: what it needs, the download, and how to install it */
 export async function Downloads({ headingId = 'download-title', heading = 'Get the app.' }: { headingId?: string; heading?: string }) {
-  const release = await fetchRelease();
+  const fetched = await fetchRelease();
+  const release = fetched === 'missing' ? null : fetched;
   const built = release?.updatedAt ? new Date(release.updatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : null;
   return (
     <div>
@@ -25,6 +26,8 @@ export async function Downloads({ headingId = 'download-title', heading = 'Get t
       <div className="mt-8 grid gap-3 md:grid-cols-3">
         {PLATFORMS.map((p) => {
           const asset = p.file ? release?.assets[p.file] : undefined;
+          // Known not to be published yet: say so rather than link to a 404
+          const pending = !!p.file && (fetched === 'missing' || (!!release && !asset));
           return (
             <article key={p.id} id={`download-${p.id}`} data-platform={p.id} className="surface flex flex-col p-6 transition-colors data-[mine=true]:border-accent/60">
               <div className="flex items-baseline justify-between gap-2">
@@ -33,7 +36,11 @@ export async function Downloads({ headingId = 'download-title', heading = 'Get t
               </div>
               <p className="mt-1 text-sm text-gray-400">{p.requirement}</p>
               <div className="mt-5">
-                {p.file ? (
+                {pending ? (
+                  <a href={buildsUrl()} target="_blank" rel="noopener noreferrer" className="btn btn-secondary h-11 w-full text-[15px]">
+                    Being built: check progress
+                  </a>
+                ) : p.file ? (
                   <a href={asset?.url ?? downloadUrl(p.file)} className="btn btn-primary h-11 w-full text-[15px]">
                     Download for {p.name}
                   </a>
@@ -41,7 +48,7 @@ export async function Downloads({ headingId = 'download-title', heading = 'Get t
                   <Link href="/" className="btn btn-secondary h-11 w-full text-[15px]">Use it in the browser</Link>
                 )}
                 <p className="mt-2 text-center font-mono text-[11px] text-gray-500">
-                  {p.kind}
+                  {pending ? 'Available here in a few minutes' : p.kind}
                   {asset && ` · ${formatSize(asset.size)}`}
                   {p.file && built && ` · built ${built}${release?.commit ? ` (${release.commit})` : ''}`}
                 </p>

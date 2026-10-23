@@ -23,6 +23,7 @@ export async function DELETE(request: NextRequest) {
   response.cookies.delete('github_token');
   response.cookies.delete('github_user');
   response.cookies.delete('github_oauth_state');
+  response.cookies.delete('github_device');
   
   return response;
 }

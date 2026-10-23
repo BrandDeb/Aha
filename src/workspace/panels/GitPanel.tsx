@@ -74,14 +74,10 @@ export function GitPanel({ user, onOpenPipelines }: { user: GitHubUserInfo | nul
       <div className="space-y-4 p-4">
         <h3 className="eyebrow">Git</h3>
         <p className="text-sm text-gray-400">Sign in with GitHub to pull a repository, review changes as diffs, manage branches and push commits.</p>
-        <button
-          // Full-page navigation: the OAuth flow is a server redirect, not a client route
-          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-          onClick={() => window.location.assign('/api/github/auth')}
-          className="btn btn-primary w-full"
-        >
+        <button onClick={actions.signIn} className="btn btn-primary w-full">
           Sign in with GitHub
         </button>
+        <p className="text-xs text-gray-500">No GitHub account? You can create one for free on the same page.</p>
       </div>
     );
   }
@@ -164,7 +160,7 @@ export function GitPanel({ user, onOpenPipelines }: { user: GitHubUserInfo | nul
           status === 409
             ? 'Someone pushed since your last pull. Pull to update, then commit again.'
             : workflows && (status === 403 || status === 404 || status === 422)
-              ? 'GitHub needs the “workflow” permission to change files in .github/workflows/. Sign in with GitHub again (Settings → Account) to grant it, then commit again.'
+              ? 'GitHub needs the “workflow” permission to change files in .github/workflows/. Sign out (your avatar, top right) and sign in again to grant it, then commit again.'
               : (error as Error).message,
       });
     } finally {

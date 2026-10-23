@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { generateState } from '@/lib/github';
-import { GITHUB_COOKIE_OPTIONS, getBaseUrl } from '@/lib/github-session';
+import { cookieOptions, getBaseUrl } from '@/lib/github-session';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   if (!process.env.GITHUB_CLIENT_ID) {
     return NextResponse.json(
       { error: 'GitHub OAuth is not configured' },
@@ -23,7 +23,7 @@ export async function GET() {
   
   const response = NextResponse.redirect(githubAuthUrl.toString());
   response.cookies.set('github_oauth_state', state, {
-    ...GITHUB_COOKIE_OPTIONS,
+    ...cookieOptions(request),
     maxAge: 60 * 10, // 10 minutes
   });
   

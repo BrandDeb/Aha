@@ -81,6 +81,9 @@ jobs:
           rm -rf binaries/node-* ../desktop
 
       - name: Assemble the app (studio build, production dependencies, verified Node.js)
+        # The GitHub OAuth app's client ID (public, not a secret) is built in, so "Sign in with GitHub" works in the app
+        env:
+          NEXT_PUBLIC_GITHUB_CLIENT_ID: ${{ vars.NANOCLI_GITHUB_CLIENT_ID }}
         run: node scripts/desktop-prepare.mjs --target ${{ matrix.target }}
 
       - name: Signing (only when the secrets are set)

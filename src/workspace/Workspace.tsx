@@ -52,6 +52,7 @@ const PipelinesPanel = dynamic(() => import('./panels/PipelinesPanel').then((m) 
 const WorkerPanel = dynamic(() => import('./panels/WorkerPanel').then((m) => m.WorkerPanel), { ssr: false, loading: PanelLoading });
 const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then((m) => m.SettingsDialog), { ssr: false });
 const TemplatesDialog = dynamic(() => import('./components/TemplatesDialog').then((m) => m.TemplatesDialog), { ssr: false });
+const SignInDialog = dynamic(() => import('./components/SignInDialog').then((m) => m.SignInDialog), { ssr: false });
 const ProjectDialog = dynamic(() => import('./components/ProjectDialog').then((m) => m.ProjectDialog), { ssr: false });
 const ArtifactDialog = dynamic(() => import('./components/ArtifactDialog').then((m) => m.ArtifactDialog), { ssr: false });
 const PreviewPane = dynamic(() => import('./components/PreviewPane').then((m) => m.PreviewPane), { ssr: false, loading: PanelLoading });
@@ -155,7 +156,7 @@ export function Workspace() {
   const [showTerminal, setShowTerminal] = useState(true);
   const [terminalHeight, setTerminalHeight] = useState(220);
   const [zen, setZen] = useState(false);
-  const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project'>(null);
+  const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project' | 'signin'>(null);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
   const { status: update, refresh: refreshUpdate } = useUpdateStatus();
   const [diff, setDiff] = useState<{ title: string; path: string; original: string; modified: string } | null>(null);
@@ -473,6 +474,24 @@ export function Workspace() {
     setShowPanel(true);
   }, []);
 
+  // Sign in: the redirect flow where this server is set up for it (a client secret and a callback on this host), else a one-time code
+  const signIn = useCallback(() => {
+    fetch('/api/github/device')
+      .then((r) => r.json())
+      .then((config: { flow?: string }) => {
+        // Full-page navigation: the OAuth redirect flow is a server redirect, not a client route
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+        if (config.flow === 'web') window.location.assign('/api/github/auth');
+        else setDialog('signin');
+      })
+      .catch(() => setDialog('signin'));
+  }, []);
+  const signOut = useCallback(async () => {
+    await fetch('/api/github/user', { method: 'DELETE' }).catch(() => {});
+    setUser(null);
+    notify({ kind: 'info', title: 'Signed out of GitHub' });
+  }, [notify]);
+
   const actions = useMemo<WorkspaceActions>(() => ({
     compile,
     run,
@@ -484,7 +503,8 @@ export function Workspace() {
     python,
     runLanguage,
     inspect: (result) => setViewer(result ?? lastBuild),
-  }), [compile, run, format, save, openPanel, downloadArtifact, python, runLanguage, lastBuild]);
+    signIn,
+  }), [compile, run, format, save, openPanel, downloadArtifact, python, runLanguage, lastBuild, signIn]);
 
   // Terminal "run" from the toolbar / shortcut
   const runInTerminal = useCallback(() => {
@@ -770,15 +790,18 @@ export function Workspace() {
             <button onClick={() => setDialog('palette')} className="btn btn-ghost btn-icon" aria-label="Command palette" title={formatCombo(bindings['view.palette'] ?? '', isMac)}>⌘</button>
             <button onClick={() => { setSettingsTab('general'); setDialog('settings'); }} className="btn btn-ghost btn-icon" aria-label="Settings">⚙</button>
             {user ? (
-              // eslint-disable-next-line @next/next/no-img-element -- remote avatar, no optimisation needed
-              <img src={user.avatar_url} alt={`Signed in as ${user.login}`} className="h-7 w-7 rounded-full border border-border-strong" />
+              <details className="relative">
+                <summary className="flex cursor-pointer list-none rounded-full" aria-label={`Signed in as ${user.login}`} title={`Signed in as ${user.login}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- remote avatar, no optimisation needed */}
+                  <img src={user.avatar_url} alt="" className="h-7 w-7 rounded-full border border-border-strong" />
+                </summary>
+                <div className="glass absolute right-0 top-full z-50 mt-2 w-56 rounded-xl p-2 animate-fade-in">
+                  <p className="px-2 py-1.5 text-xs text-gray-400">Signed in as <span className="font-medium text-gray-100">{user.login}</span></p>
+                  <button onClick={() => void signOut()} className="w-full rounded-lg px-2 py-1.5 text-left text-sm text-gray-300 hover:bg-white/[0.06] hover:text-gray-100">Sign out</button>
+                </div>
+              </details>
             ) : (
-              <button
-                // Full-page navigation: the OAuth flow is a server redirect, not a client route
-                // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-                onClick={() => window.location.assign('/api/github/auth')}
-                className="btn btn-ghost btn-sm hidden lg:inline-flex"
-              >
+              <button onClick={signIn} className="btn btn-ghost btn-sm hidden lg:inline-flex">
                 Sign in
               </button>
             )}
@@ -998,6 +1021,16 @@ export function Workspace() {
       {dialog === 'templates' && <TemplatesDialog onClose={() => setDialog(null)} />}
       {viewer && <ArtifactDialog result={viewer} theme={settings.theme} onClose={() => setViewer(null)} />}
       {dialog === 'project' && <ProjectDialog user={user} onClose={() => setDialog(null)} />}
+      {dialog === 'signin' && (
+        <SignInDialog
+          onClose={() => setDialog(null)}
+          onSignedIn={(signedIn) => {
+            setUser(signedIn);
+            setDialog(null);
+            notify({ kind: 'success', title: `Signed in as ${signedIn.login}` });
+          }}
+        />
+      )}
       {diff && (
         <Dialog title={diff.title} description="Left: before · Right: now" onClose={() => setDiff(null)} width="max-w-6xl" tall>
           <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-border">

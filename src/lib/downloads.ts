@@ -55,6 +55,8 @@ export const PLATFORMS: Platform[] = [
 ];
 
 export const releaseUrl = (repo = DOWNLOADS_REPO, tag = DOWNLOADS_TAG) => `https://github.com/${repo}/releases/tag/${tag}`;
+/** Where the builds run, for when a file isn't published yet */
+export const buildsUrl = (repo = DOWNLOADS_REPO) => `https://github.com/${repo}/actions/workflows/desktop.yml`;
 export const downloadUrl = (file: string, repo = DOWNLOADS_REPO, tag = DOWNLOADS_TAG) => `https://github.com/${repo}/releases/download/${tag}/${file}`;
 
 /** The platform a browser runs on, from its user agent (Apple silicon and Intel Macs look the same) */
@@ -93,14 +95,19 @@ export function releaseInfo(release: GitHubRelease): ReleaseInfo {
   return { updatedAt: latest ?? release.published_at ?? null, commit, assets };
 }
 
-/** The release, refreshed at most once an hour; null when it can't be read (the links still work) */
-export async function fetchRelease(repo = DOWNLOADS_REPO, tag = DOWNLOADS_TAG): Promise<ReleaseInfo | null> {
+/**
+ * The release, refreshed at most every 10 minutes: 'missing' when GitHub says it doesn't exist yet (the page
+ * then says the files are being built instead of linking to a 404), null when it can't be read (offline,
+ * rate-limited: the links are shown and most likely work)
+ */
+export async function fetchRelease(repo = DOWNLOADS_REPO, tag = DOWNLOADS_TAG): Promise<ReleaseInfo | 'missing' | null> {
   try {
     const response = await fetch(`https://api.github.com/repos/${repo}/releases/tags/${tag}`, {
       headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
-      next: { revalidate: 3600 },
+      next: { revalidate: 600 },
       signal: AbortSignal.timeout(4000),
     });
+    if (response.status === 404) return 'missing';
     if (!response.ok) return null;
     return releaseInfo((await response.json()) as GitHubRelease);
   } catch {
