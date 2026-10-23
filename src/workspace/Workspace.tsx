@@ -19,7 +19,7 @@ import { Terminal } from './components/Terminal';
 import { canFormat, formatSource } from './format';
 import { BuildPanel } from './panels/BuildPanel';
 import { browserPreviewSupport } from '@/lib/browser-preview';
-import { debugBrief, type SourceLocation } from '@/lib/debug';
+import { debugBrief, isUsageExit, type SourceLocation } from '@/lib/debug';
 import { detectFramework } from '@/lib/frameworks';
 import { KIT_FILE } from '@/lib/kits';
 import { detectLanguage } from '@/lib/languages';
@@ -307,7 +307,7 @@ export function Workspace() {
     );
     if (command.action === 'run') {
       if (done.code === 0) markGood('python');
-      else if (done.error !== 'stopped') reportFailure('python', `${recorded.text()}${done.error ? `\n${done.error}` : ''}`, 'python');
+      else if (done.error !== 'stopped' && !isUsageExit(recorded.text(), command.args)) reportFailure('python', `${recorded.text()}${done.error ? `\n${done.error}` : ''}`, 'python');
     }
     // pyproject.toml, uv.lock and files the program wrote come back into the explorer
     if (Object.keys(done.changed).length || done.removed.length) dispatch({ type: 'put', files: done.changed, removed: done.removed });
@@ -323,7 +323,7 @@ export function Workspace() {
     }, signal);
     const language = outcome.language ?? (options.entry ? detectLanguage(options.entry, Object.keys(p.files))?.id : undefined);
     if (outcome.ok) markGood('run');
-    else if (outcome.error !== 'stopped') reportFailure('run', `${recorded.text()}${outcome.error ? `\n${outcome.error}` : ''}`, language);
+    else if (outcome.error !== 'stopped' && !isUsageExit(recorded.text(), options.args)) reportFailure('run', `${recorded.text()}${outcome.error ? `\n${outcome.error}` : ''}`, language);
     // Cargo.lock, go.sum and files the program wrote come back into the explorer
     if (Object.keys(outcome.changed).length || outcome.removed.length) dispatch({ type: 'put', files: outcome.changed, removed: outcome.removed });
     return outcome;
@@ -420,7 +420,8 @@ export function Workspace() {
     const outcome = { ok: true, code: message.code, ms: message.ms, memoryBytes: message.memoryBytes };
     setLastRun({ ...outcome, entry });
     if (message.code === 0) markGood('run');
-    else reportFailure('run', `${recorded.text()}\nExited with code ${message.code}`, 'typescript');
+    // A usage message is the program explaining its arguments, not a failure to debug
+    else if (!isUsageExit(recorded.text(), args)) reportFailure('run', `${recorded.text()}\nExited with code ${message.code}`, 'typescript');
     return outcome;
   }, [compile, dispatch, markGood, reportFailure]);
 

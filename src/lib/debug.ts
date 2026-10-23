@@ -110,6 +110,16 @@ export function failureSignature(source: FailureSource, title: string, locations
   return (h >>> 0).toString(36);
 }
 
+/**
+ * A program run without arguments that answers with its usage ("Usage: calc <expr>") and a non-zero exit
+ * is telling you how to call it, not crashing: that is not a failure to debug.
+ */
+export function isUsageExit(output: string, args: string[] = []): boolean {
+  if (args.length) return false;
+  const text = output.slice(-4000);
+  return /^\s*(?:usage|Usage|USAGE):?\s/m.test(text) && !/Traceback|panicked at|Exception|Error:|error\[|Segmentation fault/.test(text);
+}
+
 export function makeFailure(source: FailureSource, output: string, projectPaths: string[], language?: string, now = Date.now()): Failure {
   const tail = output.length > MAX_OUTPUT ? `…${output.slice(-MAX_OUTPUT)}` : output;
   const locations = parseLocations(output, projectPaths);

@@ -152,3 +152,12 @@ test('the brief gives the agent the error, the code it points at, what changed a
   assert.match(debugBrief(failure, files, files), /Nothing changed since it last worked/);
   assert.equal(excerpt('a\nb\nc\nd', 2, 1), '    1 | a\n>   2 | b\n    3 | c');
 });
+
+test('a usage message without arguments is not a failure to debug', async () => {
+  const { isUsageExit } = await import('../src/lib/debug.ts');
+  assert.equal(isUsageExit('Usage: calc "1 + 2 * 3"\n', []), true);
+  assert.equal(isUsageExit('usage: tool [-h] file\n', undefined), true);
+  assert.equal(isUsageExit('Usage: calc "1 + 2 * 3"\n', ['1+'] ), false, 'with arguments, a non-zero exit is a real failure');
+  assert.equal(isUsageExit('Traceback (most recent call last):\n  ...\nusage: x\n', []), false);
+  assert.equal(isUsageExit('TypeError: x is undefined\n', []), false);
+});
