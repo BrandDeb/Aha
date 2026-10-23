@@ -13,10 +13,12 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { evidenceFrom, verdict, type Evidence } from '@/lib/agent/evidence';
+import { chipsFor, evidenceFrom, verdict, type Evidence } from '@/lib/agent/evidence';
 import { isHarnessFile, runHarnessLoop, type HarnessEvent } from '@/lib/agent/harness';
 import { runAgent } from '@/lib/agent/loop';
 import { callModelFor } from '@/lib/agent/model';
+import { parseReview, REVIEWER_PROMPT, reviewInput, type Review } from '@/lib/agent/review';
+import { contractsOf } from '@/lib/contracts';
 import { systemPromptFor } from '@/lib/agent/prompt';
 import { Stage, type SerializedStage } from '@/lib/agent/stage';
 import { workspaceTools } from '@/lib/agent/tools';
@@ -60,6 +62,8 @@ export interface Lane {
   score?: number;
   scoreNotes?: string[];
   evidence?: Evidence;
+  /** The second reviewer's reading of this lane's changes */
+  review?: { status: 'running' } | ({ status: 'done' } & Review) | { status: 'error'; error: string };
   recommended?: boolean;
   files: FileChange[];
   saved: SerializedStage;
@@ -96,6 +100,8 @@ export interface AgentPrefs {
   approaches: number;
   /** Start a debugging proposal by itself when something fails (once per distinct failure) */
   autoDebug: boolean;
+  /** A second reviewer reads every finished proposal before you do */
+  review: boolean;
 }
 
 export const BUDGETS: Record<AgentPrefs['budget'], { label: string; budget: Partial<Budget> }> = {
@@ -107,7 +113,7 @@ export const BUDGETS: Record<AgentPrefs['budget'], { label: string; budget: Part
 const STORE_KEY = 'nanocli:proposals';
 const PREFS_KEY = 'nanocli:agent-prefs';
 const MAX_KEPT = 15;
-const DEFAULT_PREFS: AgentPrefs = { budget: 'standard', trustCommands: false, approaches: 0, autoDebug: false };
+const DEFAULT_PREFS: AgentPrefs = { budget: 'standard', trustCommands: false, approaches: 0, autoDebug: false, review: true };
 
 /** Plain data the interface renders from */
 export function snapshotFiles(stage: Stage, hide: (p: string) => boolean = () => false): FileChange[] {
@@ -168,6 +174,11 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     projectRef.current = project;
   }, [project]);
+  const prefsRef = useRef<AgentPrefs>(DEFAULT_PREFS);
+  const proposalsRef = useRef<Proposal[]>([]);
+  useEffect(() => {
+    proposalsRef.current = proposals;
+  }, [proposals]);
 
   // Restore saved proposals (their working copies are rebuilt on demand)
   useEffect(() => {
@@ -202,6 +213,10 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
     const running = controllers.current;
     return () => running.forEach((c) => c.abort());
   }, []);
+
+  useEffect(() => {
+    prefsRef.current = prefs;
+  }, [prefs]);
 
   const setPrefs = useCallback((patch: Partial<AgentPrefs>) => {
     setPrefsState((prev) => {
@@ -253,6 +268,36 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
     [update, notify]
   );
 
+  /** The second reviewer: reads one lane's changes cold, with the goal, the evidence and the contracts */
+  const reviewLane = useCallback(
+    async (id: string, laneId: string, goal: string, summary: string, evidence: Evidence | undefined, target: Exclude<ReturnType<typeof resolveProvider>, { error: string }>) => {
+      const stage = stages.current.get(id)?.get(laneId);
+      if (!stage || !prefsRef.current.review) return;
+      const changes = snapshotFiles(stage, isHarnessFile).filter((f) => !isHarnessFile(f.path));
+      if (!changes.length) return;
+      const setReview = (review: Lane['review']) => update(id, (p) => ({ ...p, lanes: p.lanes.map((l) => (l.id === laneId ? { ...l, review } : l)) }));
+      setReview({ status: 'running' });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3 * 60_000);
+      try {
+        const input = reviewInput({
+          goal,
+          summary,
+          changes: changes.map((c) => ({ path: c.path, before: c.kind === 'added' ? '' : c.before, after: c.kind === 'deleted' ? '' : c.after })),
+          evidence: evidence ? chipsFor(evidence).map((c) => c.label) : [],
+          contracts: contractsOf(stage.files()).contracts.map((c) => c.rule),
+        });
+        const turn = await callModelFor(target)({ system: REVIEWER_PROMPT, messages: [{ role: 'user', content: input }], tools: [], signal: controller.signal });
+        setReview({ status: 'done', ...parseReview(turn.text) });
+      } catch (error) {
+        setReview({ status: 'error', error: (error as Error).name === 'AbortError' ? 'The review took too long' : (error as Error).message });
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    [update]
+  );
+
   /** One agent run on one lane; also used for follow-ups, which continue the conversation */
   const runSingle = useCallback(
     async (id: string, laneId: string, goal: string, target: Exclude<ReturnType<typeof resolveProvider>, { error: string }>) => {
@@ -295,13 +340,15 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
           },
         });
         histories.current.set(id, run.messages);
-        syncLane(id, laneId, { evidence: evidenceFrom(run, events, stage, isHarnessFile) });
+        const evidence = evidenceFrom(run, events, stage, isHarnessFile);
+        syncLane(id, laneId, { evidence, review: undefined });
         finish(id, { reason: run.reason, summary: run.summary }, run.reason === 'finished');
+        if (run.reason === 'finished') void reviewLane(id, laneId, proposalsRef.current.find((x) => x.id === id)?.goal ?? goal, run.summary, evidence, target);
       } catch (error) {
         finish(id, { reason: (error as Error).name === 'AbortError' ? 'aborted' : 'error', summary: (error as Error).message }, false);
       }
     },
-    [approver, finish, log, prefs.budget, prefs.trustCommands, syncLane, update]
+    [approver, finish, log, prefs.budget, prefs.trustCommands, syncLane, update, reviewLane]
   );
 
   /** Try the task with the current setup and with variants of the agent's harness, then recommend the best (Harness²-style) */
@@ -371,11 +418,12 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
             ? `No variant beat the current setup (score ${best.score}), so its result is recommended and no harness changes are proposed.`
             : `“${best.variant.id}” scored ${best.score} against ${result.baseline.score} for the current setup. The recommendation is its result plus the harness changes that earned it.`;
         finish(id, { reason: 'finished', summary }, true);
+        void reviewLane(id, 'recommended', goal, summary, recommended.evidence, target);
       } catch (error) {
         finish(id, { reason: (error as Error).name === 'AbortError' ? 'aborted' : 'error', summary: (error as Error).message }, false);
       }
     },
-    [finish, log, update]
+    [finish, log, update, reviewLane]
   );
 
   const targetOrExplain = useCallback((quiet = false) => {

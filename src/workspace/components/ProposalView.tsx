@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import { DiffView } from '@/components/CodeEditor';
 import { chipsFor, type Tone } from '@/lib/agent/evidence';
 import { ChangeProof } from './ChangeProof';
+import { REVIEW_LABEL, reviewFollowUp, type Review } from '@/lib/agent/review';
 import { problemOf } from '@/lib/agent/problems';
 import type { ToolCall } from '@/lib/agent/types';
 import { useActions } from '../actions';
@@ -112,6 +113,57 @@ function Activity({ log, lane, summary }: { log: LogEntry[]; lane?: string; summ
   );
 }
 
+function ReviewChip({ review }: { review: NonNullable<Proposal['lanes'][number]['review']> }) {
+  if (review.status === 'running') {
+    return <span className="rounded-md border border-border px-2 py-0.5 font-mono text-[11px] text-gray-400"><span className="dot mr-1 animate-pulse text-accent" aria-hidden="true" />reviewing…</span>;
+  }
+  if (review.status === 'error') return <span title={review.error} className={`rounded-md border px-2 py-0.5 font-mono text-[11px] ${TONE.neutral}`}>no review</span>;
+  const tone = review.verdict === 'approve' ? TONE.good : review.verdict === 'block' ? TONE.bad : TONE.warn;
+  const count = review.findings.filter((f) => f.severity !== 'minor').length;
+  return (
+    <span title={review.summary} className={`rounded-md border px-2 py-0.5 font-mono text-[11px] ${tone}`}>
+      {review.verdict === 'approve' ? 'reviewer ✓' : `reviewer: ${count || review.findings.length} ${review.verdict === 'block' ? 'blocking' : 'to fix'}`}
+    </span>
+  );
+}
+
+const SEVERITY_TONE: Record<string, string> = { blocker: 'text-danger', major: 'text-warn', minor: 'text-gray-400' };
+
+/** The second reviewer's findings, each one a click from its file, all of them a click from the agent */
+function SecondOpinion({ review, settled, onPick, onSend }: { review: Review; settled: boolean; onPick: (path: string) => void; onSend: (text: string) => void }) {
+  return (
+    <section aria-label="Second opinion">
+      <h3 className="eyebrow mb-1">Second opinion</h3>
+      <p className={`text-xs ${review.verdict === 'approve' ? 'text-accent' : review.verdict === 'block' ? 'text-danger' : 'text-warn'}`}>
+        {REVIEW_LABEL[review.verdict]}{review.summary ? `: ${review.summary}` : ''}
+      </p>
+      {review.findings.length > 0 && (
+        <ul className="mt-1.5 space-y-1.5">
+          {review.findings.map((f, i) => (
+            <li key={i} className="text-xs">
+              <div className="flex items-start gap-1.5">
+                <span className={`shrink-0 font-mono text-[10px] uppercase ${SEVERITY_TONE[f.severity]}`}>{f.severity}</span>
+                <div className="min-w-0">
+                  {f.file && (
+                    <button onClick={() => onPick(f.file!)} className="font-mono text-[11px] text-gray-400 hover:text-gray-100">
+                      {f.file}{f.line ? `:${f.line}` : ''}
+                    </button>
+                  )}
+                  <p className="text-gray-200">{f.issue}</p>
+                  {f.fix && <p className="text-gray-500">Fix: {f.fix}</p>}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!settled && review.findings.length > 0 && (
+        <button onClick={() => onSend(reviewFollowUp(review))} className="btn btn-secondary btn-sm mt-2 h-6">✦ Send to the agent</button>
+      )}
+    </section>
+  );
+}
+
 export function ProposalView({ proposal }: { proposal: Proposal }) {
   const { stop, answer, accept, discard, selectLane, followUp, close } = useProposals();
   const { settings } = useWorkspace();
@@ -153,7 +205,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
             ) : !settled && files.length > 0 ? (
               <>
                 <button className="btn btn-ghost btn-sm" onClick={() => discard(proposal.id)}>Discard</button>
-                {judged?.verified ? (
+                {judged?.verified && !(lane?.review?.status === 'done' && lane.review.verdict === 'block') ? (
                   <button className="btn btn-primary btn-sm" onClick={() => accept(proposal.id)} title="Apply every change to your files. The current version is saved to History first.">
                     Ship {files.length} change{files.length > 1 ? 's' : ''}
                   </button>
@@ -175,6 +227,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
                 {judged.verified ? '✓ ' : ''}{judged.headline}
               </span>
             )}
+            {lane?.review && <ReviewChip review={lane.review} />}
             {evidence &&
               chipsFor(evidence).map((chip) => (
                 <span key={chip.label} title={chip.detail} className={`rounded-md border px-2 py-0.5 font-mono text-[11px] ${TONE[chip.tone]}`}>
@@ -288,6 +341,9 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
                   <button className="btn btn-ghost btn-sm" onClick={() => answer(proposal.id, false)}>Decline</button>
                 </div>
               </div>
+            )}
+            {lane?.review?.status === 'done' && !working && (
+              <SecondOpinion review={lane.review} settled={settled} onPick={setPicked} onSend={(text) => followUp(proposal.id, text)} />
             )}
             {!working && !settled && project.length > 0 && lane && <ChangeProof id={`${proposal.id}:${lane.id}`} changes={project} onPick={setPicked} />}
             <Plan text={proposal.plan} />

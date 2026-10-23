@@ -168,6 +168,16 @@ What holds the agent to them:
   ("changes a contract") and needs a closer look, so a rule can't be quietly loosened.
 - **The worker keeps them.** A broken contract is the worker's next task after a failing build or run.
 
+### A second reviewer
+
+When the agent finishes, a separate reviewer reads the proposal cold: the goal, the diff (with line numbers),
+the evidence and your contracts, without the agent's reasoning or its tools, the way a colleague reviews a pull
+request. It looks for bugs first, then whether the goal is really met, safety, claims the evidence doesn't
+support, and contracts. Its verdict shows next to the evidence (`reviewer ✓`, `reviewer: 2 to fix`), its findings
+under **Second opinion** (severity, file and line, the issue, the fix), and **Send to the agent** hands them back
+in one click. A blocking review turns **Ship** into **Accept anyway**. It uses your model, one extra call per
+proposal; turn it off in the Agent tab.
+
 ### Evidence per change
 
 Every proposal also says what its changed lines actually did. Its version of the program runs once with

@@ -102,6 +102,10 @@ export function AgentPanel() {
             <input type="checkbox" checked={prefs.autoDebug} onChange={(e) => setPrefs({ autoDebug: e.target.checked })} />
             Debug failures automatically
           </label>
+          <label className="flex items-center gap-1.5 text-xs text-gray-400" title="When the agent finishes, a second reviewer reads the change cold (the goal, the diff, the evidence and your contracts) and lists what it would fix. Uses the same model; one extra call per proposal.">
+            <input type="checkbox" checked={prefs.review} onChange={(e) => setPrefs({ review: e.target.checked })} />
+            Second reviewer on every proposal
+          </label>
         </section>
 
         <section className="p-4">
