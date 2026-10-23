@@ -22,7 +22,7 @@ test('Tailwind: which runtime, and what goes to it', () => {
   const daisy = cssRuntimes({ daisyui: '^5', tailwindcss: '^4' }, {}).head;
   assert.match(daisy, /daisyui@5/);
   assert.match(cssRuntimes({ unocss: '^66' }, {}).head, /@unocss\/runtime/);
-  assert.equal(tailwindSource('@import "tailwindcss";\n@plugin "daisyui";\n@theme { --color-brand: #5eead4; }').trim(), '@theme { --color-brand: #5eead4; }');
+  assert.equal(tailwindSource('@import "tailwindcss";\n@plugin "daisyui";\n@theme { --color-brand: #5eead4; }')?.trim(), '@theme { --color-brand: #5eead4; }');
   assert.equal(tailwindSource('body { margin: 0 }'), null, 'plain CSS stays plain');
 });
 
