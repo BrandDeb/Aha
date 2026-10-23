@@ -233,7 +233,11 @@ function parseProject(rawFiles: unknown, rawEntry: unknown): { files: Record<str
   let total = 0;
   const files: Record<string, string> = {};
   for (const [filePath, content] of entries) {
-    if (!isValidProjectPath(filePath)) return { error: `Invalid file path: ${filePath.slice(0, 80)}` };
+    if (!isValidProjectPath(filePath)) {
+      // Dotfiles and folders the compiler never reads (.github/workflows/ci.yml, .gitignore, .env.example) are left out
+      if (/^\./.test(filePath) && !filePath.split('/').includes('..') && !/\.(?:[cm]?[jt]s|json)$/.test(filePath)) continue;
+      return { error: `Invalid file path: ${filePath.slice(0, 80)}` };
+    }
     if (typeof content !== 'string') return { error: `File content must be a string: ${filePath}` };
     total += Buffer.byteLength(content, 'utf8');
     files[filePath] = content;

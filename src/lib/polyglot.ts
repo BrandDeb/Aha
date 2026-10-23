@@ -241,7 +241,7 @@ export interface RunHooks {
 }
 
 /** Top-level folders that hold dependencies, build output and caches: kept between runs, never sent back */
-const KEEP = new Set(['node_modules', 'target', '.home', OUT_DIR, 'vendor', '.dart_tool', '_build', 'deps', 'bin', 'obj', '.gradle', '.venv', '__pycache__']);
+export const KEEP = new Set(['node_modules', 'target', '.home', OUT_DIR, 'vendor', '.dart_tool', '_build', 'deps', 'bin', 'obj', '.gradle', '.venv', '__pycache__']);
 
 export function installHint(language: Language): string {
   const platform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'mac' : 'linux';

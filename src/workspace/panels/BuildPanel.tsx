@@ -44,9 +44,9 @@ export function BuildPanel({ result, building, coverage, analyzing, onCoverage, 
           <div className="space-y-4">
             <ol className="space-y-3 text-sm text-gray-300">
               {[
-                ['Compile', 'builds a native binary and shows the pipeline, size and any scriptc problems.'],
-                ['Run in the terminal', 'type run to execute the project as WASM, right in this tab.'],
-                ['Ask the assistant', 'explain a file, fix build errors or write tests.'],
+                ['Run', 'runs the program right here (arguments go in the field next to Run).'],
+                ['Build', 'makes a native binary and shows the pipeline, size and any scriptc problems.'],
+                ['Ask the agent', 'type what you want in the bar at the top: it works on a copy and shows you the proof.'],
               ].map(([title, body], i) => (
                 <li key={title} className="flex gap-3">
                   <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] font-mono text-[11px] text-accent">{i + 1}</span>
@@ -54,7 +54,7 @@ export function BuildPanel({ result, building, coverage, analyzing, onCoverage, 
                 </li>
               ))}
             </ol>
-            <button onClick={() => void actions.compile()} className="btn btn-primary w-full">Compile now</button>
+            <button onClick={() => void actions.compile()} className="btn btn-primary w-full">Build now</button>
           </div>
         ) : (
           <div className="space-y-4 animate-fade-in">

@@ -5,7 +5,7 @@ import { formatSize } from '@/lib/compiler-browser';
 import { useActions } from '../actions';
 import { allFolders, basename, buildTree, diffStatus, isFolder, isPython, isRunnable, resolvePath, type TreeNode } from '../project';
 import { detectLanguage } from '@/lib/languages';
-import { streamPython, type PythonCommand, type PythonOutcome, type PythonStream } from '../python-client';
+import { pythonProjectId, streamCommand, streamPython, type PythonCommand, type PythonOutcome, type PythonStream } from '../python-client';
 import { fetchLanguages } from '../run-client';
 import { useWorkspace } from '../store';
 
@@ -34,7 +34,17 @@ const HELP = `Commands
   entry [file]          show or set the entry file
   format [file]         format with Prettier  git status       changes since last pull
   history  clear  date  whoami  help
+Anything else (npm, go test, cargo, make, pytest, git…) runs in a real shell in the project's folder on
+this machine, and files it changes come back into the editor. Force it with sh <command> or !<command>.
 Redirect output with > or >>, e.g.  run src/main.ts --help > help.txt`;
+
+/** Whether this server runs real commands (asked once) */
+let shellEnabled: Promise<boolean> | null = null;
+const realShell = () =>
+  (shellEnabled ??= fetch('/api/shell', { cache: 'no-store' })
+    .then((r) => r.json())
+    .then((d) => d.enabled === true)
+    .catch(() => false));
 
 /** Split a command line into words, honouring single and double quotes */
 export function tokenize(input: string): string[] {
@@ -104,6 +114,11 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
     const p = projectRef.current;
     let words = tokenize(raw.trim());
     if (!words.length) return;
+    // A real shell, on request: sh <command> or !<command>
+    let forced = /^\s*!/.test(raw) ? raw.replace(/^\s*!/, '') : /^\s*sh\s+/.test(raw) ? raw.replace(/^\s*sh\s+/, '') : null;
+    // A line that chains or pipes commands is shell syntax: the real shell runs all of it
+    if (forced === null && /&&|\|\||\||;|\$\(|`/.test(raw.replace(/(["'])(?:\\.|(?!\1).)*\1/g, '')) && (await realShell())) forced = raw.trim();
+    if (forced !== null) words = ['__shell__'];
 
     // Output redirection: cmd args > file | >> file
     let redirect: { path: string; append: boolean } | null = null;
@@ -158,6 +173,19 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
       const written = Object.keys(outcome.changed).filter((f) => !['pyproject.toml', 'uv.lock', '.python-version'].includes(f));
       if (written.length) print(`→ wrote ${written.join(', ')}`, 'sys');
       if (outcome.skipped.length) print(`not copied back (binary or large): ${outcome.skipped.slice(0, 6).join(', ')}${outcome.skipped.length > 6 ? '…' : ''}`, 'sys');
+    };
+
+    /** A command in a real shell in the project's folder on this machine; files it changes come back */
+    const runReal = async (line: string) => {
+      if (!(await realShell())) {
+        err(`${line.split(/\s/)[0]}: not available here — this studio doesn't run commands on its server (try help)`);
+        return;
+      }
+      await runStreamed(`$ ${line}`, async (onOutput, signal) => {
+        const done = await streamCommand('/api/shell', { projectId: pythonProjectId(p.name), files: projectRef.current.files, command: line, cwd }, onOutput, signal);
+        if (Object.keys(done.changed).length || done.removed.length) dispatch({ type: 'put', files: done.changed, removed: done.removed });
+        return { ...done, ok: done.code === 0 && !done.error };
+      });
     };
 
     const runPythonCommand = (cmd: PythonCommand, shown: string) => runStreamed(shown, (onOutput, signal) => actions.python(cmd, onOutput, signal));
@@ -386,27 +414,32 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
         break;
       }
       case 'run': {
-        // `run [file] [args…]`: the first word is a file only if it doesn't look like a flag
-        const explicit = args[0] && !args[0].startsWith('-') ? args[0] : undefined;
+        // `run [file] [args…]`: the first word is a file only if it doesn't look like a flag;
+        // `run -- args…` always runs the entry file with those arguments (what the Run button sends)
+        const entryOnly = args[0] === '--';
+        const rest = entryOnly ? args.slice(1) : args;
+        // A first word that names a project file you can't run (sample.txt) is an argument, not the program
+        const firstPath = !entryOnly && rest[0] && !rest[0].startsWith('-') ? resolve(rest[0]) : null;
+        const explicit = firstPath && (!(firstPath in p.files) || isRunnable(firstPath)) ? rest[0] : undefined;
         const explicitPath = explicit ? resolve(explicit) : null;
         const isPythonRun = explicit ? !!explicitPath && isPython(explicitPath) : !!p.entry && isPython(p.entry);
         if (isPythonRun) {
-          await runPythonFile(explicit, explicit ? args.slice(1) : args);
+          await runPythonFile(explicit, explicit ? rest.slice(1) : rest);
           break;
         }
         const languageFile = explicit ? explicitPath : p.entry;
         const language = languageFile && languageFile in p.files ? detectLanguage(languageFile, Object.keys(p.files)) : null;
         if (language && languageFile) {
-          await runLanguageFile(languageFile, explicit ? args.slice(1) : args, language.name);
+          await runLanguageFile(languageFile, explicit ? rest.slice(1) : rest, language.name);
           break;
         }
         let entry: string | undefined;
-        let programArgs = args;
-        if (args[0] && !args[0].startsWith('-')) {
-          const candidate = resolve(args[0]);
+        let programArgs = rest;
+        if (explicit) {
+          const candidate = resolve(explicit);
           if (candidate && candidate in p.files) {
             entry = candidate;
-            programArgs = args.slice(1);
+            programArgs = rest.slice(1);
           }
         }
         const target = entry ?? p.entry;
@@ -435,8 +468,13 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
         }
         break;
       }
+      case '__shell__':
+        await runReal(forced ?? '');
+        return;
       default:
-        err(`${command}: command not found — try help`);
+        // Not a built-in: the real shell gets the whole line (it handles quotes and redirects itself)
+        await runReal(raw.trim());
+        return;
     }
 
     if (redirect) {

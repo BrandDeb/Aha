@@ -52,26 +52,57 @@ const PipelinesPanel = dynamic(() => import('./panels/PipelinesPanel').then((m) 
 const WorkerPanel = dynamic(() => import('./panels/WorkerPanel').then((m) => m.WorkerPanel), { ssr: false, loading: PanelLoading });
 const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then((m) => m.SettingsDialog), { ssr: false });
 const TemplatesDialog = dynamic(() => import('./components/TemplatesDialog').then((m) => m.TemplatesDialog), { ssr: false });
+const WelcomeDialog = dynamic(() => import('./components/WelcomeDialog').then((m) => m.WelcomeDialog), { ssr: false });
 const SignInDialog = dynamic(() => import('./components/SignInDialog').then((m) => m.SignInDialog), { ssr: false });
 const ProjectDialog = dynamic(() => import('./components/ProjectDialog').then((m) => m.ProjectDialog), { ssr: false });
 const ArtifactDialog = dynamic(() => import('./components/ArtifactDialog').then((m) => m.ArtifactDialog), { ssr: false });
 const PreviewPane = dynamic(() => import('./components/PreviewPane').then((m) => m.PreviewPane), { ssr: false, loading: PanelLoading });
 const ProposalView = dynamic(() => import('./components/ProposalView').then((m) => m.ProposalView), { ssr: false, loading: PanelLoading });
 
-const PANELS: { id: PanelId; label: string; glyph: string }[] = [
-  { id: 'build', label: 'Build', glyph: '▶' },
-  { id: 'git', label: 'Git', glyph: '⑂' },
-  { id: 'ci', label: 'Pipelines', glyph: '⇶' },
-  { id: 'ai', label: 'Assistant', glyph: '✦' },
-  { id: 'agent', label: 'Agent', glyph: '⚙' },
-  { id: 'worker', label: 'Worker', glyph: '◎' },
-  { id: 'kit', label: 'Kit', glyph: '▣' },
-  { id: 'python', label: 'Python', glyph: 'Py' },
-  { id: 'languages', label: 'Run', glyph: '▷' },
-  { id: 'history', label: 'History', glyph: '↺' },
-  { id: 'graph', label: 'Graph', glyph: '⌬' },
-  { id: 'package', label: 'Package', glyph: '▤' },
+/**
+ * The side panel, in four groups: what you run, the agent, your source and CI, and the project's shape.
+ * The agent is one place with three ways to use it: Ask (answers, nothing changes), Do (a task done on a
+ * copy, back as a proposal with proof) and Keep going (it picks up the next useful task by itself).
+ */
+const GROUPS: { id: string; label: string; panels: { id: PanelId; label: string; hint: string }[] }[] = [
+  {
+    id: 'run',
+    label: 'Run',
+    panels: [
+      { id: 'build', label: 'Build', hint: 'Build output, timings, coverage and the last run' },
+      { id: 'languages', label: 'Language', hint: 'The toolchain that runs this project, and its options' },
+      { id: 'python', label: 'Python', hint: 'uv: run, packages, environment variables' },
+      { id: 'package', label: 'Packages', hint: 'Dependencies and scripts' },
+    ],
+  },
+  {
+    id: 'agent',
+    label: 'Agent',
+    panels: [
+      { id: 'agent', label: 'Do', hint: 'Give it a task: it works on a copy and comes back with a proposal and the proof that it works' },
+      { id: 'ai', label: 'Ask', hint: 'Questions and explanations about your code; nothing changes' },
+      { id: 'worker', label: 'Keep going', hint: 'It picks up the next useful task by itself while you work' },
+    ],
+  },
+  {
+    id: 'source',
+    label: 'Source',
+    panels: [
+      { id: 'git', label: 'Git', hint: 'Changes, branches, commit and push' },
+      { id: 'ci', label: 'Pipelines', hint: 'CI/CD: set it up, run it here, see GitHub runs' },
+      { id: 'history', label: 'History', hint: 'Saved versions of the project' },
+    ],
+  },
+  {
+    id: 'project',
+    label: 'Project',
+    panels: [
+      { id: 'graph', label: 'Graph', hint: 'How the files import each other' },
+      { id: 'kit', label: 'Kit', hint: 'The field kit: playbook, checks and setup' },
+    ],
+  },
 ];
+const groupOf = (panel: PanelId) => GROUPS.find((g) => g.panels.some((p) => p.id === panel)) ?? GROUPS[0];
 
 const DEFAULT_KEYS: Record<string, string> = {
   'build.compile': 'Mod+Enter',
@@ -133,7 +164,16 @@ export function Workspace() {
   const [showPreview, setShowPreview] = useState(false);
   // Failures from every run path, and the last version that worked: what "Debug this" starts from
   const tracker = useFailureTracker(project.name, project.files);
+  const argsRef = useRef<HTMLInputElement>(null);
   const { report: reportFailure, markGood } = tracker;
+  // A program that answered with its usage wants arguments: say so, and offer the field next to Run
+  const hintArguments = useCallback(
+    (output: string) => {
+      const usage = output.split('\n').find((l) => /^\s*usage:?\s/i.test(l))?.trim();
+      notify({ kind: 'info', title: 'This program expects arguments', detail: usage, action: { label: 'Add arguments', run: () => argsRef.current?.focus() } });
+    },
+    [notify]
+  );
   const devServer = useDevServer(project.name, project.files, !!web);
   // Vite-style apps can also run entirely in the browser (esbuild-wasm): the only way where dev servers are off
   const inBrowser = useMemo(() => (web ? browserPreviewSupport(project.files) : null), [web, project.files]);
@@ -150,13 +190,20 @@ export function Workspace() {
   const [coverage, setCoverage] = useState<CoverageResult | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [lastRun, setLastRun] = useState<(RunOutcome & { entry: string }) | null>(null);
-  const [panel, setPanel] = useState<PanelId>('build');
+  const [panel, setPanelState] = useState<PanelId>('build');
+  // Each group reopens on the tool you last used in it
+  const [lastInGroup, setLastInGroup] = useState<Record<string, PanelId>>({});
+  const setPanel = useCallback((id: PanelId) => {
+    setPanelState(id);
+    setLastInGroup((prev) => ({ ...prev, [groupOf(id).id]: id }));
+  }, []);
   const [showExplorer, setShowExplorer] = useState(true);
   const [showPanel, setShowPanel] = useState(true);
   const [showTerminal, setShowTerminal] = useState(true);
   const [terminalHeight, setTerminalHeight] = useState(220);
   const [zen, setZen] = useState(false);
-  const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project' | 'signin'>(null);
+  const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project' | 'signin' | 'welcome'>(null);
+  const [templatesFilter, setTemplatesFilter] = useState<'all' | 'typescript' | 'web' | 'python' | 'other' | 'kits'>('all');
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
   const { status: update, refresh: refreshUpdate } = useUpdateStatus();
   const [diff, setDiff] = useState<{ title: string; path: string; original: string; modified: string } | null>(null);
@@ -183,6 +230,18 @@ export function Workspace() {
       .then((data) => data.authenticated && setUser(data.user))
       .catch(() => {});
   }, []);
+
+  // A genuinely first visit (nothing stored, no link to open): the one-minute welcome
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      const firstVisit = !localStorage.getItem('nanocli:welcomed') && !localStorage.getItem('nanocli:ai') && !localStorage.getItem('nanocli:workspace') && !window.location.search;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- storage is only readable after hydration
+      if (firstVisit) setDialog('welcome');
+    } catch {
+      // storage blocked: no welcome
+    }
+  }, [hydrated]);
 
   // ?project= / ?template= / ?share= links (once, after storage hydration)
   useEffect(() => {
@@ -236,7 +295,7 @@ export function Workspace() {
     } catch {
       fail();
     }
-  }, [hydrated, dispatch, notify, saveSnapshot]);
+  }, [hydrated, dispatch, notify, saveSnapshot, setPanel]);
 
   // Zen mode: hide chrome, go full screen
   useEffect(() => {
@@ -307,12 +366,13 @@ export function Workspace() {
     );
     if (command.action === 'run') {
       if (done.code === 0) markGood('python');
-      else if (done.error !== 'stopped' && !isUsageExit(recorded.text(), command.args)) reportFailure('python', `${recorded.text()}${done.error ? `\n${done.error}` : ''}`, 'python');
+      else if (isUsageExit(recorded.text(), command.args)) hintArguments(recorded.text());
+      else if (done.error !== 'stopped') reportFailure('python', `${recorded.text()}${done.error ? `\n${done.error}` : ''}`, 'python');
     }
     // pyproject.toml, uv.lock and files the program wrote come back into the explorer
     if (Object.keys(done.changed).length || done.removed.length) dispatch({ type: 'put', files: done.changed, removed: done.removed });
     return { ...done, ok: done.code === 0 };
-  }, [dispatch, markGood, reportFailure]);
+  }, [dispatch, markGood, reportFailure, hintArguments]);
 
   const runLanguage = useCallback<WorkspaceActions['runLanguage']>(async (options, onOutput = () => {}, signal) => {
     const p = projectRef.current;
@@ -322,12 +382,14 @@ export function Workspace() {
       onOutput(stream, text);
     }, signal);
     const language = outcome.language ?? (options.entry ? detectLanguage(options.entry, Object.keys(p.files))?.id : undefined);
+    if (outcome.error !== 'stopped') setLastRun({ ok: !outcome.error, code: outcome.code ?? undefined, ms: outcome.ms, entry: options.entry, message: outcome.error });
     if (outcome.ok) markGood('run');
-    else if (outcome.error !== 'stopped' && !isUsageExit(recorded.text(), options.args)) reportFailure('run', `${recorded.text()}${outcome.error ? `\n${outcome.error}` : ''}`, language);
+    else if (isUsageExit(recorded.text(), options.args)) hintArguments(recorded.text());
+    else if (outcome.error !== 'stopped') reportFailure('run', `${recorded.text()}${outcome.error ? `\n${outcome.error}` : ''}`, language);
     // Cargo.lock, go.sum and files the program wrote come back into the explorer
     if (Object.keys(outcome.changed).length || outcome.removed.length) dispatch({ type: 'put', files: outcome.changed, removed: outcome.removed });
     return outcome;
-  }, [dispatch, markGood, reportFailure]);
+  }, [dispatch, markGood, reportFailure, hintArguments]);
 
   const compile = useCallback<WorkspaceActions['compile']>(async (options = {}) => {
     const p = projectRef.current;
@@ -360,7 +422,7 @@ export function Workspace() {
     } finally {
       setBuilding(false);
     }
-  }, [target, settings.build, notify, saveSnapshot, markGood, reportFailure]);
+  }, [target, settings.build, notify, saveSnapshot, markGood, reportFailure, setPanel]);
 
   /** The toolbar's Compile: Python has no compile step, so it runs the program in the terminal instead */
   const compileOrRun = useCallback(() => {
@@ -421,9 +483,11 @@ export function Workspace() {
     setLastRun({ ...outcome, entry });
     if (message.code === 0) markGood('run');
     // A usage message is the program explaining its arguments, not a failure to debug
-    else if (!isUsageExit(recorded.text(), args)) reportFailure('run', `${recorded.text()}\nExited with code ${message.code}`, 'typescript');
+    // args[0] is the program's name (argv[0]); its own arguments follow
+    else if (isUsageExit(recorded.text(), args.slice(1))) hintArguments(recorded.text());
+    else reportFailure('run', `${recorded.text()}\nExited with code ${message.code}`, 'typescript');
     return outcome;
-  }, [compile, dispatch, markGood, reportFailure]);
+  }, [compile, dispatch, markGood, reportFailure, hintArguments]);
 
   const format = useCallback<WorkspaceActions['format']>(async (path) => {
     const file = path ?? active;
@@ -468,12 +532,12 @@ export function Workspace() {
     setCoverage(await analyzeCoverageBrowser({ files: p.files, entry: p.entry }));
     setAnalyzing(false);
     setPanel('build');
-  }, []);
+  }, [setPanel]);
 
   const openPanel = useCallback((id: PanelId) => {
     setPanel(id);
     setShowPanel(true);
-  }, []);
+  }, [setPanel]);
 
   // Sign in: the redirect flow where this server is set up for it (a client secret and a callback on this host), else a one-time code
   const signIn = useCallback(() => {
@@ -505,12 +569,40 @@ export function Workspace() {
     runLanguage,
     inspect: (result) => setViewer(result ?? lastBuild),
     signIn,
+    openSettings: (tab = 'general') => {
+      setSettingsTab(tab);
+      setDialog('settings');
+    },
   }), [compile, run, format, save, openPanel, downloadArtifact, python, runLanguage, lastBuild, signIn]);
 
   // Terminal "run" from the toolbar / shortcut
+  // Program arguments, per project, next to Run (a CLI that needs them shouldn't look broken)
+  const [runArgs, setRunArgs] = useState('');
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- storage is only readable in the browser
+      setRunArgs(localStorage.getItem(`nanocli:run-args:${project.name}`) ?? '');
+    } catch {
+      setRunArgs('');
+    }
+  }, [project.name]);
+  const updateRunArgs = useCallback((value: string) => {
+    setRunArgs(value);
+    try {
+      localStorage.setItem(`nanocli:run-args:${projectRef.current.name}`, value);
+    } catch {
+      // storage blocked: kept for this session
+    }
+  }, []);
+  const runArgsRef = useRef(runArgs);
+  useEffect(() => {
+    runArgsRef.current = runArgs;
+  }, [runArgs]);
   const runInTerminal = useCallback(() => {
     setShowTerminal(true);
-    setTimeout(() => terminalRun.current?.('run'), 0);
+    const args = runArgsRef.current.trim();
+    // `run --` keeps the arguments from being read as a file to run
+    setTimeout(() => terminalRun.current?.(args ? `run -- ${args}` : 'run'), 0);
   }, []);
 
   const { start: startDevServer, state: devState } = devServer;
@@ -719,6 +811,7 @@ export function Workspace() {
 
   // Web apps have no scriptc build: their side panel opens on the agent instead
   const shownPanel: PanelId = web && panel === 'build' ? 'agent' : panel;
+  const shownGroup = groupOf(shownPanel);
   const panelVisible = (id: PanelId) =>
     id === 'build' ? !web : id === 'python' ? hasPython || panel === 'python' : id === 'languages' ? !!entryLanguage || panel === 'languages' : id === 'package' ? !hasPython || 'package.json' in project.files || panel === 'package' : id === 'kit' ? KIT_FILE in project.files || panel === 'kit' : true;
 
@@ -737,11 +830,6 @@ export function Workspace() {
             aria-label="Project name"
             className="w-36 min-w-0 rounded-md bg-transparent px-2 py-1 font-mono text-sm text-gray-300 outline-none hover:bg-white/[0.05] focus:bg-white/[0.07]"
           />
-          {git && (
-            <button onClick={() => openPanel('git')} className="badge hidden font-mono md:inline-flex" title={`${git.owner}/${git.repo}`}>
-              ⑂ {git.branch}{Object.keys(changes).length ? ` · ${Object.keys(changes).length}` : ''}
-            </button>
-          )}
           {collab && (
             <button
               className="badge hidden md:inline-flex"
@@ -754,23 +842,26 @@ export function Workspace() {
             </button>
           )}
 
-          {(worker.status.kind === 'working' || worker.status.kind === 'waiting-for-you') && (
-            <button
-              onClick={() => openPanel('worker')}
-              className={`badge hidden max-w-[16rem] lg:inline-flex ${worker.status.kind === 'waiting-for-you' ? 'text-warn' : ''}`}
-              title={worker.status.kind === 'working' ? `The worker is on: ${worker.status.proposal.goal.replace(/^Worker · /, '')}` : worker.status.reason}
-            >
-              <span className="dot animate-pulse" aria-hidden="true" />
-              <span className="truncate">{worker.status.kind === 'working' ? `Worker · ${worker.status.proposal.goal.replace(/^Worker · /, '')}` : 'Worker needs you'}</span>
-            </button>
-          )}
 
           <div className="hidden min-w-0 flex-1 px-2 md:block">
             <CommandBar inputRef={askRef} shortcut={formatCombo(bindings['agent.ask'] ?? '', isMac)} onNeedModel={() => openPanel('agent')} />
           </div>
 
           <div className="ml-auto flex items-center gap-2">
-            {usesScriptc && <OutputMenu target={target} options={settings.build} onTarget={setTarget} onOptions={(patch) => updateSettings({ build: { ...settings.build, ...patch } })} />}
+            {!web && (
+              <input
+                ref={argsRef}
+                value={runArgs}
+                onChange={(e) => updateRunArgs(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') runApp();
+                }}
+                placeholder="arguments"
+                aria-label="Program arguments"
+                title="Arguments for Run, as you would type them after the program name"
+                className="hidden h-8 w-40 rounded-lg border border-border bg-transparent px-2.5 font-mono text-xs text-gray-200 outline-none placeholder:text-gray-600 focus:border-border-strong lg:block"
+              />
+            )}
             {web && !showPreview && devState.status === 'ready' ? (
               <button onClick={() => setShowPreview(true)} className="btn btn-primary btn-sm" title={`Show the running app (${formatCombo(bindings['view.preview'] ?? '', isMac)})`}>
                 <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" /> Preview
@@ -778,16 +869,18 @@ export function Workspace() {
             ) : (
               <button
                 onClick={runApp}
-                className={`btn btn-sm ${usesScriptc ? 'btn-secondary' : 'btn-primary'}`}
+                className="btn btn-primary btn-sm"
                 title={`${web ? `Start ${web.label} and preview it` : isPython(project.entry) ? 'Run with uv in the terminal' : entryLanguage ? `Run with ${entryLanguage.name} in the terminal` : 'Run as WASM in the terminal'} (${formatCombo(bindings['build.run'] ?? '', isMac)})`}
               >
                 Run
               </button>
             )}
-            {usesScriptc && <button onClick={compileOrRun} disabled={building} className="btn btn-primary btn-sm" title={formatCombo(bindings['build.compile'] ?? '', isMac)}>
-              {building ? 'Compiling…' : 'Compile'}
-              <span className="kbd border-black/25 text-[10px] text-[var(--color-accent-fg)]/70">{formatCombo(bindings['build.compile'] ?? '', isMac)}</span>
-            </button>}
+            {usesScriptc && (
+              <button onClick={compileOrRun} disabled={building} className="btn btn-secondary btn-sm" title={`Build the ${target} output (${formatCombo(bindings['build.compile'] ?? '', isMac)})`}>
+                {building ? 'Building…' : 'Build'}
+              </button>
+            )}
+            {usesScriptc && <OutputMenu target={target} options={settings.build} onTarget={setTarget} onOptions={(patch) => updateSettings({ build: { ...settings.build, ...patch } })} />}
             <button onClick={() => setDialog('palette')} className="btn btn-ghost btn-icon" aria-label="Command palette" title={formatCombo(bindings['view.palette'] ?? '', isMac)}>⌘</button>
             <button onClick={() => { setSettingsTab('general'); setDialog('settings'); }} className="btn btn-ghost btn-icon" aria-label="Settings">⚙</button>
             {user ? (
@@ -947,23 +1040,44 @@ export function Workspace() {
           {/* Side panel */}
           {showPanel && (
             <aside className="pane hidden w-[24rem] shrink-0 flex-col overflow-hidden border-l border-border lg:flex" aria-label="Tools" data-zen-hide>
-              <div role="tablist" aria-label="Tool panels" className="flex shrink-0 overflow-x-auto border-b border-border bg-[var(--bar)] px-1">
-                {PANELS.filter((p) => panelVisible(p.id)).map((p) => (
-                  <button
-                    key={p.id}
-                    role="tab"
-                    aria-selected={shownPanel === p.id}
-                    onClick={() => setPanel(p.id)}
-                    className={`flex h-10 shrink-0 items-center gap-1.5 px-2.5 text-[13px] transition-colors ${
-                      shownPanel === p.id ? 'text-gray-100 shadow-[inset_0_-2px_0_var(--color-accent)]' : 'text-gray-400 hover:text-gray-100'
-                    }`}
-                  >
-                    {p.label}
-                    {p.id === 'git' && Object.keys(changes).length > 0 && <span className="rounded bg-[var(--accent-soft)] px-1 font-mono text-[11px] text-accent">{Object.keys(changes).length}</span>}
-                    {p.id === 'build' && diagnostics.length > 0 && <span className="rounded bg-danger/15 px-1 font-mono text-[11px] text-danger">{diagnostics.length}</span>}
-                  </button>
-                ))}
+              <div role="tablist" aria-label="Tool groups" className="flex shrink-0 border-b border-border bg-[var(--bar)] px-1">
+                {GROUPS.filter((g) => g.panels.some((p) => panelVisible(p.id))).map((g) => {
+                  const selected = g.id === shownGroup.id;
+                  const target = g.panels.find((p) => p.id === lastInGroup[g.id] && panelVisible(p.id)) ?? g.panels.find((p) => panelVisible(p.id))!;
+                  return (
+                    <button
+                      key={g.id}
+                      role="tab"
+                      aria-selected={selected}
+                      onClick={() => setPanel(target.id)}
+                      className={`flex h-10 flex-1 items-center justify-center gap-1.5 px-2 text-[13px] transition-colors ${
+                        selected ? 'text-gray-100 shadow-[inset_0_-2px_0_var(--color-accent)]' : 'text-gray-400 hover:text-gray-100'
+                      }`}
+                    >
+                      {g.label}
+                      {g.id === 'source' && Object.keys(changes).length > 0 && <span className="rounded bg-[var(--accent-soft)] px-1 font-mono text-[11px] text-accent">{Object.keys(changes).length}</span>}
+                      {g.id === 'run' && diagnostics.length > 0 && <span className="rounded bg-danger/15 px-1 font-mono text-[11px] text-danger">{diagnostics.length}</span>}
+                      {g.id === 'agent' && (worker.status.kind === 'working' || proposals.proposals.some((p) => p.status === 'working')) && <span className="dot animate-pulse text-accent" aria-label="working" />}
+                    </button>
+                  );
+                })}
               </div>
+              {shownGroup.panels.filter((p) => panelVisible(p.id)).length > 1 && (
+                <div role="tablist" aria-label={`${shownGroup.label} tools`} className="flex shrink-0 gap-1 border-b border-border px-3 py-2">
+                  {shownGroup.panels.filter((p) => panelVisible(p.id)).map((p) => (
+                    <button
+                      key={p.id}
+                      role="tab"
+                      aria-selected={shownPanel === p.id}
+                      onClick={() => setPanel(p.id)}
+                      title={p.hint}
+                      className={`rounded-md px-2.5 py-1 text-xs transition-colors ${shownPanel === p.id ? 'bg-white/[0.08] text-gray-100' : 'text-gray-400 hover:bg-white/[0.04] hover:text-gray-100'}`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto">
                 {shownPanel === 'build' && (
                   <BuildPanel result={lastBuild} building={building} coverage={coverage} analyzing={analyzing} onCoverage={() => void analyze()} lastRun={lastRun} />
@@ -988,23 +1102,49 @@ export function Workspace() {
           )}
         </div>
 
-        {/* Status bar */}
-        <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-border bg-[var(--bar)] px-3 font-mono text-[11px] text-gray-400" data-zen-hide>
-          <span className="flex items-center gap-1.5"><span className="dot text-accent" aria-hidden="true" />{project.entry ? project.entry : 'no entry file'}</span>
-          <span className="hidden sm:inline">{Object.keys(project.files).length} files</span>
+        {/* Status bar: what is happening now, each item one click from its panel */}
+        <footer className="flex h-7 shrink-0 items-center gap-1 overflow-hidden border-t border-border bg-[var(--bar)] px-2 font-mono text-[11px] text-gray-400" data-zen-hide>
+          {git && (
+            <button onClick={() => openPanel('git')} className="rounded px-1.5 hover:bg-white/[0.06] hover:text-gray-100" title={`${git.owner}/${git.repo}`}>
+              ⑂ {git.branch}{Object.keys(changes).length ? ` · ${Object.keys(changes).length} changed` : ''}
+            </button>
+          )}
+          <span className="hidden px-1.5 sm:inline" title="Entry file">{project.entry || 'no entry file'}</span>
           {web && devState.status !== 'none' && (
             <button onClick={() => setShowPreview((v) => !v)} className={`rounded px-1.5 hover:bg-white/[0.06] ${devState.status === 'ready' ? 'text-accent' : devState.status === 'failed' ? 'text-danger' : ''}`} title={devState.url ?? devState.error ?? ''}>
               {devState.status === 'ready' ? `● ${web.label} · ${devState.url?.replace(/^https?:\/\//, '').replace(/\/$/, '')}` : `${web.label} · ${devState.status}`}
             </button>
           )}
-          {lastBuild && <span className={lastBuild.success ? 'text-accent' : 'text-danger'}>{lastBuild.success ? `✓ built ${lastBuild.durationMs}ms` : `✕ ${diagnostics.length || 1} problem${diagnostics.length > 1 ? 's' : ''}`}</span>}
+          {lastBuild && (
+            <button onClick={() => openPanel('build')} className={`rounded px-1.5 hover:bg-white/[0.06] ${lastBuild.success ? 'text-accent' : 'text-danger'}`}>
+              {lastBuild.success ? `✓ built ${lastBuild.durationMs}ms` : `✕ ${diagnostics.length || 1} problem${diagnostics.length > 1 ? 's' : ''}`}
+            </button>
+          )}
+          {lastRun && lastRun.message !== 'stopped' && (
+            <span className={`px-1.5 ${lastRun.ok && !lastRun.code ? 'text-accent' : 'text-amber-300'}`}>{lastRun.ok ? `ran · exit ${lastRun.code ?? 0}${lastRun.ms !== undefined ? ` · ${lastRun.ms}ms` : ''}` : 'run failed'}</span>
+          )}
+          {failure && (
+            <span className="max-w-[18rem] truncate px-1.5 text-danger" title={failure.title}>● {failure.title}</span>
+          )}
+          <span className="ml-auto" />
+          {(() => {
+            const working = proposals.proposals.find((p) => p.status === 'working');
+            const review = proposals.proposals.filter((p) => p.status === 'review').length;
+            if (working) return <button onClick={() => openProposal(working.id)} className="flex max-w-[22rem] items-center gap-1.5 rounded px-1.5 text-gray-200 hover:bg-white/[0.06]"><span className="dot animate-pulse text-accent" aria-hidden="true" /><span className="truncate">Agent · {working.goal.replace(/^Worker · /, '')}</span></button>;
+            if (review) return <button onClick={() => openPanel('agent')} className="rounded px-1.5 text-accent hover:bg-white/[0.06]">{review} to review</button>;
+            return null;
+          })()}
+          {worker.settings.mode !== 'off' && (
+            <button onClick={() => openPanel('worker')} className={`rounded px-1.5 hover:bg-white/[0.06] ${worker.status.kind === 'waiting-for-you' ? 'text-amber-300' : ''}`} title="Keep going: the worker">
+              {worker.status.kind === 'working' ? 'worker on it' : worker.status.kind === 'waiting-for-you' ? 'worker needs you' : worker.status.kind === 'paused' ? 'worker paused' : `worker · ${worker.queue.length} queued`}
+            </button>
+          )}
           {update?.canApply && (
             <button onClick={() => { setSettingsTab('maintenance'); setDialog('settings'); }} className="rounded px-1.5 text-accent hover:bg-[var(--accent-soft)]" title="A newer version of the studio is available">
               ↑ {update.behind} update{update.behind > 1 ? 's' : ''}
             </button>
           )}
-          <span className="ml-auto hidden sm:inline">scriptc 0.2 · {formatCombo(bindings['view.palette'] ?? '', isMac)} for commands</span>
-          <span className="hidden md:inline">© 2026 BrandDeb</span>
+          <button onClick={() => setDialog('palette')} className="hidden rounded px-1.5 hover:bg-white/[0.06] hover:text-gray-100 sm:inline">{formatCombo(bindings['view.palette'] ?? '', isMac)} commands</button>
         </footer>
       </div>
 
@@ -1019,7 +1159,24 @@ export function Workspace() {
         />
       )}
       {dialog === 'settings' && <SettingsDialog commands={commands} isMac={isMac} onClose={() => setDialog(null)} initialTab={settingsTab} update={update} refreshUpdate={refreshUpdate} />}
-      {dialog === 'templates' && <TemplatesDialog onClose={() => setDialog(null)} />}
+      {dialog === 'templates' && <TemplatesDialog initial={templatesFilter} onClose={() => { setDialog(null); setTemplatesFilter('all'); }} />}
+      {dialog === 'welcome' && (
+        <WelcomeDialog
+          onClose={() => {
+            setDialog(null);
+            try {
+              localStorage.setItem('nanocli:welcomed', '1');
+            } catch {
+              // storage blocked: shown again next time
+            }
+          }}
+          onStart={(startWith) => {
+            if (!startWith) return;
+            setTemplatesFilter(startWith);
+            setDialog('templates');
+          }}
+        />
+      )}
       {viewer && <ArtifactDialog result={viewer} theme={settings.theme} onClose={() => setViewer(null)} />}
       {dialog === 'project' && <ProjectDialog user={user} onClose={() => setDialog(null)} />}
       {dialog === 'signin' && (

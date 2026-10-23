@@ -3,6 +3,7 @@
 import { createContext, useContext } from 'react';
 import type { CompileResult } from '@/lib/compiler-browser';
 import type { CompileTarget } from '@/types';
+import type { SettingsTab } from './components/SettingsDialog';
 import type { PythonCommand, PythonOutcome, PythonStream } from './python-client';
 import type { RunOptions, RunOutcome as LanguageOutcome } from './run-client';
 
@@ -40,6 +41,8 @@ export interface WorkspaceActions {
   inspect: (result?: CompileResult | null) => void;
   /** Sign in (or sign up) with GitHub: the redirect flow when this server has one, else a one-time code */
   signIn: () => void;
+  /** Open Settings on a tab (Assistant for keys and models, Maintenance…) */
+  openSettings: (tab?: SettingsTab) => void;
 }
 
 export type PanelId = 'build' | 'git' | 'ai' | 'agent' | 'history' | 'graph' | 'package' | 'python' | 'languages' | 'worker' | 'kit' | 'ci';

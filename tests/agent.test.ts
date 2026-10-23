@@ -522,3 +522,14 @@ test('callModelFor: posts the right request per provider and explains failures',
   const offline = callModelFor(target('ollama'), (async () => { throw new TypeError('fetch failed'); }) as typeof fetch);
   await assert.rejects(offline({ system: 'S', messages: conversation, tools }), /Couldn't reach Ollama/);
 });
+
+test('problems: what went wrong, in terms of what you can do', async () => {
+  const { problemOf } = await import('../src/lib/agent/problems.ts');
+  assert.equal(problemOf('Google Gemini rejected the API key: API key not valid. Please pass a valid API key.')?.kind, 'key');
+  assert.equal(problemOf('OpenAI: 429 Too Many Requests')?.kind, 'quota');
+  assert.equal(problemOf('Anthropic: Your credit balance is too low')?.kind, 'quota');
+  assert.equal(problemOf('The model "gpt-9" does not exist')?.kind, 'model');
+  assert.equal(problemOf('TypeError: Failed to fetch')?.kind, 'network');
+  assert.equal(problemOf('Added greet() and the build passes.'), null);
+  assert.equal(problemOf(undefined), null);
+});

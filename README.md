@@ -67,7 +67,8 @@ The workspace at `/` is a dark editor built around scriptc.
 | Area | What it does |
 |---|---|
 | **Projects** | File tree with folders, create/rename/move/delete, entry file, relative imports between files, autosave to the browser |
-| **Terminal** | A shell over the project (`ls cd cat mv rm tree echo > file …`). `run` compiles to WASM and executes it in a Web Worker in the tab with the project mounted; files it writes appear in the explorer |
+| **Terminal** | Built-in commands over the project (`ls cd cat mv rm tree echo > file …`, `run`) plus a real shell: anything else (`npm test`, `go test ./...`, `cargo build`, `make`, pipes and `&&`) runs in the project's folder on your machine, and files it changes come back into the editor. `sh …` or `!…` forces the real shell |
+| **Layout** | The side panel has four groups: Run (Build, Language, Python, Packages), Agent (Do, Ask, Keep going), Source (Git, Pipelines, History) and Project (Graph, Kit). Run takes program arguments in the field beside it; a program that answers with its usage gets a hint instead of a failure. The status bar shows the branch, the last build and run, the current failure, the agent and the worker, each one click from its panel. A first visit gets a one-minute welcome (what you're building, a model, GitHub) |
 | **Build** | Nine outputs from one menu — native, WASM, LLVM IR, scriptc IR (JSON), assembly, WASM text (WAT), object file, static library, WASM reactor — with an output viewer (highlighted text, or a hexdump for binaries), build options (release/dev, strip, dynamic engine, sanitizers, Windows window), pipeline timings, scriptc coverage and a run profile |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |

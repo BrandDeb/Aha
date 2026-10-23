@@ -11,11 +11,11 @@ import { useWorkspace } from '../store';
 import { useToast } from '../toasts';
 import { Dialog } from './Dialog';
 
-export function TemplatesDialog({ onClose }: { onClose: () => void }) {
+export function TemplatesDialog({ onClose, initial = 'all' }: { onClose: () => void; initial?: 'all' | 'typescript' | 'web' | 'python' | 'other' | 'kits' }) {
   const { project, dispatch, saveSnapshot } = useWorkspace();
   const { notify } = useToast();
   const actions = useActions();
-  const [language, setLanguage] = useState<'all' | 'typescript' | 'web' | 'python' | 'other' | 'kits'>('all');
+  const [language, setLanguage] = useState<'all' | 'typescript' | 'web' | 'python' | 'other' | 'kits'>(initial);
   const importRef = useRef<HTMLInputElement>(null);
   const groupOf = (t: Template) => ((t.language ?? 'typescript') === 'typescript' || t.language === 'python' || t.language === 'web' ? (t.language ?? 'typescript') : 'other');
   const shown = language === 'kits' ? [] : TEMPLATES.filter((t) => language === 'all' || groupOf(t) === language);

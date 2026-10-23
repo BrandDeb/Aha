@@ -10,7 +10,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { DiffView } from '@/components/CodeEditor';
 import { chipsFor, type Tone } from '@/lib/agent/evidence';
+import { problemOf } from '@/lib/agent/problems';
 import type { ToolCall } from '@/lib/agent/types';
+import { useActions } from '../actions';
 import { languageFor } from '../project';
 import { ago, laneOf, useProposals, verdict, type LogEntry, type Proposal } from '../proposals';
 import { useWorkspace } from '../store';
@@ -68,7 +70,20 @@ function Activity({ log, lane, summary }: { log: LogEntry[]; lane?: string; summ
     <ol className="space-y-2" aria-label="What the agent did">
       {log.filter((e) => !(e.kind === 'agent' && summary && e.text === summary)).map((entry) =>
         entry.kind === 'you' ? (
-          <li key={entry.id} className="rounded-lg bg-white/[0.04] px-3 py-2 text-sm text-gray-100">{entry.text}</li>
+          <li key={entry.id} className="rounded-lg bg-white/[0.04] px-3 py-2 text-sm text-gray-100">
+            {(entry.text ?? '').length > 240 ? (
+              // A long task (a debugging brief, a worker task) folds to its first lines
+              <details>
+                <summary className="cursor-pointer list-none">
+                  <span className="line-clamp-2">{entry.text}</span>
+                  <span className="mt-1 block text-xs text-gray-500">Show the whole task</span>
+                </summary>
+                <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-gray-300">{entry.text}</p>
+              </details>
+            ) : (
+              entry.text
+            )}
+          </li>
         ) : entry.kind === 'agent' ? (
           <li key={entry.id} className="whitespace-pre-wrap text-sm leading-relaxed text-gray-300">{entry.text?.replace(/\*\*/g, '')}</li>
         ) : entry.kind === 'notice' ? (
@@ -99,6 +114,7 @@ function Activity({ log, lane, summary }: { log: LogEntry[]; lane?: string; summ
 export function ProposalView({ proposal }: { proposal: Proposal }) {
   const { stop, answer, accept, discard, selectLane, followUp, close } = useProposals();
   const { settings } = useWorkspace();
+  const actions = useActions();
   const lane = laneOf(proposal);
   const files = lane?.files ?? [];
   const [picked, setPicked] = useState<string | null>(null);
@@ -109,6 +125,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
   const evidence = lane?.evidence;
   const judged = evidence ? verdict(evidence) : null;
   const project = files.filter((f) => !f.path.startsWith('agent/') && f.path !== 'AGENTS.md');
+  const problem = working ? null : problemOf(proposal.outcome?.reason === 'finished' ? undefined : proposal.outcome?.summary);
 
   return (
     <div className="flex h-full min-h-0 flex-col" aria-label={`Proposal: ${proposal.goal}`}>
@@ -119,7 +136,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <span className={working ? 'text-gray-300' : settled ? 'text-gray-500' : 'text-accent'}>
                 {working && <span className="mr-1.5 inline-block h-2.5 w-2.5 animate-spin rounded-full border border-gray-600 border-t-gray-100 align-[-1px]" aria-hidden="true" />}
-                {proposal.pending ? 'Waiting for you' : STATUS[proposal.status]}
+                {proposal.pending ? 'Waiting for you' : problem ? 'Couldn’t start' : STATUS[proposal.status]}
                 {working && proposal.step ? ` · step ${proposal.step}` : ''}
               </span>
               <span aria-hidden="true">·</span>
@@ -165,7 +182,30 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
               ))}
           </div>
         )}
-        {proposal.outcome && !working && <p className="max-w-4xl whitespace-pre-wrap text-sm leading-relaxed text-gray-300">{proposal.outcome.summary}</p>}
+        {problem ? (
+          <div role="alert" className="flex flex-wrap items-start gap-3 rounded-xl border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-gray-100">{problem.title}</p>
+              <p className="mt-0.5 text-sm text-gray-400">{problem.detail}</p>
+              <details className="mt-1.5 text-xs text-gray-500">
+                <summary className="cursor-pointer">What the provider said</summary>
+                <p className="mt-1 whitespace-pre-wrap">{proposal.outcome?.summary}</p>
+              </details>
+            </div>
+            <div className="flex shrink-0 gap-1.5">
+              {problem.kind !== 'network' && (
+                <button className="btn btn-primary btn-sm" onClick={() => actions.openSettings('ai')}>
+                  {problem.kind === 'key' ? 'Fix key' : 'Choose a model'}
+                </button>
+              )}
+              <button className={`btn btn-sm ${problem.kind === 'network' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => followUp(proposal.id, 'Try again.')}>
+                Try again
+              </button>
+            </div>
+          </div>
+        ) : (
+          proposal.outcome && !working && <p className="max-w-4xl whitespace-pre-wrap text-sm leading-relaxed text-gray-300">{proposal.outcome.summary}</p>
+        )}
       </header>
 
       {/* Approaches */}
@@ -218,7 +258,15 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
             </>
           ) : (
             <div className="flex flex-1 items-center justify-center p-8 text-center text-sm text-gray-500">
-              {working ? 'Changes appear here as the agent makes them. Nothing touches your files until you accept.' : settled ? `This proposal was ${proposal.status}.` : 'No file changes.'}
+              {working
+                ? 'Changes appear here as the agent makes them. Nothing touches your files until you accept.'
+                : settled
+                  ? `This proposal was ${proposal.status}.`
+                  : problem
+                    ? 'No changes: the agent stopped before it could start on your project.'
+                    : proposal.outcome?.reason === 'finished'
+                      ? 'No changes needed: the agent answered without editing files (its answer is above).'
+                      : `No changes: the run ended early (${proposal.outcome?.reason ?? 'stopped'}).`}
             </div>
           )}
           {project.length < files.length && (
