@@ -42,10 +42,17 @@ def entry(path, line):
     e = data.get(key)
     if e is None:
         e = data[key] = {"hits": 0, "values": {}}
+        entry_at[id(e)] = (path, line)
     return e
 
 
+entry_at = {}
+
+
 def record(e, name, s):
+    at = entry_at.get(id(e))
+    if at is not None:
+        step_value(at[0], at[1], name, s)
     x = e["values"].get(name)
     if x is None:
         x = e["values"][name] = {"n": 0, "first": [], "last": s}
@@ -84,13 +91,25 @@ def statement_lines():
 def dump():
     try:
         with open(OUT, "w", encoding="utf-8") as f:
-            json.dump({"truncated": state["truncated"], "files": statement_lines(), "data": data}, f)
+            json.dump({"truncated": state["truncated"], "files": statement_lines(), "data": data, "steps": steps}, f)
     except Exception:
         pass
 
 
 snapshots = {}
 raising = set()
+# Rewind: every line that ran, in order, with what it set (capped)
+MAX_STEPS = 20000
+steps = []
+
+
+def step_value(path, line, name, s):
+    for i in range(len(steps) - 1, max(-1, len(steps) - 201), -1):
+        if steps[i][0] == path and steps[i][1] == line:
+            if steps[i][2] is None:
+                steps[i][2] = {}
+            steps[i][2][name] = s
+            return
 
 
 def tracer(frame, event, arg):
@@ -117,6 +136,8 @@ def tracer(frame, event, arg):
                 print("\n[live values: the program ran too long; showing the start of the run]", flush=True)
                 os._exit(124)
             entry(path, frame.f_lineno)["hits"] += 1
+            if len(steps) < MAX_STEPS:
+                steps.append([path, frame.f_lineno, None])
             snapshots[id(frame)] = (frame.f_lineno, snap(frame))
         else:
             # a function leaving because of an error returns nothing; the module itself returns nothing to show

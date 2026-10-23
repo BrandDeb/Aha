@@ -507,3 +507,8 @@ html.zen [data-zen-hide] {
   from { opacity: 0.4; transform: translateX(16px); }
   to { opacity: 1; transform: none; }
 }
+
+/* Rewind: the moment being looked at */
+.monaco-editor .rewind-line { background: color-mix(in srgb, var(--color-accent) 14%, transparent); }
+.monaco-editor .rewind-gutter { background: var(--color-accent); width: 3px !important; margin-left: 3px; }
+.monaco-editor .rewind-value { color: var(--color-accent); font-style: italic; opacity: 0.95; }

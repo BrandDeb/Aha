@@ -13,7 +13,7 @@ import { KEEP, RUN_PROJECTS, runEnv } from '../polyglot.ts';
 import { createJobPool, createKeyedLock, isSafeRelativePath, runStep, writeProject } from '../proc.ts';
 import { instrument } from './instrument.ts';
 import { PY_TRACER } from './python-tracer.ts';
-import { LIVE_SOURCE, liveSupported, type LiveLine, type LiveRequest, type LiveResult } from './shared.ts';
+import { LIVE_SOURCE, liveSupported, type LiveLine, type LiveStep, type LiveRequest, type LiveResult } from './shared.ts';
 
 export { LIVE_SOURCE, liveSupported, type LiveLine, type LiveRequest, type LiveResult };
 
@@ -45,6 +45,9 @@ const JS_RUNTIME = `'use strict';
 const fs = require('fs');
 const MAX_EVENTS = 300000, MAX_FIRST = 8, MAX_LEN = 72;
 const data = {};
+// Rewind: every line that ran, in order, with what it set (capped; the per-line summary above is not)
+const MAX_STEPS = 20000;
+const steps = [];
 let events = 0, truncated = false, last = null;
 function fmt(v, depth) {
   depth = depth || 0;
@@ -72,12 +75,20 @@ function fmt(v, depth) {
   } catch (e) { return '‹unreadable›'; }
 }
 const short = (s) => (s.length > MAX_LEN ? s.slice(0, MAX_LEN - 1) + '…' : s);
-function write() { try { fs.writeFileSync(process.env.NANOCLI_LIVE_OUT, JSON.stringify({ truncated, data })); } catch (e) {} }
+function write() { try { fs.writeFileSync(process.env.NANOCLI_LIVE_OUT, JSON.stringify({ truncated, data, steps })); } catch (e) {} }
 function count() {
   if (++events > MAX_EVENTS && !truncated) { truncated = true; write(); process.stdout.write('\\n[live values: the program ran too long; showing the start of the run]\\n'); process.exit(124); }
 }
-globalThis.__h = (f, l) => { count(); last = f + ':' + l; const e = (data[last] ||= { hits: 0, values: {} }); e.hits++; };
+globalThis.__h = (f, l) => { count(); last = f + ':' + l; const e = (data[last] ||= { hits: 0, values: {} }); e.hits++; if (steps.length < MAX_STEPS) steps.push([f, l, null]); };
+function step(key, name, s) {
+  // a value set by the line that just ran belongs to that moment; otherwise it is a moment of its own
+  // (a loop header setting the next item, a call returning after its body ran)
+  const top = steps[steps.length - 1];
+  if (top && top[0] + ':' + top[1] === key) { (top[2] ||= {})[name] = s; return; }
+  if (steps.length < MAX_STEPS) { const [f, l] = key.split(':'); steps.push([Number(f), Number(l), { [name]: s }]); }
+}
 function record(key, name, s) {
+  step(key, name, s);
   const e = (data[key] ||= { hits: 0, values: {} });
   const x = (e.values[name] ||= { n: 0, first: [], last: s });
   x.n++; if (x.first.length < MAX_FIRST) x.first.push(s); x.last = s;
@@ -178,7 +189,7 @@ export async function runLive(request: LiveRequest, options: { timeoutMs?: numbe
       const originals = new Map(fileIds.map((p) => [p.replace(/\.[cm]?[jt]s$/, '.js'), p]));
       output = cleanLiveOutput(output, liveDir, (rel) => originals.get(rel)).replaceAll(dir + path.sep, '');
 
-      let raw: { truncated?: boolean; files?: Record<string, number[]>; data?: Record<string, LiveLine> } = {};
+      let raw: { truncated?: boolean; files?: Record<string, number[]>; data?: Record<string, LiveLine>; steps?: [number | string, number, Record<string, string> | null][] } = {};
       try {
         raw = JSON.parse(await fs.readFile(out, 'utf8'));
       } catch {
@@ -197,9 +208,15 @@ export async function runLive(request: LiveRequest, options: { timeoutMs?: numbe
         (files[p] ??= { statementLines: [], lines: {} }).lines[Number(key.slice(at + 1))] = line;
       }
       const ok = outcome.code === 0 && !outcome.timedOut && !outcome.spawnError;
+      const steps: LiveStep[] = [];
+      for (const [ref, line, values] of raw.steps ?? []) {
+        const p = typeof ref === 'number' ? fileIds[ref] : ref;
+        if (p && p in request.files) steps.push(values ? { file: p, line, values } : { file: p, line });
+      }
       return {
         ok,
         files,
+        steps,
         output,
         code: outcome.code,
         ms: Date.now() - started,

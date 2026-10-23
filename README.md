@@ -73,6 +73,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Create** | One place to start: **describe** an app in plain words and get a plan (language, stack and why) that the agent builds while you review; a **gallery** of 23 apps (dashboards, trackers, landing pages, APIs, games, AI chat) each on the stack that suits it and many in several languages; a **stack builder** (framework, styling, UI kit, data, routing, state, forms, testing, lint, API and database) that writes every dependency into package.json or pyproject.toml and wires each one into working code; and every template and field kit. See [Create](#create) |
 | **AI autocomplete** | Grey-text suggestions as you type, from any model (the one chosen for Autocomplete in Settings → AI models, or the main one): it sees the code around the cursor and the files it imports, and only what is missing is shown (echoes of the current line, code fences and anything already after the cursor are stripped). Tab accepts, Ctrl/⌘ + → accepts a word, Alt + \\ asks on demand. Answers are cached and cancelled as you type on; switch it off in Settings → Extensions |
 | **Live values** | Turn on **Live** above the editor and the entry file (TypeScript, JavaScript or Python) runs after each pause in typing: every line shows what it did, right after the code — the values it set (`sum = 3, 7, 12 ×3` for a loop), what it returned, what it printed and the error it threw — and lines that never ran fade. Hover a line for every value. Local only, like Run; see [Live values](#live-values) |
+| **Rewind** | Every live run is recorded: scrub back and forth through it, play it back, and see each variable as it was at that moment, with the line that ran highlighted. Click a variable to jump to where it changes; a crash opens on the line that threw; ask the agent about any moment. See [Rewind](#rewind) |
 | **Contracts** | Rules that stay true, written in words and checked by a pattern or a command ("no console.log in src", "every route checks the session", "the tests pass"). The agent is told every one and checks them before it finishes, a proposal that breaks one is never marked verified, the worker fixes broken ones, and the status bar shows how they stand; see [Contracts](#contracts) |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
@@ -170,6 +171,22 @@ your edits until the next run lands.
 Live values run your program on the server, so they work where Run does: on your own machine (or with
 `NANOCLI_RUN=1`). Your program runs on every pause, so keep it off for code that sends email or writes to a
 real database.
+
+### Rewind
+
+Every live run is also recorded, line by line, so you can go back in time through it. Click **⟲ Rewind**
+next to Live and a timeline opens under the editor: the editor follows along, highlighting the line that ran
+at that moment and what it did, and the bar lists every variable as it was right then (the ones that just
+changed are lit).
+
+- **Step** with ◀ ▶ or the arrow keys, drag the slider, or press ▶ to play the run back.
+- **Jump to a change:** click a variable to go to the next moment it changes (Shift-click for the one before).
+- **Crashes first:** when the run threw, Rewind opens on the line that threw, and **✕ crash** jumps back there.
+- **Ask about this moment** hands the agent the line, the variables and the steps that led there, and asks
+  whether anything looks wrong.
+
+The first 20,000 steps of a run are kept. Works for TypeScript, JavaScript and Python, across every file of
+the project.
 
 ## Contracts
 

@@ -338,6 +338,8 @@ interface CodeEditorProps {
   live?: { file: LiveResult['files'][string] | undefined; stale: boolean } | null;
   /** Lines an accepted proposal wrote, and why (hover the line number) */
   why?: { line: number; text: string }[];
+  /** Rewind: the line that ran at the chosen moment, and what it did then */
+  rewind?: { line: number; text: string } | null;
 }
 
 export function CodeEditor({
@@ -355,6 +357,7 @@ export function CodeEditor({
   extensions = { wordWrap: true },
   live = null,
   why,
+  rewind,
 }: CodeEditorProps) {
   const editorRef = useRef<EditorInstance | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -446,6 +449,24 @@ export function CodeEditor({
         }))
     );
   };
+  const rewindRef = useRef<{ clear: () => void } | null>(null);
+  const rewindLine = rewind?.line ?? 0;
+  const rewindText = rewind?.text ?? '';
+  useEffect(() => {
+    rewindRef.current?.clear();
+    rewindRef.current = null;
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (!editor || !model || !rewindLine || rewindLine > model.getLineCount()) return;
+    rewindRef.current = editor.createDecorationsCollection([
+      {
+        range: { startLineNumber: rewindLine, startColumn: 1, endLineNumber: rewindLine, endColumn: model.getLineMaxColumn(rewindLine) },
+        options: { isWholeLine: true, className: 'rewind-line', linesDecorationsClassName: 'rewind-gutter', ...(rewindText ? { after: { content: `  ${rewindText}`, inlineClassName: 'rewind-value' } } : {}) },
+      },
+    ]);
+    editor.revealLineInCenterIfOutsideViewport(rewindLine);
+  }, [rewindLine, rewindText, path]);
+
   // Callers build the list each render: re-apply only when what it says changes
   const whyKey = why?.length ? why.map((w) => `${w.line}:${w.text.length}`).join(',') : '';
   useEffect(() => {

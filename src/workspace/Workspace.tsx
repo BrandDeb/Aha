@@ -36,6 +36,7 @@ import { useWorker } from './worker';
 import { useWorkspace } from './store';
 import { useToast } from './toasts';
 import { useLiveValues } from './live-client';
+import { firstError } from '@/lib/live/rewind';
 import { useContracts } from './contracts-client';
 import { useAutocomplete } from './autocomplete';
 import { usePersistedFlag } from './layout';
@@ -61,6 +62,7 @@ const HistoryPanel = dynamic(() => import('./panels/HistoryPanel').then((m) => m
 const PackagePanel = dynamic(() => import('./panels/PackagePanel').then((m) => m.PackagePanel), { ssr: false, loading: PanelLoading });
 const LanguagePanel = dynamic(() => import('./panels/LanguagePanel').then((m) => m.LanguagePanel), { ssr: false, loading: PanelLoading });
 const PythonPanel = dynamic(() => import('./panels/PythonPanel').then((m) => m.PythonPanel), { ssr: false, loading: PanelLoading });
+const RewindBar = dynamic(() => import('./components/RewindBar').then((m) => m.RewindBar), { ssr: false });
 const OptimizePanel = dynamic(() => import('./panels/OptimizePanel').then((m) => m.OptimizePanel), { ssr: false, loading: PanelLoading });
 const ContractsPanel = dynamic(() => import('./panels/ContractsPanel').then((m) => m.ContractsPanel), { ssr: false, loading: PanelLoading });
 const KitPanel = dynamic(() => import('./panels/KitPanel').then((m) => m.KitPanel), { ssr: false, loading: PanelLoading });
@@ -686,6 +688,23 @@ export function Workspace() {
   // Why-history: which lines of the open files an accepted proposal wrote, and why
   const whyEntries = useMemo(() => parseWhy(project.files[WHY_FILE]), [project.files]);
   const whyFor = (path: string) => (whyEntries.length && project.files[path] !== undefined ? [...whyByLine(whyEntries, path, project.files[path])].map(([line, entry]) => ({ line, text: describeWhy(entry) })) : undefined);
+  // Rewind: scrub through the last live run; null when closed
+  const [rewindAt, setRewindAt] = useState<number | null>(null);
+  const rewindSteps = live.on ? (live.result?.steps ?? []) : [];
+  const rewindOpen = rewindAt !== null && rewindSteps.length > 0;
+  const rewindStep = rewindOpen ? rewindSteps[Math.min(rewindAt, rewindSteps.length - 1)] : null;
+  const rewindFor = (path: string) => {
+    if (!rewindStep || rewindStep.file !== path) return null;
+    const text = Object.entries(rewindStep.values ?? {})
+      .map(([name, value]) => (name === 'out' ? `→ ${value}` : name === 'return' ? `↩ ${value}` : name === 'threw' ? `✕ ${value}` : `${name} = ${value}`))
+      .join('   ');
+    return { line: rewindStep.line, text };
+  };
+  // Stepping into another file opens it, like a debugger following a call
+  const rewindFile = rewindStep?.file;
+  useEffect(() => {
+    if (rewindFile && rewindFile in projectRef.current.files) dispatch({ type: 'open', path: rewindFile });
+  }, [rewindFile, dispatch]);
   const liveFor = (path: string) => {
     if (!live.on || !live.available) return null;
     const file = live.forFile(path, project.files[path]);
@@ -941,6 +960,7 @@ export function Workspace() {
             extensions={extensions}
             live={liveFor(path)}
             why={whyFor(path)}
+            rewind={rewindFor(path)}
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
@@ -1149,6 +1169,16 @@ export function Workspace() {
                           {liveSummary(live.result)}
                         </span>
                       )}
+                      {live.on && !!live.result?.steps?.length && (
+                        <button
+                          onClick={() => setRewindAt(rewindOpen ? null : (firstError(live.result!.steps!) ?? 0))}
+                          aria-pressed={rewindOpen}
+                          className="btn btn-ghost btn-sm"
+                          title="Rewind: step back and forth through the run and see every variable at each moment"
+                        >
+                          ⟲ Rewind
+                        </button>
+                      )}
                     </span>
                   )}
                   <button onClick={() => void format()} disabled={!active || !canFormat(active)} className="btn btn-ghost btn-sm" title={formatCombo(bindings['file.format'] ?? '', isMac)}>Format</button>
@@ -1198,6 +1228,19 @@ export function Workspace() {
               )}
             </section>
 
+            {rewindOpen && (
+              <RewindBar
+                steps={rewindSteps}
+                at={Math.min(rewindAt, rewindSteps.length - 1)}
+                onAt={setRewindAt}
+                truncated={!!live.result?.truncated}
+                sourceOf={(file) => project.files[file]}
+                onAsk={(question, label) => {
+                  if (proposals.ask(question, { label }) === null) openPanel('agent');
+                }}
+                onClose={() => setRewindAt(null)}
+              />
+            )}
             {showTerminal && (
               <section className="pane relative flex shrink-0 flex-col overflow-hidden border-t border-border" style={{ height: terminalHeight }} aria-label="Terminal" data-zen-hide>
                 <div

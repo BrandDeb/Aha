@@ -13,8 +13,17 @@ export interface LiveLine {
   values: Record<string, { n: number; first: string[]; last: string }>;
 }
 
+/** One moment of the run, for Rewind: the line that ran and what it set, printed, returned or threw */
+export interface LiveStep {
+  file: string;
+  line: number;
+  values?: Record<string, string>;
+}
+
 export interface LiveResult {
   ok: boolean;
+  /** Every line that ran, in order (the first 20,000), for scrubbing through the run */
+  steps?: LiveStep[];
   /** Per file: lines that hold a statement, and what each line that ran did */
   files: Record<string, { statementLines: number[]; lines: Record<number, LiveLine> }>;
   output: string;
