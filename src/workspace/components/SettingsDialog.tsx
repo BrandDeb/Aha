@@ -89,16 +89,17 @@ export function SettingsDialog({ commands, isMac, onClose, initialTab = 'general
   };
 
   return (
-    <Dialog title="Settings" onClose={onClose} width="max-w-2xl" tall>
-      <div className="segmented mb-4 max-w-full flex-wrap self-start [&>button]:whitespace-nowrap" role="tablist" aria-label="Settings sections">
+    <Dialog title="Settings" onClose={onClose} width="max-w-4xl" tall>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
+      <div className="flex shrink-0 gap-1 overflow-x-auto md:w-40 md:flex-col md:overflow-visible" role="tablist" aria-label="Settings sections" aria-orientation="vertical">
         {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
+          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`shrink-0 rounded-lg px-3 py-1.5 text-left text-sm transition-colors ${tab === t ? 'bg-[var(--accent-soft)] text-accent' : 'text-gray-400 hover:bg-white/[0.04] hover:text-gray-100'}`}>
             {TAB_LABELS[t]}
           </button>
         ))}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto pr-1">
         {tab === 'general' && (
           <div className="divide-y divide-border">
             <div className="flex items-center justify-between py-2.5">
@@ -282,6 +283,7 @@ export function SettingsDialog({ commands, isMac, onClose, initialTab = 'general
             <p className="pt-3 text-xs text-gray-500">Built-in extensions. Each one contributes editor behaviour and can be switched off without affecting the others.</p>
           </div>
         )}
+      </div>
       </div>
     </Dialog>
   );

@@ -44,12 +44,21 @@ export function AgentPanel() {
         </p>
       </div>
 
-      {(configuring || !ready) && (
+      {!ready && !configuring && (
+        <div className="space-y-2 border-b border-border bg-[var(--accent-soft)]/40 p-4">
+          <p className="text-sm font-medium text-gray-100">First, a model</p>
+          <p className="text-xs leading-relaxed text-gray-400">The agent needs a model that can call tools. Free options work: a Google Gemini key, Groq, OpenRouter, or a local model in Ollama.</p>
+          <div className="flex flex-wrap gap-1.5">
+            <button onClick={() => actions.openSettings('ai')} className="btn btn-primary btn-sm">See what to use, and why</button>
+            <button onClick={() => setConfiguring(true)} className="btn btn-ghost btn-sm">Pick one here</button>
+          </div>
+        </div>
+      )}
+      {configuring && (
         <div className="max-h-[70%] shrink-0 overflow-y-auto border-b border-border p-4">
-          <p className="mb-2 text-sm text-gray-300">The agent calls tools, so it needs a model with tool support: your own key (Anthropic, OpenAI, Gemini, Groq, OpenRouter) or a local model in Ollama.</p>
           <button onClick={() => actions.openSettings('ai')} className="mb-3 text-xs text-accent underline-offset-2 hover:underline">Not sure? See which model to use for which job, and why</button>
           <AiModelSettings compact onSelect={() => setConfiguring(true)} />
-          {ready && <button onClick={() => setConfiguring(false)} className="btn btn-secondary btn-sm mt-3 w-full">Done</button>}
+          <button onClick={() => setConfiguring(false)} className="btn btn-secondary btn-sm mt-3 w-full">{ready ? 'Done' : 'Close'}</button>
         </div>
       )}
 
@@ -78,8 +87,39 @@ export function AgentPanel() {
       </form>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <section className="space-y-2.5 border-b border-border p-4">
-          <h3 className="eyebrow">How it works</h3>
+
+        <section className="p-4">
+          <h3 className="eyebrow mb-2">Proposals</h3>
+          {proposals.length === 0 ? (
+            <p className="text-sm text-gray-500">None yet. Describe a task above, or in the bar at the top (Ctrl/⌘ + L).</p>
+          ) : (
+            <ul className="space-y-1">
+              {proposals.map((p) => {
+                const state = stateOf(p);
+                const lane = laneOf(p);
+                return (
+                  <li key={p.id} className={`group flex items-center gap-2 rounded-lg px-2 py-1.5 ${p.id === activeId ? 'bg-white/[0.07]' : 'hover:bg-white/[0.04]'}`}>
+                    <button onClick={() => open(p.id)} className="min-w-0 flex-1 text-left">
+                      <div className="truncate text-sm text-gray-100">{p.goal}</div>
+                      <div className="flex gap-1.5 text-[11px] text-gray-500">
+                        <span className={state.tone}>{state.label}</span>
+                        {lane && lane.files.length > 0 && <span>· {lane.files.length} file{lane.files.length > 1 ? 's' : ''}</span>}
+                        <span>· {ago(p.createdAt)}</span>
+                      </div>
+                    </button>
+                    <button onClick={() => remove(p.id)} className="text-xs text-gray-600 opacity-0 hover:text-gray-100 group-hover:opacity-100 focus:opacity-100" aria-label={`Delete proposal ${p.goal}`}>✕</button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+        <details className="group border-t border-border">
+          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-xs text-gray-400 hover:text-gray-100">
+            <span className="eyebrow whitespace-nowrap">How it works</span>
+            <span className="truncate pl-3 font-mono text-[11px] text-gray-500">{BUDGETS[prefs.budget].label.split(' ·')[0]} · {prefs.approaches ? `compare ${prefs.approaches + 1}` : 'one try'}{prefs.review ? ' · reviewed' : ''} <span className="inline-block transition-transform group-open:rotate-90" aria-hidden="true">›</span></span>
+          </summary>
+          <div className="space-y-2.5 px-4 pb-4">
           <label className="flex items-center justify-between gap-2 text-xs text-gray-400">
             Budget
             <select value={prefs.budget} onChange={(e) => setPrefs({ budget: e.target.value as AgentPrefs['budget'] })} className="input h-7 w-auto text-xs">
@@ -109,34 +149,8 @@ export function AgentPanel() {
             <input type="checkbox" checked={prefs.review} onChange={(e) => setPrefs({ review: e.target.checked })} />
             Second reviewer on every proposal
           </label>
-        </section>
-
-        <section className="p-4">
-          <h3 className="eyebrow mb-2">Proposals</h3>
-          {proposals.length === 0 ? (
-            <p className="text-sm text-gray-500">None yet. Ask from the bar at the top or here.</p>
-          ) : (
-            <ul className="space-y-1">
-              {proposals.map((p) => {
-                const state = stateOf(p);
-                const lane = laneOf(p);
-                return (
-                  <li key={p.id} className={`group flex items-center gap-2 rounded-lg px-2 py-1.5 ${p.id === activeId ? 'bg-white/[0.07]' : 'hover:bg-white/[0.04]'}`}>
-                    <button onClick={() => open(p.id)} className="min-w-0 flex-1 text-left">
-                      <div className="truncate text-sm text-gray-100">{p.goal}</div>
-                      <div className="flex gap-1.5 text-[11px] text-gray-500">
-                        <span className={state.tone}>{state.label}</span>
-                        {lane && lane.files.length > 0 && <span>· {lane.files.length} file{lane.files.length > 1 ? 's' : ''}</span>}
-                        <span>· {ago(p.createdAt)}</span>
-                      </div>
-                    </button>
-                    <button onClick={() => remove(p.id)} className="text-xs text-gray-600 opacity-0 hover:text-gray-100 group-hover:opacity-100 focus:opacity-100" aria-label={`Delete proposal ${p.goal}`}>✕</button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+          </div>
+        </details>
       </div>
     </div>
   );

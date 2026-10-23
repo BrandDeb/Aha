@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type KeyboardEvent } from 'react';
 import { formatCombo } from '../project';
+import { paletteOrder, readRecent, remember } from '../palette';
 
 export interface Command {
   id: string;
@@ -43,18 +44,20 @@ function score(query: string, text: string): number {
 export function CommandPalette({ commands, files, bindings, isMac, onOpenFile, onClose }: PaletteProps) {
   const [query, setQuery] = useState('');
   const [index, setIndex] = useState(0);
+  const [recent] = useState(readRecent);
 
   const items = useMemo(() => {
     const cmd = commands
       .filter((c) => c.enabled !== false)
       .map((c) => ({ kind: 'command' as const, id: c.id, label: `${c.category}: ${c.title}`, keys: bindings[c.id] ?? c.keys ?? '', run: c.run, s: score(query, `${c.category} ${c.title}`) }));
     const file = files.map((f) => ({ kind: 'file' as const, id: f, label: f, keys: '', run: () => onOpenFile(f), s: score(query, f) + 0.5 }));
-    return [...cmd, ...file].filter((i) => i.s !== Infinity).sort((a, b) => a.s - b.s).slice(0, 50);
-  }, [commands, files, bindings, query, onOpenFile]);
+    return paletteOrder([...cmd, ...file], query, recent);
+  }, [commands, files, bindings, query, onOpenFile, recent]);
 
   const choose = (i: number) => {
     const item = items[i];
     if (!item) return;
+    if (item.kind === 'command') remember(item.id);
     onClose();
     // Let the palette unmount before running (commands may open dialogs)
     setTimeout(item.run, 0);
@@ -85,7 +88,12 @@ export function CommandPalette({ commands, files, bindings, isMac, onOpenFile, o
         />
         <ul id="palette-list" role="listbox" className="max-h-[50vh] overflow-y-auto p-2">
           {items.length === 0 && <li className="px-3 py-6 text-center text-sm text-gray-500">No commands or files match “{query}”.</li>}
-          {items.map((item, i) => (
+          {items.map((item, i) => [
+            (i === 0 || items[i - 1].section !== item.section) && (
+              <li key={`h-${item.section}`} role="presentation" className="px-3 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wider text-gray-500">
+                {item.section}
+              </li>
+            ),
             <li
               key={`${item.kind}-${item.id}`}
               id={`palette-${i}`}
@@ -100,8 +108,8 @@ export function CommandPalette({ commands, files, bindings, isMac, onOpenFile, o
                 {item.label}
               </span>
               {item.keys && <span className="kbd shrink-0">{formatCombo(item.keys, isMac)}</span>}
-            </li>
-          ))}
+            </li>,
+          ])}
         </ul>
       </div>
     </div>

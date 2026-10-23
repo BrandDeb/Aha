@@ -38,7 +38,7 @@ import { useToast } from './toasts';
 import { useLiveValues } from './live-client';
 import { useContracts } from './contracts-client';
 import { usePersistedFlag } from './layout';
-import { Box, Branch, Files, FilePlus, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Search, Sparkle } from './components/Icons';
+import { Box, Branch, Code, Command as CommandIcon, Files, FilePlus, Gear, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, Search, Sparkle, Wrench } from './components/Icons';
 import type { CreateTab } from './components/CreateDialog';
 import { useCiOnSave } from './ci-on-save';
 import { describeContracts } from '@/lib/contracts';
@@ -174,6 +174,7 @@ export function Workspace() {
   const proposals = useProposals();
   const { open: openProposal, close: closeProposal } = proposals;
   const askRef = useRef<HTMLInputElement | null>(null);
+  const [askArgs, setAskArgs] = useState(false);
 
   // Opening a file (from the tree, a tab, the palette) brings the editor back in front of a proposal
   const shownFile = useRef(active);
@@ -205,7 +206,12 @@ export function Workspace() {
   const hintArguments = useCallback(
     (output: string) => {
       const usage = output.split('\n').find((l) => /^\s*usage:?\s/i.test(l))?.trim();
-      notify({ kind: 'info', title: 'This program expects arguments', detail: usage, action: { label: 'Add arguments', run: () => argsRef.current?.focus() } });
+      const addArguments = () => {
+        // The field sits next to Run on wide screens; elsewhere, ask for them
+        if (argsRef.current?.offsetParent) return argsRef.current.focus();
+        setAskArgs(true);
+      };
+      notify({ kind: 'info', title: 'This program expects arguments', detail: usage, action: { label: 'Add arguments', run: addArguments } });
     },
     [notify]
   );
@@ -235,6 +241,9 @@ export function Workspace() {
   // The explorer collapses to a rail on the left, the tools to a rail on the right
   const [showExplorer, setShowExplorer] = usePersistedFlag('nanocli:explorer-open', true);
   const [showPanel, setShowPanel] = usePersistedFlag('nanocli:tools-open', true);
+  // Phones and tablets: the explorer, the tools and the agent bar open as full-width sheets over the editor
+  const [sheet, setSheet] = useState<null | 'files' | 'tools' | 'ask'>(null);
+  const mobileAskRef = useRef<HTMLInputElement | null>(null);
   const [showTerminal, setShowTerminal] = useState(true);
   const [terminalHeight, setTerminalHeight] = useState(220);
   const [zen, setZen] = useState(false);
@@ -655,6 +664,13 @@ export function Workspace() {
   useEffect(() => {
     runArgsRef.current = runArgs;
   }, [runArgs]);
+  useEffect(() => {
+    if (!askArgs) return;
+    const value = window.prompt('Arguments for Run, as you would type them after the program name', runArgs);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a one-off prompt the toast asked for
+    if (value !== null) updateRunArgs(value);
+    setAskArgs(false);
+  }, [askArgs, runArgs, updateRunArgs]);
   const runInTerminal = useCallback(() => {
     setShowTerminal(true);
     const args = runArgsRef.current.trim();
@@ -821,6 +837,8 @@ export function Workspace() {
     { id: 'panel.git', category: 'Git', title: 'Open Git panel', keys: DEFAULT_KEYS['panel.git'], run: () => openPanel('git') },
     { id: 'panel.ai', category: 'Assistant', title: 'Open assistant', keys: DEFAULT_KEYS['panel.ai'], run: () => openPanel('ai') },
     { id: 'panel.history', category: 'History', title: 'Open version history', keys: DEFAULT_KEYS['panel.history'], run: () => openPanel('history') },
+    { id: 'panel.optimize', category: 'Project', title: 'Optimize: SEO, AEO, GEO, social, accessibility, speed', run: () => openPanel('optimize') },
+    { id: 'panel.contracts', category: 'Project', title: 'Open contracts', run: () => openPanel('contracts') },
     { id: 'panel.graph', category: 'Graph', title: 'Open dependency graph', run: () => openPanel('graph') },
     { id: 'agent.ask', category: 'Assistant', title: 'Ask the agent…', keys: DEFAULT_KEYS['agent.ask'], run: () => askRef.current?.focus() },
     { id: 'panel.agent', category: 'Assistant', title: 'Open agent (proposals, model, preferences)', run: () => openPanel('agent') },
@@ -951,8 +969,11 @@ export function Workspace() {
             value={project.name}
             onChange={(e) => dispatch({ type: 'rename-project', name: e.target.value })}
             aria-label="Project name"
-            className="w-36 min-w-0 rounded-md bg-transparent px-2 py-1 font-mono text-sm text-gray-300 outline-none hover:bg-white/[0.05] focus:bg-white/[0.07]"
+            className="w-28 min-w-0 flex-1 rounded-md bg-transparent px-2 py-1 font-mono text-sm text-gray-300 outline-none hover:bg-white/[0.05] focus:bg-white/[0.07] md:w-36 md:flex-none"
           />
+          <button onClick={() => setDialog('templates')} className="btn btn-ghost btn-sm hidden shrink-0 gap-1 sm:inline-flex" title="Create: describe an app, the gallery, the stack builder, templates">
+            <Plus size={14} /> Create
+          </button>
           {collab && (
             <button
               className="badge hidden md:inline-flex"
@@ -982,7 +1003,7 @@ export function Workspace() {
                 placeholder="arguments"
                 aria-label="Program arguments"
                 title="Arguments for Run, as you would type them after the program name"
-                className="hidden h-8 w-40 rounded-lg border border-border bg-transparent px-2.5 font-mono text-xs text-gray-200 outline-none placeholder:text-gray-600 focus:border-border-strong lg:block"
+                className="hidden h-8 w-36 rounded-lg border border-border bg-transparent px-2.5 font-mono text-xs text-gray-200 outline-none placeholder:text-gray-600 focus:border-border-strong xl:block"
               />
             )}
             {web && !showPreview && devState.status === 'ready' ? (
@@ -1004,8 +1025,8 @@ export function Workspace() {
               </button>
             )}
             {usesScriptc && <OutputMenu target={target} options={settings.build} onTarget={setTarget} onOptions={(patch) => updateSettings({ build: { ...settings.build, ...patch } })} />}
-            <button onClick={() => setDialog('palette')} className="btn btn-ghost btn-icon" aria-label="Command palette" title={formatCombo(bindings['view.palette'] ?? '', isMac)}>⌘</button>
-            <button onClick={() => { setSettingsTab('general'); setDialog('settings'); }} className="btn btn-ghost btn-icon" aria-label="Settings">⚙</button>
+            <button onClick={() => setDialog('palette')} className="btn btn-ghost btn-icon" aria-label="Command palette" title={`Commands and files (${formatCombo(bindings['view.palette'] ?? '', isMac)})`}><CommandIcon /></button>
+            <button onClick={() => { setSettingsTab('general'); setDialog('settings'); }} className="btn btn-ghost btn-icon hidden sm:inline-flex" aria-label="Settings" title="Settings"><Gear /></button>
             {user ? (
               <details className="relative">
                 <summary className="flex cursor-pointer list-none rounded-full" aria-label={`Signed in as ${user.login}`} title={`Signed in as ${user.login}`}>
@@ -1028,11 +1049,16 @@ export function Workspace() {
         <div className="flex min-h-0 flex-1">
           {/* Explorer */}
           <aside
-            className={`pane hidden shrink-0 flex-col overflow-hidden border-r border-border transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex ${showExplorer ? 'w-60' : 'w-12'}`}
+            className={`pane shrink-0 flex-col overflow-hidden border-r border-border transition-[width] duration-200 ease-out motion-reduce:transition-none md:static md:z-auto md:flex md:border-r ${sheet === 'files' ? 'fixed inset-x-0 top-12 bottom-[5.25rem] z-40 flex w-full border-0 bg-[var(--color-background)]' : 'hidden'} ${showExplorer || sheet === 'files' ? 'md:w-60' : 'md:w-12'}`}
             aria-label="Explorer"
             data-zen-hide
+            onClick={(e) => {
+              // On a phone, opening a file shows it: the sheet gets out of the way
+              const row = (e.target as HTMLElement).closest('[role="treeitem"]');
+              if (sheet === 'files' && row && !row.hasAttribute('aria-expanded')) setSheet(null);
+            }}
           >
-            {showExplorer ? (
+            {showExplorer || sheet === 'files' ? (
               <>
                 <FileTree errorCounts={errorCounts} onCollapse={() => setShowExplorer(false)} collapseTitle={`Collapse the explorer (${formatCombo(bindings['view.explorer'] ?? '', isMac)})`} />
                 <div className="flex items-center gap-1 border-t border-border p-2">
@@ -1210,10 +1236,10 @@ export function Workspace() {
               })}
             </nav>
           )}
-          {showPanel && (
-            <aside className="pane hidden w-[24rem] shrink-0 flex-col overflow-hidden border-l border-border animate-[slide-in-right_180ms_ease-out] motion-reduce:animate-none lg:flex" aria-label="Tools" data-zen-hide>
+          {(showPanel || sheet === 'tools') && (
+            <aside className={`pane shrink-0 flex-col overflow-hidden border-l border-border animate-[slide-in-right_180ms_ease-out] motion-reduce:animate-none lg:static lg:z-auto lg:flex lg:w-[24rem] ${sheet === 'tools' ? 'fixed inset-x-0 top-12 bottom-[5.25rem] z-40 flex w-full border-0 bg-[var(--color-background)]' : 'hidden'} ${!showPanel ? 'lg:hidden' : ''}`} aria-label="Tools" data-zen-hide>
               <div role="tablist" aria-label="Tool groups" className="flex shrink-0 border-b border-border bg-[var(--bar)] px-1">
-                <button onClick={() => setShowPanel(false)} className="flex h-10 w-9 shrink-0 items-center justify-center text-gray-500 hover:text-gray-100" aria-label="Collapse the tools" title={`Collapse the tools (${formatCombo(bindings['view.panel'] ?? '', isMac)})`}>
+                <button onClick={() => (sheet ? setSheet(null) : setShowPanel(false))} className="flex h-10 w-9 shrink-0 items-center justify-center text-gray-500 hover:text-gray-100" aria-label="Collapse the tools" title={`Collapse the tools (${formatCombo(bindings['view.panel'] ?? '', isMac)})`}>
                   <PanelRightClose />
                 </button>
                 {GROUPS.filter((g) => g.panels.some((p) => panelVisible(p.id))).map((g) => {
@@ -1279,6 +1305,38 @@ export function Workspace() {
           )}
         </div>
 
+        {sheet === 'ask' && (
+          <div className="fixed inset-x-0 top-12 z-50 border-b border-border bg-[var(--bar)] p-3 shadow-2xl md:hidden" role="dialog" aria-label="Ask the agent">
+            <CommandBar inputRef={mobileAskRef} shortcut="" onNeedModel={() => { setSheet('tools'); openPanel('agent'); }} />
+          </div>
+        )}
+        {/* Phones and tablets: everything the side panels hold, one tap away */}
+        <nav className="flex h-14 shrink-0 items-stretch border-t border-border bg-[var(--bar)] lg:hidden" aria-label="Workspace" data-zen-hide>
+          {([
+            ['files', 'Files', Files, 'md:hidden'],
+            [null, 'Code', Code, ''],
+            ['ask', 'Ask', Sparkle, 'md:hidden'],
+            ['tools', 'Tools', Wrench, ''],
+          ] as const).map(([id, label, Icon, cls]) => (
+            <button
+              key={label}
+              onClick={() => {
+                setSheet(id === sheet ? null : id);
+                if (id === 'ask') setTimeout(() => mobileAskRef.current?.focus(), 50);
+              }}
+              aria-pressed={sheet === id}
+              className={`flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${cls} ${sheet === id ? 'text-accent' : 'text-gray-400'}`}
+            >
+              <Icon size={18} /> {label}
+            </button>
+          ))}
+          <button onClick={() => { setSheet(null); setDialog('templates'); }} className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] text-gray-400">
+            <Plus size={18} /> Create
+          </button>
+          <button onClick={() => { setSheet(null); setSettingsTab('general'); setDialog('settings'); }} className="flex flex-1 flex-col items-center justify-center gap-0.5 text-[11px] text-gray-400 sm:hidden">
+            <Gear size={18} /> Settings
+          </button>
+        </nav>
         {/* Status bar: what is happening now, each item one click from its panel */}
         <footer className="flex h-7 shrink-0 items-center gap-1 overflow-hidden border-t border-border bg-[var(--bar)] px-2 font-mono text-[11px] text-gray-400" data-zen-hide>
           {git && (

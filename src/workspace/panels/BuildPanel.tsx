@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { formatSize, type CompileResult, type CoverageResult } from '@/lib/compiler-browser';
 import { useActions, type RunOutcome } from '../actions';
 import { useWorkspace } from '../store';
@@ -22,6 +23,22 @@ interface BuildPanelProps {
 }
 
 export function BuildPanel({ result, building, coverage, analyzing, onCoverage, lastRun }: BuildPanelProps) {
+  // The three-step guide is for the first visit; after a first build or run a single line is enough
+  const [builtBefore] = useState(() => {
+    try {
+      return localStorage.getItem('nanocli:built-once') === '1';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    if (!result && !lastRun) return;
+    try {
+      localStorage.setItem('nanocli:built-once', '1');
+    } catch {
+      // storage blocked: the guide shows again
+    }
+  }, [result, lastRun]);
   const { project, dispatch } = useWorkspace();
   const actions = useActions();
   const phases = result?.phases ?? [];
@@ -40,11 +57,16 @@ export function BuildPanel({ result, building, coverage, analyzing, onCoverage, 
             <span className="h-3 w-3 animate-spin rounded-full border border-gray-500 border-t-gray-100" aria-hidden="true" />
             Compiling with scriptc…
           </p>
+        ) : !result && builtBefore ? (
+          <div className="space-y-3">
+            <p className="text-sm text-gray-400">No build yet in this session. Build makes a native binary and shows the pipeline, its size and any scriptc problems.</p>
+            <button onClick={() => void actions.compile()} className="btn btn-primary w-full">Build now</button>
+          </div>
         ) : !result ? (
           <div className="space-y-4">
             <ol className="space-y-3 text-sm text-gray-300">
               {[
-                ['Run', 'runs the program right here (arguments go in the field next to Run).'],
+                ['Run', 'runs the program right here; a program that needs arguments asks for them.'],
                 ['Build', 'makes a native binary and shows the pipeline, size and any scriptc problems.'],
                 ['Ask the agent', 'type what you want in the bar at the top: it works on a copy and shows you the proof.'],
               ].map(([title, body], i) => (
