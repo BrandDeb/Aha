@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { buildTree, diffStatus, dirname, isRunnable, isValidPath, type TreeNode } from '../project';
 import { useWorkspace } from '../store';
 import { useToast } from '../toasts';
+import { useProposals } from '../proposals';
 
 type Editing =
   | { mode: 'new-file' | 'new-folder'; parent: string }
@@ -13,6 +14,12 @@ const CHANGE_GLYPH = { added: 'A', modified: 'M', deleted: 'D' } as const;
 
 export function FileTree({ errorCounts }: { errorCounts: Record<string, number> }) {
   const { project, active, git, dispatch } = useWorkspace();
+  const { open: openProposal } = useProposals();
+  // A file you click is the file you see, even when it is already the open one behind a proposal
+  const openFile = (path: string) => {
+    dispatch({ type: 'open', path });
+    openProposal(null);
+  };
   const { notify } = useToast();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -121,7 +128,7 @@ export function FileTree({ errorCounts }: { errorCounts: Record<string, number> 
       if (row.node.type === 'folder' && !collapsed.has(row.node.path)) toggle(row.node.path);
       else move(rows.findIndex((r) => r.node.path === dirname(row.node.path)));
     }
-    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (row.node.type === 'folder') toggle(row.node.path); else dispatch({ type: 'open', path: row.node.path }); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (row.node.type === 'folder') toggle(row.node.path); else openFile(row.node.path); }
     else if (e.key === 'F2') { e.preventDefault(); setEditing({ mode: 'rename', path: row.node.path }); setDraft(row.node.name); }
     else if (e.key === 'Delete') { e.preventDefault(); remove(row.node); }
   };
@@ -176,7 +183,7 @@ export function FileTree({ errorCounts }: { errorCounts: Record<string, number> 
                 data-path={node.path}
                 tabIndex={focused === node.path || (!focused && isActive) ? 0 : -1}
                 onFocus={() => setFocused(node.path)}
-                onClick={() => (node.type === 'folder' ? toggle(node.path) : dispatch({ type: 'open', path: node.path }))}
+                onClick={() => (node.type === 'folder' ? toggle(node.path) : openFile(node.path))}
                 onDoubleClick={() => { setEditing({ mode: 'rename', path: node.path }); setDraft(node.name); }}
                 style={{ paddingLeft: 12 + depth * 14 }}
                 className={`group flex h-7 cursor-pointer items-center gap-2 pr-2 outline-none transition-colors focus-visible:bg-white/[0.08] ${

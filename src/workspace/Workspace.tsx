@@ -39,6 +39,7 @@ import { useLiveValues } from './live-client';
 import { useContracts } from './contracts-client';
 import { useCiOnSave } from './ci-on-save';
 import { describeContracts } from '@/lib/contracts';
+import { describeWhy, parseWhy, whyByLine, WHY_FILE } from '@/lib/why';
 import { liveSummary } from '@/lib/live/display';
 
 // Everything beyond the editor, terminal and Build panel loads the first time it is opened, so the studio starts with
@@ -620,6 +621,9 @@ export function Workspace() {
   // Live values: the entry runs after each pause in typing and every line shows what it did
   const live = useLiveValues({ projectName: project.name, files: project.files, entry: project.entry, args: runArgs });
   const { available: liveAvailable, on: liveOn, setOn: setLiveOn } = live;
+  // Why-history: which lines of the open files an accepted proposal wrote, and why
+  const whyEntries = useMemo(() => parseWhy(project.files[WHY_FILE]), [project.files]);
+  const whyFor = (path: string) => (whyEntries.length && project.files[path] !== undefined ? [...whyByLine(whyEntries, path, project.files[path])].map(([line, entry]) => ({ line, text: describeWhy(entry) })) : undefined);
   const liveFor = (path: string) => {
     if (!live.on || !live.available) return null;
     const file = live.forFile(path, project.files[path]);
@@ -829,6 +833,7 @@ export function Workspace() {
             theme={settings.theme}
             extensions={extensions}
             live={liveFor(path)}
+            why={whyFor(path)}
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">

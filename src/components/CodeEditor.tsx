@@ -301,6 +301,8 @@ interface CodeEditorProps {
    * (it moves with the edits) until the next result. null: live mode is off.
    */
   live?: { file: LiveResult['files'][string] | undefined; stale: boolean } | null;
+  /** Lines an accepted proposal wrote, and why (hover the line number) */
+  why?: { line: number; text: string }[];
 }
 
 export function CodeEditor({
@@ -317,6 +319,7 @@ export function CodeEditor({
   theme = 'dark',
   extensions = { wordWrap: true },
   live = null,
+  why,
 }: CodeEditorProps) {
   const editorRef = useRef<EditorInstance | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -391,6 +394,30 @@ export function CodeEditor({
     ]);
     livePathRef.current = path;
   };
+  const whyRef = useRef<{ clear: () => void } | null>(null);
+  const applyWhy = () => {
+    whyRef.current?.clear();
+    whyRef.current = null;
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (!editor || !model || !why?.length) return;
+    const count = model.getLineCount();
+    whyRef.current = editor.createDecorationsCollection(
+      why
+        .filter((w) => w.line <= count)
+        .map((w) => ({
+          range: { startLineNumber: w.line, startColumn: 1, endLineNumber: w.line, endColumn: 1 },
+          options: { linesDecorationsClassName: 'why-line', lineNumberHoverMessage: { value: w.text }, linesDecorationsTooltip: 'Written by an accepted proposal: hover the line number for why' },
+        }))
+    );
+  };
+  // Callers build the list each render: re-apply only when what it says changes
+  const whyKey = why?.length ? why.map((w) => `${w.line}:${w.text.length}`).join(',') : '';
+  useEffect(() => {
+    applyWhy();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyWhy reads the current props
+  }, [whyKey, path]);
+
   // Re-applied when the result, its freshness or the file changes (not on every render)
   const liveFile = live?.file;
   const liveStale = live?.stale;
@@ -446,6 +473,7 @@ export function CodeEditor({
     editor.onDidFocusEditorText(() => onFocus?.());
     onEditor?.(editor);
     applyLive();
+    applyWhy();
     // The sync effect ran before Monaco mounted, so register the other files now
     syncModels();
     applyMarkers();

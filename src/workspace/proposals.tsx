@@ -17,7 +17,8 @@ import { chipsFor, evidenceFrom, verdict, type Evidence } from '@/lib/agent/evid
 import { isHarnessFile, runHarnessLoop, type HarnessEvent } from '@/lib/agent/harness';
 import { runAgent } from '@/lib/agent/loop';
 import { callModelFor } from '@/lib/agent/model';
-import { parseReview, REVIEWER_PROMPT, reviewInput, type Review } from '@/lib/agent/review';
+import { parseReview, REVIEW_LABEL, REVIEWER_PROMPT, reviewInput, type Review } from '@/lib/agent/review';
+import { linesWritten, recordWhy, WHY_FILE } from '@/lib/why';
 import { contractsOf } from '@/lib/contracts';
 import { systemPromptFor } from '@/lib/agent/prompt';
 import { Stage, type SerializedStage } from '@/lib/agent/stage';
@@ -523,6 +524,21 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
       if (conflicts.length) notify({ kind: 'info', title: `${conflicts.length} file${conflicts.length > 1 ? 's' : ''} skipped`, detail: `${conflicts.join(', ')} changed since the agent started. Review them by hand.` });
       if (!chosen.length) return;
       const { files, removed } = stage.toPut(chosen);
+      // Why-history: the lines this writes remember the goal they served
+      const lane = laneOf(proposal);
+      const written = linesWritten(snapshotFiles(stage, isHarnessFile).filter((f) => chosen.includes(f.path)), (path) => !isHarnessFile(path));
+      if (Object.keys(written).length) {
+        files[WHY_FILE] = recordWhy(current[WHY_FILE], {
+          id: `${proposal.id}:${Date.now().toString(36)}`,
+          at: Date.now(),
+          goal: proposal.goal.slice(0, 300),
+          summary: proposal.outcome?.summary?.slice(0, 600),
+          origin: proposal.origin ?? 'you',
+          verdict: lane?.evidence ? verdict(lane.evidence).headline : undefined,
+          review: lane?.review?.status === 'done' ? REVIEW_LABEL[lane.review.verdict] : undefined,
+          files: written,
+        });
+      }
       saveSnapshot(`Before accepting: ${proposal.goal.slice(0, 40)}`);
       dispatch({ type: 'put', files, removed });
       stage.rebase({ ...Object.fromEntries(Object.entries(current).filter(([p]) => !removed.includes(p))), ...files });

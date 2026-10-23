@@ -493,3 +493,11 @@ html.zen [data-zen-hide] {
 .live-unrun {
   opacity: 0.4;
 }
+
+/* Why-history: a thin mark beside lines an accepted proposal wrote */
+.why-line {
+  margin-left: 3px;
+  width: 2px !important;
+  background: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  border-radius: 1px;
+}

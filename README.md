@@ -178,6 +178,14 @@ under **Second opinion** (severity, file and line, the issue, the fix), and **Se
 in one click. A blocking review turns **Ship** into **Accept anyway**. It uses your model, one extra call per
 proposal; turn it off in the Agent tab.
 
+### Why-history
+
+Every line an accepted proposal wrote remembers why it is there. A thin accent mark sits beside those lines;
+hover the line number for the reason: the goal it served, who asked (you, the debugger or the worker), when it
+was accepted, its evidence ("Verified") and the reviewer's verdict. The history lives in `.nanocli/why.json`, so it
+is committed with the code and travels with the repository; lines are matched by their text, so the reason
+stays attached while the code around them moves or is re-indented.
+
 ### Evidence per change
 
 Every proposal also says what its changed lines actually did. Its version of the program runs once with
