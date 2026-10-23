@@ -161,3 +161,10 @@ test('a usage message without arguments is not a failure to debug', async () => 
   assert.equal(isUsageExit('Traceback (most recent call last):\n  ...\nusage: x\n', []), false);
   assert.equal(isUsageExit('TypeError: x is undefined\n', []), false);
 });
+
+test('a pipeline failure is titled by its step and the reason, not by a stray line of test output', async () => {
+  const { makeFailure, headline } = await import('../src/lib/debug.ts');
+  assert.equal(headline("failureType: 'testCodeFailure'\nError: broken on purpose"), 'Error: broken on purpose');
+  const f = makeFailure('pipeline', "Pipeline .github/workflows/ci.yml · job check · step “Test” failed (Exited with code 1)\n$ npm run test\n  failureType: 'testCodeFailure'\nError: broken on purpose\n    at wordstats.js:20", ['wordstats.js']);
+  assert.equal(f.title, 'Step “Test” failed: Error: broken on purpose');
+});

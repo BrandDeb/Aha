@@ -74,7 +74,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Contracts** | Rules that stay true, written in words and checked by a pattern or a command ("no console.log in src", "every route checks the session", "the tests pass"). The agent is told every one and checks them before it finishes, a proposal that breaks one is never marked verified, the worker fixes broken ones, and the status bar shows how they stand; see [Contracts](#contracts) |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
-| **Pipelines** | CI/CD from the project: GitHub Actions or GitLab CI with lint, test and build, deploys (Pages, containers, Vercel, Netlify, Fly.io, release binaries), run locally before you push, GitHub run status in the Git tab, failures fixed by the agent; see [DevOps](#devops-pipelines-in-the-studio) |
+| **Pipelines** | CI/CD from the project: GitHub Actions or GitLab CI with lint, test and build, deploys (Pages, containers, Vercel, Netlify, Fly.io, release binaries), run locally before you push (or on every save: "works here = works in CI" in the status bar), GitHub run status in the Git tab, failures fixed by the agent; see [DevOps](#devops-pipelines-in-the-studio) |
 | **Assistant** | Any model you choose — free tiers (Gemini, Groq, OpenRouter, Cerebras, Mistral), local (Ollama, LM Studio) or your own Anthropic/OpenAI key: explain, fix build errors, generate tests, chat — with one-click Apply that versions the previous file first |
 | **Agent** | Give it a goal; it reads your project, edits a private copy, builds and runs it to check its work, and retries within a budget. You review diffs and accept or discard; see [Agent](#agent) |
 | **Field kits** | A project plus its playbook, setup, checks and agent house rules, shared as one file; three built in for FDE and ISV work; see [Field kits](#field-kits) |
@@ -379,6 +379,15 @@ The **Pipelines** tab sets up CI/CD for the project you have open and runs it be
 Running pipelines locally follows the same rule as running code: only when the studio listens on your own machine (or
 `NANOCLI_RUN=1`). Signing in with GitHub now asks for the `workflow` permission, which GitHub requires for commits that
 change `.github/workflows/`; sign in again if you signed in before.
+
+
+### Works here = works in CI
+
+Turn on **Run on every save** in the Pipelines tab (or "Run CI on every save" in ⌘K) and each save (⌘S) runs
+the project's CI file on your machine in the background: the same lint, test and build steps CI runs, with a
+newer save cancelling the run before it. The status bar shows `CI here · Test` while it runs, then
+`CI here ✓ 12 s` or `CI here ✕ Test`; a failure lands in the debugger ("Step “Test” failed: …") with
+**Debug this**, so the agent or the worker can fix it before you push.
 
 ## Field kits
 

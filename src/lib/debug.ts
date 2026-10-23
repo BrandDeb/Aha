@@ -92,7 +92,7 @@ export function headline(output: string): string {
   const pick =
     // Python: the last line of a traceback is the exception
     (lines.some((l) => l.startsWith('Traceback (most recent call last)')) && lines.reverse().find((l) => /^[A-Za-z_][\w.]*(Error|Exception|Interrupt|Exit)\b/.test(l))) ||
-    lines.find((l) => /^(error(\[E\d+\])?|fatal error|panic|thread '.*' panicked|Uncaught|Unhandled|Exception|FAIL|\[FAIL)/i.test(l)) ||
+    lines.find((l) => /^(error(\[E\d+\])?|fatal error|panic|thread '.*' panicked|Uncaught|Unhandled|Exception|FAIL\b|\[FAIL)/i.test(l)) ||
     // "file:line:col: message" (esbuild, gcc, clang, go, swift…): the message, after the location
     lines.find((l) => /^[\w./@+-]+\.[A-Za-z]{1,6}:\d+(?::\d+)?:?\s+(?:error:\s*)?\S/.test(l))?.replace(/^[\w./@+-]+\.[A-Za-z]{1,6}:\d+(?::\d+)?:?\s+/, '') ||
     lines.find((l) => /\b(error|exception|panic|failed|cannot|undefined|not found|unexpected)\b/i.test(l)) ||
@@ -123,7 +123,9 @@ export function isUsageExit(output: string, args: string[] = []): boolean {
 export function makeFailure(source: FailureSource, output: string, projectPaths: string[], language?: string, now = Date.now()): Failure {
   const tail = output.length > MAX_OUTPUT ? `…${output.slice(-MAX_OUTPUT)}` : output;
   const locations = parseLocations(output, projectPaths);
-  const title = headline(output);
+  // A pipeline report starts with which step failed; the reason is in the step's output below it
+  const step = source === 'pipeline' ? /^Pipeline .*?step “(.+?)” failed/.exec(output) : null;
+  const title = step ? `Step “${step[1]}” failed: ${headline(output.slice(output.indexOf('\n') + 1))}`.slice(0, 200) : headline(output);
   return { source, title, output: tail, language, locations, signature: failureSignature(source, title, locations), at: now };
 }
 

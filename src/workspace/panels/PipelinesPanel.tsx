@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEPLOY_TARGETS, deployAvailability, generatePipeline, PROVIDERS, type DeployTarget, type Provider } from '@/lib/pipelines/generate';
 import { parsePipeline, pipelineFiles, type Pipeline } from '@/lib/pipelines/parse';
 import { detectStacks } from '@/lib/pipelines/stack';
+import { useCiOnSave } from '../ci-on-save';
 import { failureReport, fetchPipelinesEnabled, runPipelineFile, type PipelineEvent, type PipelineResult } from '../pipelines-client';
 import { useProposals } from '../proposals';
 import { useWorkspace } from '../store';
@@ -84,6 +85,12 @@ export function PipelinesPanel({ onFailure, onPassed }: { onFailure: (report: st
   );
 
   const running = !!run && !run.result;
+  const hooks = useMemo(() => ({ onFailure, onPassed }), [onFailure, onPassed]);
+  const onSave = useCiOnSave(project.name, files, hooks);
+  const setCiOnSave = (next: boolean) => {
+    onSave.setOn(next);
+    if (next) void onSave.run();
+  };
 
   return (
     <div className="space-y-6 p-4">
@@ -98,6 +105,17 @@ export function PipelinesPanel({ onFailure, onPassed }: { onFailure: (report: st
         </div>
         {ciFiles.length === 0 && <p className="text-sm leading-relaxed text-gray-400">No CI/CD yet. Set it up below: the studio reads your project and writes a workflow that lints, tests and builds it on every push, and can deploy it. You can run it here before you push.</p>}
         {enabled === false && ciFiles.length > 0 && <p className="text-xs text-gray-500">This server doesn’t run commands (it isn’t on your own machine), so pipelines run on GitHub or GitLab only.</p>}
+        {onSave.available && (
+          <label className="flex items-start gap-2 rounded-lg border border-white/[0.06] p-3 text-xs">
+            <input type="checkbox" checked={onSave.on} onChange={(e) => setCiOnSave(e.target.checked)} className="mt-0.5" />
+            <span>
+              <span className="text-gray-100">Run on every save</span>
+              <span className="block text-gray-500">
+                Works here = works in CI: each save (⌘S) runs {onSave.ciFile} here in the background, and the status bar shows the result before you push.
+              </span>
+            </span>
+          </label>
+        )}
         {parsed.map(({ path, pipeline }) => (
           <div key={path} className="space-y-2 rounded-lg border border-white/[0.06] p-3">
             <div className="flex items-center gap-2">

@@ -37,6 +37,7 @@ import { useWorkspace } from './store';
 import { useToast } from './toasts';
 import { useLiveValues } from './live-client';
 import { useContracts } from './contracts-client';
+import { useCiOnSave } from './ci-on-save';
 import { describeContracts } from '@/lib/contracts';
 import { liveSummary } from '@/lib/live/display';
 
@@ -172,6 +173,10 @@ export function Workspace() {
   const tracker = useFailureTracker(project.name, project.files);
   const argsRef = useRef<HTMLInputElement>(null);
   const { report: reportFailure, markGood } = tracker;
+  // Works here = works in CI: the project's CI file runs on every save when that is on
+  const ciHooks = useMemo(() => ({ onFailure: (report: string) => reportFailure('pipeline', report), onPassed: () => markGood('pipeline') }), [reportFailure, markGood]);
+  const ci = useCiOnSave(project.name, project.files, ciHooks);
+  const { onSave: ciOnSave, available: ciAvailable, on: ciOn, setOn: setCiOn } = ci;
   // A program that answered with its usage wants arguments: say so, and offer the field next to Run
   const hintArguments = useCallback(
     (output: string) => {
@@ -513,7 +518,8 @@ export function Workspace() {
     if (settings.formatOnSave) await format();
     saveSnapshot(`Saved ${active ? basename(active) : ''}`.trim());
     notify({ kind: 'success', title: 'Saved', detail: 'Version stored in History. Files autosave as you type.' });
-  }, [settings.formatOnSave, format, saveSnapshot, active, notify]);
+    ciOnSave();
+  }, [settings.formatOnSave, format, saveSnapshot, active, notify, ciOnSave]);
 
   const downloadArtifact = useCallback(async (result?: CompileResult | null) => {
     const build = result ?? lastBuild;
@@ -709,6 +715,7 @@ export function Workspace() {
     { id: 'build.download', category: 'Build', title: 'Download last artifact', run: () => void downloadArtifact(), enabled: !!lastBuild?.success },
     { id: 'file.save', category: 'File', title: 'Save version', keys: DEFAULT_KEYS['file.save'], run: () => void save() },
     { id: 'file.format', category: 'Editor', title: 'Format document', keys: DEFAULT_KEYS['file.format'], run: () => void format() },
+    ...(ciAvailable ? [{ id: 'ci.on-save', category: 'Pipelines', title: ciOn ? 'Stop running CI on save' : 'Run CI on every save (works here = works in CI)', run: () => setCiOn(!ciOn) }] : []),
     ...(liveAvailable ? [{ id: 'view.live', category: 'Editor', title: liveOn ? 'Turn off live values' : 'Turn on live values (show what each line did)', run: () => setLiveOn(!liveOn) }] : []),
     { id: 'file.new-project', category: 'File', title: 'New project from template…', keys: DEFAULT_KEYS['file.new-project'], run: () => setDialog('templates') },
     { id: 'file.import-export', category: 'File', title: 'Import & export…', keys: DEFAULT_KEYS['file.import-export'], run: () => setDialog('project') },
@@ -732,7 +739,7 @@ export function Workspace() {
     { id: 'collab.toggle', category: 'Collaboration', title: collab ? 'Leave live session' : 'Start live session', run: () => setCollab((v) => !v) },
     { id: 'prefs.settings', category: 'Preferences', title: 'Settings', keys: DEFAULT_KEYS['prefs.settings'], run: () => { setSettingsTab('general'); setDialog('settings'); } },
     { id: 'prefs.maintenance', category: 'Preferences', title: 'Updates and health checks', run: () => { setSettingsTab('maintenance'); setDialog('settings'); } },
-  ], [compileOrRun, runApp, web, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, collab, liveAvailable, liveOn, setLiveOn]);
+  ], [compileOrRun, runApp, web, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, collab, liveAvailable, liveOn, setLiveOn, ciAvailable, ciOn, setCiOn]);
 
   const bindings = useMemo(() => {
     const map: Record<string, string> = { ...DEFAULT_KEYS, ...settings.keybindings };
@@ -1180,6 +1187,23 @@ export function Workspace() {
             if (review) return <button onClick={() => openPanel('agent')} className="rounded px-1.5 text-accent hover:bg-white/[0.06]">{review} to review</button>;
             return null;
           })()}
+          {ci.on && ci.available && (
+            <button
+              onClick={() => openPanel('ci')}
+              className={`rounded px-1.5 hover:bg-white/[0.06] ${ci.stale ? '' : ci.state.status === 'passed' ? 'text-accent' : ci.state.status === 'failed' ? 'text-danger' : ''}`}
+              title={`${ci.ciFile}: the same steps CI runs, on this machine, on every save${ci.stale ? ' (files changed since: save to run again)' : ''}`}
+            >
+              {ci.state.status === 'running' ? (
+                <span className="flex items-center gap-1.5"><span className="dot animate-pulse text-accent" aria-hidden="true" />CI here · {ci.state.step ?? 'starting'}</span>
+              ) : ci.state.status === 'passed' ? (
+                `CI here ✓ ${Math.round(ci.state.ms / 1000)} s`
+              ) : ci.state.status === 'failed' ? (
+                `CI here ✕ ${ci.state.step ?? ''}`.trim()
+              ) : (
+                'CI on save'
+              )}
+            </button>
+          )}
           {contractStatus.contracts.length > 0 && (
             <button
               onClick={() => openPanel('contracts')}
