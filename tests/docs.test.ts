@@ -46,5 +46,13 @@ test('docs: search ranks titles first and needs every word', () => {
 });
 
 test('docs: the baked-in README is up to date (npm run docs:sync)', () => {
-  assert.equal(README, readFileSync('README.md', 'utf8'));
+  assert.equal(README, readFileSync('README.md', 'utf8').replace(/\r\n?/g, '\n'));
+});
+
+test('docs: CRLF line endings (Windows checkouts) parse the same as LF, and never stall', () => {
+  const lf = docsFromReadme(README);
+  const crlf = docsFromReadme(README.replace(/\n/g, '\r\n'));
+  assert.deepEqual(crlf, lf);
+  // A line no rule recognises still moves the parser on
+  assert.equal(parseBlocks('### \r\ntext').length, 2);
 });

@@ -105,7 +105,8 @@ const cells = (row: string) =>
 
 /** Block markdown for one page's body */
 export function parseBlocks(md: string): Block[] {
-  const lines = md.split('\n');
+  // Windows checkouts have CRLF line endings: normalise, or every heading reads as text
+  const lines = md.replace(/\r\n?/g, '\n').split('\n');
   const blocks: Block[] = [];
   let i = 0;
   while (i < lines.length) {
@@ -157,6 +158,8 @@ export function parseBlocks(md: string): Block[] {
     }
     const para: string[] = [];
     while (i < lines.length && lines[i].trim() && !/^(```|#{3,4}\s|>|\s*([-*]|\d+\.)\s)/.test(lines[i]) && !(/^\s*\|/.test(lines[i]) && /^\s*\|?[\s:|-]+\|/.test(lines[i + 1] ?? ''))) para.push(lines[i++].trim());
+    // Always consume at least one line, so a line no rule above recognises can never stall the loop
+    if (!para.length) para.push(lines[i++].trim());
     blocks.push({ t: 'p', c: parseInline(para.join(' ')) });
   }
   return blocks;
@@ -164,7 +167,7 @@ export function parseBlocks(md: string): Block[] {
 
 /** Every page of the docs, in sidebar order */
 export function docsFromReadme(readme: string): DocPage[] {
-  const parts = readme.split(/^## /m).slice(1);
+  const parts = readme.replace(/\r\n?/g, '\n').split(/^## /m).slice(1);
   const pages: DocPage[] = [];
   for (const part of parts) {
     const newline = part.indexOf('\n');

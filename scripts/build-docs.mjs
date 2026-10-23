@@ -3,7 +3,8 @@
 // every build; tests/docs.test.ts fails when the committed copy is out of date.
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const readme = readFileSync('README.md', 'utf8');
+// Line endings normalised, so the generated file is the same on Windows (CRLF checkouts) and everywhere else
+const readme = readFileSync('README.md', 'utf8').replace(/\r\n?/g, '\n');
 const out = `// Generated from README.md by scripts/build-docs.mjs (npm run docs:sync). Do not edit.\nexport const README = ${JSON.stringify(readme)};\n`;
 const target = 'src/lib/docs-readme.ts';
 let current = '';
