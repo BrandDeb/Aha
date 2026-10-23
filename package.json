@@ -21,7 +21,8 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "verify:templates": "node --experimental-strip-types scripts/verify-templates.ts",
-    "verify:apps": "node --experimental-strip-types --no-warnings scripts/verify-apps.ts"
+    "verify:apps": "node --experimental-strip-types --no-warnings scripts/verify-apps.ts",
+    "verify:stacks": "node --experimental-strip-types scripts/verify-stacks.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

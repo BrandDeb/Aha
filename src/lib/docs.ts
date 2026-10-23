@@ -37,7 +37,7 @@ export interface DocPage {
 
 /** Sidebar groups, in order; a README section not listed goes under "More" */
 export const DOC_GROUPS: { name: string; pages: string[] }[] = [
-  { name: 'Getting started', pages: ['Quick start', 'Features', "What's measured"] },
+  { name: 'Getting started', pages: ['Quick start', 'Create', 'Features', "What's measured"] },
   { name: 'Writing code', pages: ['Live values', 'Contracts', 'Web apps and live preview', 'Other languages', 'Python and uv'] },
   { name: 'AI', pages: ['Assistant', 'Agent'] },
   { name: 'Shipping', pages: ['DevOps: pipelines in the studio', 'Field kits', 'Desktop app (Windows and macOS)', 'Signing in with GitHub'] },

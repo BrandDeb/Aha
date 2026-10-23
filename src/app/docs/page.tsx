@@ -4,17 +4,21 @@ import { SiteFooter, SiteHeader } from '@/components/SiteHeader';
 import { DOC_GROUPS, searchEntries } from '@/lib/docs';
 import { DocsSearch } from './DocsSearch';
 import { loadDocs } from './load';
+import { JsonLd } from '@/components/JsonLd';
+import { breadcrumbLd, pageMeta, siteUrl } from '@/lib/site';
 
-export const metadata: Metadata = {
-  title: 'Docs · NanoCLI Studio',
+export const metadata: Metadata = pageMeta({
+  title: 'Docs',
   description: 'How NanoCLI Studio works: the editor, live values, the agent and its proposals, templates, pipelines, the desktop app, configuration and the API.',
-};
+  path: '/docs',
+});
 
 export default function DocsIndex() {
   const pages = loadDocs();
   const groups = [...DOC_GROUPS.map((g) => g.name), 'More'].filter((g) => pages.some((p) => p.group === g));
   return (
     <div className="min-h-screen bg-background text-gray-100">
+      <JsonLd data={breadcrumbLd(siteUrl(), [{ name: 'Home', path: '/landing' }, { name: 'Docs', path: '/docs' }])} />
       <SiteHeader active="/docs" />
       <main className="mx-auto max-w-6xl px-4 py-14">
         <div className="eyebrow">Docs</div>

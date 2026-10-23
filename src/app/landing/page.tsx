@@ -11,11 +11,15 @@ import { SiteFooter, SiteHeader } from '@/components/SiteHeader';
 import { AUDIENCE_LABEL, KIT_LIBRARY } from '@/lib/kit-library';
 import { LANGUAGES } from '@/lib/languages';
 import { PLANS, priceLabel } from '@/lib/pricing';
+import { JsonLd } from '@/components/JsonLd';
+import { organizationLd, pageMeta, siteUrl, softwareLd, websiteLd } from '@/lib/site';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta({
   title: 'NanoCLI Studio · The IDE where AI does the work and proves it',
-  description: 'An editor and an AI teammate in one workspace. Every change arrives as a proposal with the diff and evidence that it builds and runs. 40+ languages, live preview, field kits, your own model.',
-};
+  absoluteTitle: true,
+  description: 'An editor and an AI teammate in one workspace. Describe an app or write it yourself; every change arrives as a proposal with the diff and evidence that it builds and runs. 40+ languages, live preview, a stack builder, your own model.',
+  path: '/landing',
+});
 
 const PROOF = [
   { value: `${LANGUAGES.length + 2}`, label: 'Languages and runtimes', detail: 'smart contracts included, toolchains installed and patched for you' },
@@ -63,6 +67,7 @@ const FAQ = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen">
+      <JsonLd data={[organizationLd(siteUrl()), websiteLd(siteUrl()), softwareLd(siteUrl(), PLANS)]} />
       <SiteHeader active="/landing">
         <Link href="/pricing" className="btn btn-ghost btn-sm hidden sm:inline-flex">Pricing</Link>
         <Link href="/" className="btn btn-primary btn-sm">Open the studio</Link>

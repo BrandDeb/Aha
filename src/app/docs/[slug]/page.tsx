@@ -7,6 +7,8 @@ import { DocsNav } from '../DocsNav';
 import { DocsSearch } from '../DocsSearch';
 import { searchEntries } from '@/lib/docs';
 import { loadDocs } from '../load';
+import { JsonLd } from '@/components/JsonLd';
+import { breadcrumbLd, docLd, pageMeta, siteUrl } from '@/lib/site';
 
 // Every page comes from README.md at build time
 export const dynamicParams = false;
@@ -18,7 +20,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const page = loadDocs().find((p) => p.slug === slug);
-  return page ? { title: `${page.title} · NanoCLI Studio docs`, description: page.summary.slice(0, 200) } : {};
+  return page ? pageMeta({ title: `${page.title} · Docs`, description: page.summary.slice(0, 200), path: `/docs/${page.slug}`, type: 'article' }) : {};
 }
 
 export default async function DocPageView({ params }: { params: Promise<{ slug: string }> }) {
@@ -32,6 +34,7 @@ export default async function DocPageView({ params }: { params: Promise<{ slug: 
 
   return (
     <div className="min-h-screen bg-background text-gray-100">
+      <JsonLd data={[docLd(siteUrl(), page), breadcrumbLd(siteUrl(), [{ name: 'Home', path: '/landing' }, { name: 'Docs', path: '/docs' }, { name: page.group, path: '/docs' }, { name: page.title, path: `/docs/${page.slug}` }])]} />
       <SiteHeader active="/docs" />
       <div className="mx-auto flex max-w-7xl gap-10 px-4 py-10">
         <aside className="hidden w-56 shrink-0 lg:block">

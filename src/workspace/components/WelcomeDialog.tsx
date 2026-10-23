@@ -6,9 +6,11 @@ import { useActions } from '../actions';
 import { useAiConfig } from '../ai-config';
 import { Dialog } from './Dialog';
 
-export type StartWith = 'typescript' | 'python' | 'web' | 'other' | 'kits' | null;
+export type StartWith = 'describe' | 'gallery' | 'typescript' | 'python' | 'web' | 'other' | 'kits' | null;
 
 const CHOICES: { id: Exclude<StartWith, null> | 'here'; title: string; detail: string }[] = [
+  { id: 'describe', title: 'Describe an app', detail: 'Say what you want in plain words: the studio picks the stack, says why, and the agent builds it' },
+  { id: 'gallery', title: 'Pick from the gallery', detail: 'Dashboards, trackers, landing pages, APIs, games: each on the stack that suits it, in many languages' },
   { id: 'here', title: 'A command-line tool', detail: 'TypeScript, compiled to a small native binary. The editor already has one open.' },
   { id: 'python', title: 'Python or AI', detail: 'An LLM agent, RAG, data analysis, an MCP server, managed by uv' },
   { id: 'web', title: 'A web app', detail: 'Next.js, Vite, SvelteKit, Astro… with a live preview' },

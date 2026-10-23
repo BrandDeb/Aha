@@ -6,12 +6,24 @@ import "@fontsource/ibm-plex-mono/500.css";
 import "@fontsource/ibm-plex-mono/600.css";
 import "./globals.css";
 import { healScript } from "@/lib/self-heal";
+import { SITE, siteUrl } from "@/lib/site";
 
 /* Fonts are bundled with the app (no request to Google at build or run time) */
 
 export const metadata: Metadata = {
-  title: "NanoCLI Studio",
-  description: "Write TypeScript in your browser, compile it to a native binary with scriptc, and run it.",
+  metadataBase: new URL(siteUrl()),
+  title: { default: `${SITE.name} · ${SITE.tagline}`, template: `%s · ${SITE.name}` },
+  description: SITE.description,
+  applicationName: SITE.name,
+  keywords: [...SITE.keywords],
+  publisher: SITE.publisher,
+  category: "technology",
+  alternates: { canonical: "/" },
+  openGraph: { type: "website", siteName: SITE.name, title: `${SITE.name} · ${SITE.tagline}`, description: SITE.description, url: "/", locale: "en_US" },
+  twitter: { card: "summary_large_image", title: `${SITE.name} · ${SITE.tagline}`, description: SITE.description },
+  icons: { icon: [{ url: "/favicon.ico" }, { url: "/icon.svg", type: "image/svg+xml" }], apple: "/icon.svg" },
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 } },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {

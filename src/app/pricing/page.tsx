@@ -3,11 +3,14 @@ import Link from 'next/link';
 import { SiteFooter, SiteHeader } from '@/components/SiteHeader';
 import { checkoutFor, COMPARISON, PLANS, PRICING_FAQ } from '@/lib/pricing';
 import { PricingPlans } from './PricingPlans';
+import { JsonLd } from '@/components/JsonLd';
+import { breadcrumbLd, faqLd, pageMeta, siteUrl, softwareLd } from '@/lib/site';
 
-export const metadata: Metadata = {
-  title: 'Pricing · NanoCLI Studio',
+export const metadata: Metadata = pageMeta({
+  title: 'Pricing',
   description: 'Free for the whole studio with your own model. Pro adds the autonomous worker, automatic debugging and the native app. Premium is for forward-deployed, ISV and platform teams.',
-};
+  path: '/pricing',
+});
 
 function Cell({ value }: { value: boolean | string }) {
   if (value === true) return <span className="text-accent" aria-label="Included">✓</span>;
@@ -26,6 +29,7 @@ export default function PricingPage() {
 
   return (
     <div className="min-h-screen">
+      <JsonLd data={[softwareLd(siteUrl(), PLANS), faqLd(PRICING_FAQ.map((f) => ({ question: f.q, answer: f.a }))), breadcrumbLd(siteUrl(), [{ name: 'Home', path: '/landing' }, { name: 'Pricing', path: '/pricing' }])]} />
       <SiteHeader active="/pricing">
         <Link href="/" className="btn btn-primary btn-sm">Open the studio</Link>
       </SiteHeader>

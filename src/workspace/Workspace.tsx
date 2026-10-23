@@ -39,6 +39,7 @@ import { useLiveValues } from './live-client';
 import { useContracts } from './contracts-client';
 import { usePersistedFlag } from './layout';
 import { Box, Branch, Files, FilePlus, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Search, Sparkle } from './components/Icons';
+import type { CreateTab } from './components/CreateDialog';
 import { useCiOnSave } from './ci-on-save';
 import { describeContracts } from '@/lib/contracts';
 import { describeWhy, parseWhy, whyByLine, WHY_FILE } from '@/lib/why';
@@ -59,12 +60,13 @@ const HistoryPanel = dynamic(() => import('./panels/HistoryPanel').then((m) => m
 const PackagePanel = dynamic(() => import('./panels/PackagePanel').then((m) => m.PackagePanel), { ssr: false, loading: PanelLoading });
 const LanguagePanel = dynamic(() => import('./panels/LanguagePanel').then((m) => m.LanguagePanel), { ssr: false, loading: PanelLoading });
 const PythonPanel = dynamic(() => import('./panels/PythonPanel').then((m) => m.PythonPanel), { ssr: false, loading: PanelLoading });
+const OptimizePanel = dynamic(() => import('./panels/OptimizePanel').then((m) => m.OptimizePanel), { ssr: false, loading: PanelLoading });
 const ContractsPanel = dynamic(() => import('./panels/ContractsPanel').then((m) => m.ContractsPanel), { ssr: false, loading: PanelLoading });
 const KitPanel = dynamic(() => import('./panels/KitPanel').then((m) => m.KitPanel), { ssr: false, loading: PanelLoading });
 const PipelinesPanel = dynamic(() => import('./panels/PipelinesPanel').then((m) => m.PipelinesPanel), { ssr: false, loading: PanelLoading });
 const WorkerPanel = dynamic(() => import('./panels/WorkerPanel').then((m) => m.WorkerPanel), { ssr: false, loading: PanelLoading });
 const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then((m) => m.SettingsDialog), { ssr: false });
-const TemplatesDialog = dynamic(() => import('./components/TemplatesDialog').then((m) => m.TemplatesDialog), { ssr: false });
+const CreateDialog = dynamic(() => import('./components/CreateDialog').then((m) => m.CreateDialog), { ssr: false });
 const WelcomeDialog = dynamic(() => import('./components/WelcomeDialog').then((m) => m.WelcomeDialog), { ssr: false });
 const SignInDialog = dynamic(() => import('./components/SignInDialog').then((m) => m.SignInDialog), { ssr: false });
 const ProjectDialog = dynamic(() => import('./components/ProjectDialog').then((m) => m.ProjectDialog), { ssr: false });
@@ -125,6 +127,7 @@ const GROUPS: { id: string; label: string; panels: { id: PanelId; label: string;
     label: 'Project',
     panels: [
       { id: 'contracts', label: 'Contracts', hint: 'Rules that stay true: the agent keeps them, every proposal is checked against them' },
+      { id: 'optimize', label: 'Optimize', hint: 'SEO, answer engines, AI engines (GEO), social cards, accessibility, mobile and speed, with fixes' },
       { id: 'graph', label: 'Graph', hint: 'How the files import each other' },
       { id: 'kit', label: 'Kit', hint: 'The field kit: playbook, checks and setup' },
     ],
@@ -237,7 +240,7 @@ export function Workspace() {
   const [zen, setZen] = useState(false);
   const [awaySince, setAwaySince] = useState<number | null>(null);
   const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project' | 'signin' | 'welcome' | 'morning'>(null);
-  const [templatesFilter, setTemplatesFilter] = useState<'all' | 'typescript' | 'web' | 'python' | 'other' | 'kits'>('all');
+  const [createStart, setCreateStart] = useState<{ tab: CreateTab; filter?: 'all' | 'typescript' | 'web' | 'python' | 'other' }>({ tab: 'describe' });
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
   const { status: update, refresh: refreshUpdate } = useUpdateStatus();
   const [diff, setDiff] = useState<{ title: string; path: string; original: string; modified: string } | null>(null);
@@ -804,7 +807,7 @@ export function Workspace() {
     { id: 'file.format', category: 'Editor', title: 'Format document', keys: DEFAULT_KEYS['file.format'], run: () => void format() },
     ...(ciAvailable ? [{ id: 'ci.on-save', category: 'Pipelines', title: ciOn ? 'Stop running CI on save' : 'Run CI on every save (works here = works in CI)', run: () => setCiOn(!ciOn) }] : []),
     ...(liveAvailable ? [{ id: 'view.live', category: 'Editor', title: liveOn ? 'Turn off live values' : 'Turn on live values (show what each line did)', run: () => setLiveOn(!liveOn) }] : []),
-    { id: 'file.new-project', category: 'File', title: 'New project from template…', keys: DEFAULT_KEYS['file.new-project'], run: () => setDialog('templates') },
+    { id: 'file.new-project', category: 'File', title: 'Create: describe an app, gallery, stack builder, templates…', keys: DEFAULT_KEYS['file.new-project'], run: () => setDialog('templates') },
     { id: 'file.import-export', category: 'File', title: 'Import & export…', keys: DEFAULT_KEYS['file.import-export'], run: () => setDialog('project') },
     { id: 'view.morning', category: 'View', title: 'What happened while I was away (morning report)', run: openMorning },
     { id: 'view.palette', category: 'View', title: 'Command palette', keys: DEFAULT_KEYS['view.palette'], run: () => setDialog('palette') },
@@ -922,7 +925,7 @@ export function Workspace() {
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
             <p className="text-sm text-gray-400">No file open.</p>
-            <button onClick={() => setDialog('templates')} className="btn btn-secondary btn-sm">Start from a template</button>
+            <button onClick={() => setDialog('templates')} className="btn btn-secondary btn-sm">Create something</button>
           </div>
         )}
       </div>
@@ -1033,7 +1036,7 @@ export function Workspace() {
               <>
                 <FileTree errorCounts={errorCounts} onCollapse={() => setShowExplorer(false)} collapseTitle={`Collapse the explorer (${formatCombo(bindings['view.explorer'] ?? '', isMac)})`} />
                 <div className="flex items-center gap-1 border-t border-border p-2">
-                  <button onClick={() => setDialog('templates')} className="btn btn-ghost btn-sm flex-1">New project</button>
+                  <button onClick={() => setDialog('templates')} className="btn btn-ghost btn-sm flex-1">Create</button>
                   <button onClick={() => setDialog('project')} className="btn btn-ghost btn-sm flex-1">Import / export</button>
                 </div>
               </>
@@ -1043,7 +1046,7 @@ export function Workspace() {
                 <RailButton label="Files" onClick={() => setShowExplorer(true)}><Files /></RailButton>
                 <RailButton label="Search and commands" onClick={() => setDialog('palette')}><Search /></RailButton>
                 <span className="flex-1" />
-                <RailButton label="New project" onClick={() => setDialog('templates')}><FilePlus /></RailButton>
+                <RailButton label="Create" onClick={() => setDialog('templates')}><FilePlus /></RailButton>
               </nav>
             )}
           </aside>
@@ -1263,6 +1266,7 @@ export function Workspace() {
                 }} />}
                 {shownPanel === 'agent' && <AgentPanel />}
                 {shownPanel === 'worker' && <WorkerPanel worker={worker} />}
+                {shownPanel === 'optimize' && <OptimizePanel onOpen={(file) => openLocation({ file, line: 1 })} />}
                 {shownPanel === 'contracts' && <ContractsPanel onOpen={(file, line) => openLocation({ file, line: line ?? 1 })} />}
                 {shownPanel === 'kit' && <KitPanel onFocus={(focus) => worker.setSettings({ focus })} />}
                 {shownPanel === 'history' && <HistoryPanel />}
@@ -1358,7 +1362,17 @@ export function Workspace() {
         />
       )}
       {dialog === 'settings' && <SettingsDialog commands={commands} isMac={isMac} onClose={() => setDialog(null)} initialTab={settingsTab} update={update} refreshUpdate={refreshUpdate} />}
-      {dialog === 'templates' && <TemplatesDialog initial={templatesFilter} onClose={() => { setDialog(null); setTemplatesFilter('all'); }} />}
+      {dialog === 'templates' && (
+        <CreateDialog
+          initial={createStart.tab}
+          templateFilter={createStart.filter}
+          onNeedModel={() => openPanel('agent')}
+          onClose={() => {
+            setDialog(null);
+            setCreateStart({ tab: 'describe' });
+          }}
+        />
+      )}
       {dialog === 'morning' && report && (
         <MorningReportDialog
           report={report}
@@ -1385,7 +1399,7 @@ export function Workspace() {
           }}
           onStart={(startWith) => {
             if (!startWith) return;
-            setTemplatesFilter(startWith);
+            setCreateStart(startWith === 'describe' || startWith === 'gallery' || startWith === 'kits' ? { tab: startWith } : { tab: 'templates', filter: startWith });
             setDialog('templates');
           }}
         />

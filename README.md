@@ -70,6 +70,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Terminal** | Built-in commands over the project (`ls cd cat mv rm tree echo > file …`, `run`) plus a real shell: anything else (`npm test`, `go test ./...`, `cargo build`, `make`, pipes and `&&`) runs in the project's folder on your machine, and files it changes come back into the editor. `sh …` or `!…` forces the real shell |
 | **Layout** | The side panel has four groups: Run (Build, Language, Python, Packages), Agent (Do, Ask, Keep going), Source (Git, Pipelines, History) and Project (Graph, Kit). Run takes program arguments in the field beside it; a program that answers with its usage gets a hint instead of a failure. The status bar shows the branch, the last build and run, the current failure, the agent and the worker, each one click from its panel. A first visit gets a one-minute welcome (what you're building, a model, GitHub) |
 | **Build** | Nine outputs from one menu — native, WASM, LLVM IR, scriptc IR (JSON), assembly, WASM text (WAT), object file, static library, WASM reactor — with an output viewer (highlighted text, or a hexdump for binaries), build options (release/dev, strip, dynamic engine, sanitizers, Windows window), pipeline timings, scriptc coverage and a run profile |
+| **Create** | One place to start: **describe** an app in plain words and get a plan (language, stack and why) that the agent builds while you review; a **gallery** of 23 apps (dashboards, trackers, landing pages, APIs, games, AI chat) each on the stack that suits it and many in several languages; a **stack builder** (framework, styling, UI kit, data, routing, state, forms, testing, lint, API and database) that writes every dependency into package.json or pyproject.toml and wires each one into working code; and every template and field kit. See [Create](#create) |
 | **Live values** | Turn on **Live** above the editor and the entry file (TypeScript, JavaScript or Python) runs after each pause in typing: every line shows what it did, right after the code — the values it set (`sum = 3, 7, 12 ×3` for a loop), what it returned, what it printed and the error it threw — and lines that never ran fade. Hover a line for every value. Local only, like Run; see [Live values](#live-values) |
 | **Contracts** | Rules that stay true, written in words and checked by a pattern or a command ("no console.log in src", "every route checks the session", "the tests pass"). The agent is told every one and checks them before it finishes, a proposal that breaks one is never marked verified, the worker fixes broken ones, and the status bar shows how they stand; see [Contracts](#contracts) |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
@@ -96,6 +97,40 @@ Native executables are linked for the machine the server runs on. Use the WASM t
 portable artifact.
 
 ---
+
+## Create
+
+**Create** (the button under the file tree, or Ctrl/⌘ + K → Create) is where every project starts. Your current
+project is kept in History, so trying something costs nothing.
+
+- **Describe it.** Write what you want ("an expense tracker that saves to a database, with charts by category").
+  The studio picks the language and stack by readable rules, not a model, so the plan is instant, free and
+  explained line by line: Python for data and AI, Astro for content sites, a TypeScript binary for CLIs, React with
+  shadcn/ui for interactive apps, a Hono API and Drizzle + SQLite when it needs to save things, Recharts for charts,
+  and so on. A language or library you name always wins ("…in Go", "…with Vue and Bootstrap"). **Create and build
+  it** makes the starter and hands the agent a brief; its work arrives as a proposal you review. **Create the
+  starter only** if you'd rather write it yourself, and **Adjust the stack** to change any choice first.
+- **Gallery.** 23 apps people actually build (Kanban, notes, habits, admin dashboard, expenses, invoices, landing
+  page, blog, portfolio, AI chat, agent, data report, REST API, URL shortener, live chat, CLI, scraper, weather,
+  Pomodoro, quiz, Snake, recipes, an ERC-20 token), each with why its stack fits. Many come in several languages: the
+  todo app in 12, the REST API in Python, TypeScript, Go, Rust, C# and Java. The brief the agent gets is shown, and
+  you can edit it.
+- **Stack builder.** For the web: React, Vue, Svelte, Solid, Preact or none; Tailwind, plain CSS, CSS Modules, Sass,
+  Bootstrap, Bulma, Pico or UnoCSS; then shadcn/ui, daisyUI, Mantine, Lucide, Motion, Sonner, Recharts, TanStack
+  Query, SWR, Axios, TanStack Router, React Router, Vue Router, Solid Router, Zustand, Jotai, Redux Toolkit, Pinia,
+  VueUse, Zod, React Hook Form, TanStack Form, TanStack Table, date-fns, i18next, Vitest + Testing Library,
+  Playwright, ESLint, Prettier, Biome, a Hono API and Drizzle + SQLite. For Python (uv): FastAPI, Flask, Typer or a
+  script, plus Pydantic, pydantic-settings, HTTPX, SQLModel, Jinja2, pandas, Polars, NumPy, Matplotlib, the
+  Anthropic and OpenAI SDKs, Rich, python-dotenv, Loguru, pytest, Ruff and mypy. Choices that don't fit are greyed
+  out with the reason; requirements are added and conflicts resolved, and the panel says what changed. Every
+  package goes into package.json, or into pyproject.toml the way `uv add` writes it (tools in the dev group), and
+  the panel shows the equivalent `npm install` / `uv add` commands. Each library is **used**, not just installed:
+  a card on the home page shows it working (a query that fetches from the API, a form that validates, a sortable
+  table, a store, a chart), with tests, lint and typecheck scripts and a README that says why each piece is there.
+- **Templates and field kits.** Every starter in 70+ languages, searchable, and the FDE/ISV kits.
+
+`npm run verify:stacks` installs, typechecks, lints, tests and builds a matrix of stacks and every stack in the
+gallery for real.
 
 ## Live values
 
@@ -563,6 +598,33 @@ Your own projects in these stacks are recognised the same way. Dependencies are 
 changes (`pyproject.toml`, `Cargo.toml`, `Gemfile`, `mix.exs`…); a missing toolchain is one click away in
 Run → Language. `npm run verify:apps` runs all twelve for real: start, page, API, and an edit served live.
 
+### Optimize: SEO, AEO, GEO and the rest
+
+**Project → Optimize** checks a web project from its files as you edit (no network) and scores eight areas:
+
+| Area | What it checks |
+|---|---|
+| **SEO** (search engines) | Title and meta description length, canonical URL, robots.txt, sitemap, one `<h1>`, no accidental `noindex` |
+| **AEO** (answer engines, voice) | schema.org JSON-LD, FAQ data or question-shaped headings answered in the first sentence |
+| **GEO** (ChatGPT, Claude, Perplexity, AI Overviews) | `llms.txt`, AI search crawlers not blocked, content that exists without JavaScript, a clear entity (Organization / Product data), enough specific text to cite |
+| **Social** | Open Graph tags, a share image, the X/Twitter card |
+| **Accessibility** | `lang`, image alt text, descriptive link text, zoom not disabled |
+| **Mobile and app** | Viewport, icon, web app manifest |
+| **Performance** | Render-blocking scripts, image dimensions (layout shift), heavy images |
+| **International** | `hreflang` links when the project has several languages |
+
+Each finding says what it found and why it matters. **Fix N automatically** adds the missing tags and files
+(robots.txt, sitemap.xml, llms.txt, a manifest, a favicon, JSON-LD, Open Graph and Twitter tags) using the site
+address you give; everything that needs real content or framework-specific code (an FAQ, a share image,
+prerendering, Next.js metadata) becomes one brief for the agent, which comes back as a proposal you review.
+
+The studio's own site does the same: canonical URLs and full social cards on every page, a generated share image,
+`/sitemap.xml`, `/robots.txt` (search engines and AI assistants welcome; set `SITE_AI_TRAINING=off` to turn away
+AI training crawlers only), `/manifest.webmanifest`, `/llms.txt` and `/llms-full.txt` (the docs and FAQ as plain
+text for language models), and schema.org data: Organization, WebSite and SoftwareApplication with the plans as
+offers, FAQPage on the FAQ and pricing pages, TechArticle and breadcrumbs on every docs page. Set
+`NEXT_PUBLIC_SITE_URL` to the public address in production.
+
 ### CSS frameworks
 
 Every popular way to style a web app works out of the box, in the in-browser preview (no install) and with the
@@ -731,6 +793,8 @@ Maintenance only works when the studio listens on your own machine (the default)
 | `/landing` | Product page |
 | `/pricing` | Plans (Free, Pro, Premium) and a comparison; edit them in `src/lib/pricing.ts` |
 | `/docs` | Developer docs, made from this README: one page per section, with search |
+| `/llms.txt`, `/llms-full.txt` | The site and its docs as plain text for language models |
+| `/sitemap.xml`, `/robots.txt`, `/manifest.webmanifest` | For search engines, crawlers and installing the app |
 | `/faq` | Searchable FAQ |
 | `/onboarding` | Three-step tour ending in the workspace with a template (`/?template=<id>`) |
 | `/?kit=<id>` | Opens a built-in [field kit](#field-kits) |
@@ -904,6 +968,8 @@ GET /api/download?filename=<filename>
 
 ```bash
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
+NEXT_PUBLIC_SITE_URL=https://your-domain   # canonical URLs, sitemap, social cards, llms.txt (defaults to NEXT_PUBLIC_BASE_URL)
+SITE_AI_TRAINING=on                       # off: robots.txt turns away AI training crawlers (search and AI answers still allowed)
 PORT=3000
 
 # Pricing page: checkout links for the paid plans (https only; until set, the buttons

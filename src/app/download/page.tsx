@@ -2,11 +2,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Downloads } from '@/components/Downloads';
 import { SiteFooter, SiteHeader } from '@/components/SiteHeader';
+import { pageMeta } from '@/lib/site';
 
-export const metadata: Metadata = {
-  title: 'Download · NanoCLI Studio',
+export const metadata: Metadata = pageMeta({
+  title: 'Download',
   description: 'NanoCLI Studio for macOS (Apple silicon) and Windows, or run it from source on Linux. The same studio as the browser version, as a native app.',
-};
+  path: '/download',
+});
 
 export default function DownloadPage() {
   return (
