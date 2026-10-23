@@ -213,7 +213,13 @@ export function detectStacks(files: Record<string, string>): Stack[] {
     add(simple({ id: 'gradle', name: 'JVM · Gradle', setup: [{ name: 'Set up Java', uses: ACTIONS.java, with: { distribution: 'temurin', 'java-version': '21', cache: 'gradle' } }], install: [], image: 'gradle:jdk21', checks: [{ id: 'build', label: 'Build and test', run: has(files, 'gradlew') ? './gradlew build' : 'gradle build' }] }));
   }
   if (anyPath(files, (p) => /\.(csproj|fsproj|sln)$/.test(p))) {
-    add(simple({ id: 'dotnet', name: '.NET', setup: [{ name: 'Set up .NET', uses: ACTIONS.dotnet, with: { 'dotnet-version': '9.0.x' } }], install: ['dotnet restore'], image: 'mcr.microsoft.com/dotnet/sdk:9.0', checks: [{ id: 'format', label: 'Check formatting', run: 'dotnet format --verify-no-changes' }, { id: 'build', label: 'Build', run: 'dotnet build --no-restore -c Release' }, { id: 'test', label: 'Test', run: 'dotnet test --no-build -c Release' }] }));
+    // The SDK the projects target (net10.0 → 10.0.x), and the test project when tests live in their own
+    const projects = Object.keys(files).filter((p) => /\.(csproj|fsproj)$/.test(p));
+    const major = Math.max(9, ...projects.map((p) => Number(files[p].match(/<TargetFrameworks?>\s*net(\d+)\./)?.[1] ?? 0)));
+    const testProject = projects.find((p) => p.includes('/') && /<PackageReference\s+Include="(xunit|NUnit|MSTest\.TestFramework|Microsoft\.NET\.Test\.Sdk)"/i.test(files[p]));
+    const solution = anyPath(files, (p) => !p.includes('/') && p.endsWith('.sln'));
+    const test = testProject && !solution ? `dotnet test ${testProject.slice(0, testProject.lastIndexOf('/'))} -c Release` : 'dotnet test --no-build -c Release';
+    add(simple({ id: 'dotnet', name: '.NET', setup: [{ name: 'Set up .NET', uses: ACTIONS.dotnet, with: { 'dotnet-version': `${major}.0.x` } }], install: ['dotnet restore'], image: `mcr.microsoft.com/dotnet/sdk:${major}.0`, checks: [{ id: 'format', label: 'Check formatting', run: 'dotnet format --verify-no-changes' }, { id: 'build', label: 'Build', run: 'dotnet build --no-restore -c Release' }, { id: 'test', label: 'Test', run: test }] }));
   }
   if ('Gemfile' in files) {
     const checks: Check[] = [];
@@ -232,6 +238,19 @@ export function detectStacks(files: Record<string, string>): Stack[] {
   }
   if ('build.zig' in files) {
     add(simple({ id: 'zig', name: 'Zig', setup: [{ name: 'Set up Zig', uses: ACTIONS.zig }], install: [], image: 'alpine:latest', gitlabSetup: ['apk add --no-cache zig'], checks: [{ id: 'build', label: 'Build', run: 'zig build' }, { id: 'test', label: 'Test', run: 'zig build test' }] }));
+  } else if (anyPath(files, (p) => p.endsWith('.zig'))) {
+    // No build.zig: test and compile the entry file directly (test blocks in the files it imports run too)
+    const entry = ['src/main.zig', 'main.zig'].find((p) => p in files) ?? Object.keys(files).find((p) => p.endsWith('.zig'))!;
+    add(simple({ id: 'zig', name: 'Zig', setup: [{ name: 'Set up Zig', uses: ACTIONS.zig }], install: [], image: 'alpine:latest', gitlabSetup: ['apk add --no-cache zig'], checks: [{ id: 'format', label: 'Check formatting', run: 'zig fmt --check .' }, { id: 'test', label: 'Test', run: `zig test ${entry}` }, { id: 'build', label: 'Build', run: `zig build-exe ${entry} -O ReleaseSafe` }] }));
+  }
+  if ('Package.swift' in files) {
+    add(simple({ id: 'swift', name: 'Swift', setup: [], install: [], image: 'swift:latest', notes: ['GitHub’s Ubuntu runners come with Swift, so there is no setup step.'], checks: [{ id: 'build', label: 'Build', run: 'swift build' }, { id: 'test', label: 'Test', run: 'swift test' }] }));
+  }
+  if (!has(files, 'pom.xml', 'build.gradle', 'build.gradle.kts') && anyPath(files, (p) => p.endsWith('.kt'))) {
+    // Kotlin without Gradle: the compiler on its own (GitHub's Ubuntu runners have kotlinc); a test/ program with its own main is the test
+    const sources = anyPath(files, (p) => p.startsWith('src/')) ? 'src' : '.';
+    const testMain = Object.keys(files).find((p) => /^test\/\w+\.kt$/.test(p) && /^fun main\(/m.test(files[p]))?.slice(5, -3);
+    add(simple({ id: 'kotlin', name: 'Kotlin', setup: [{ name: 'Set up Java', uses: ACTIONS.java, with: { distribution: 'temurin', 'java-version': '21' } }], install: [], image: 'zenika/kotlin:latest', checks: [{ id: 'build', label: 'Build', run: `kotlinc ${sources} -include-runtime -d build/app.jar` }, ...(testMain ? [{ id: 'test' as const, label: 'Test', run: `kotlinc ${sources} test -include-runtime -d build/test.jar && java -cp build/test.jar ${testMain}Kt` }] : [])] }));
   }
   if ('CMakeLists.txt' in files) {
     add(simple({ id: 'cmake', name: 'C/C++ · CMake', setup: [], install: [], image: 'gcc:latest', gitlabSetup: ['apt-get update -qq && apt-get install -y -qq cmake'], checks: [{ id: 'build', label: 'Configure and build', run: 'cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build' }, { id: 'test', label: 'Test', run: 'ctest --test-dir build --output-on-failure' }] }));

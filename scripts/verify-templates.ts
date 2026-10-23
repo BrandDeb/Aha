@@ -8,10 +8,11 @@ import path from 'node:path';
 process.env.NANOCLI_HOME ??= mkdtempSync(path.join(tmpdir(), 'tplv-'));
 const { TEMPLATES } = await import('../src/lib/templates.ts');
 const { PROJECT_TEMPLATES, WORDSTATS_OUTPUT } = await import('../src/lib/project-templates.ts');
+const { MORE_PROJECT_TEMPLATES } = await import('../src/lib/project-templates-more.ts');
 const { runLanguage } = await import('../src/lib/polyglot.ts');
 const { runPipeline } = await import('../src/lib/pipelines/run.ts');
 const only = process.argv.slice(2);
-for (const pt of PROJECT_TEMPLATES) {
+for (const pt of [...PROJECT_TEMPLATES, ...MORE_PROJECT_TEMPLATES]) {
   if (only.length && !only.includes(pt.language)) continue;
   const t = TEMPLATES.find((x) => x.id === pt.id)!;
   const files = { ...t.files!, [t.filename]: t.code };

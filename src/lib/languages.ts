@@ -207,7 +207,7 @@ export const LANGUAGES: Language[] = [
     versionArgs: ['-version'],
     install: { windows: 'winget install JetBrains.Kotlin.Compiler', mac: 'brew install kotlin', linux: 'sdk install kotlin (sdkman.io)' },
     plan: ({ entry, paths, args }) => [
-      { label: 'kotlinc', tool: [['kotlinc']], args: [...entryFirst(entry, withExt(paths, ['.kt'])), '-include-runtime', '-d', `${OUT_DIR}/app.jar`], timeoutMs: COMPILE },
+      { label: 'kotlinc', tool: [['kotlinc']], args: [...entryFirst(entry, notTests(withExt(paths, ['.kt']))), '-include-runtime', '-d', `${OUT_DIR}/app.jar`], timeoutMs: COMPILE },
       { label: 'java', tool: [['java']], args: ['-jar', `${OUT_DIR}/app.jar`, ...args], timeoutMs: RUN },
     ],
   },
@@ -299,7 +299,13 @@ export const LANGUAGES: Language[] = [
     tools: [['swift']],
     versionArgs: ['--version'],
     install: { windows: 'winget install Swift.Toolchain', mac: 'xcode-select --install', linux: 'swift.org/install' },
-    plan: ({ entry, args }) => [{ label: 'swift', tool: [['swift']], args: [entry, ...args], timeoutMs: COMPILE }],
+    note: 'A single file runs as a script; a Swift package (Package.swift) builds and runs its executable with swift run.',
+    plan: ({ entry, read, args }) => {
+      const pkg = read('Package.swift');
+      if (pkg === undefined) return [{ label: 'swift', tool: [['swift']], args: [entry, ...args], timeoutMs: COMPILE }];
+      const product = pkg.match(/executableTarget\(\s*name:\s*"([^"]+)"/)?.[1];
+      return [{ label: 'swift run', tool: [['swift']], args: ['run', '--quiet', ...(product ? [product] : []), ...args], timeoutMs: COMPILE }];
+    },
   },
   {
     id: 'dart',
@@ -319,7 +325,11 @@ export const LANGUAGES: Language[] = [
     tools: [['elixir']],
     versionArgs: ['--version'],
     install: { windows: 'winget install ElixirLang.Elixir', mac: 'brew install elixir', linux: 'sudo apt install elixir' },
-    plan: ({ entry, args }) => [{ label: 'elixir', tool: [['elixir']], args: [entry, ...args], timeoutMs: RUN }],
+    note: 'A script runs with elixir; in a Mix project (mix.exs) it runs with mix run, so the project’s modules are compiled and loaded.',
+    plan: ({ entry, read, args }) =>
+      read('mix.exs') === undefined || entry.endsWith('.ex')
+        ? [{ label: 'elixir', tool: [['elixir']], args: [entry, ...args], timeoutMs: RUN }]
+        : [{ label: 'mix run', tool: [['mix']], args: ['run', entry, ...args], timeoutMs: COMPILE }],
   },
   {
     id: 'haskell',

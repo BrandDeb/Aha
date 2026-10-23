@@ -11,6 +11,7 @@ import { LANGUAGE_STARTERS } from './language-templates.ts';
 import { generatePipeline } from './pipelines/generate.ts';
 import { detectStacks } from './pipelines/stack.ts';
 import { PROJECT_TEMPLATES } from './project-templates.ts';
+import { MORE_PROJECT_TEMPLATES } from './project-templates-more.ts';
 import { PYTHON_TEMPLATES } from './python-templates.ts';
 import { WEB_STARTERS } from './web-templates.ts';
 import { CSS_STARTERS } from './css-templates.ts';
@@ -427,7 +428,7 @@ countdown(Number(process.argv[2] ?? '3'));
 `,
   },
   ...PYTHON_TEMPLATES,
-  ...PROJECT_TEMPLATES.map(({ id, name, description, filename, files, language }): Template => {
+  ...[...PROJECT_TEMPLATES, ...MORE_PROJECT_TEMPLATES].map(({ id, name, description, filename, files, language }): Template => {
     const { [filename]: code, ...rest } = files;
     return { id, name, description, filename, code, files: { ...rest, ...ciFor(files) }, language };
   }),

@@ -26,9 +26,9 @@ export interface ProjectTemplate {
 /** What every template prints when run without arguments */
 export const WORDSTATS_OUTPUT = ['lines: 3', 'words: 19', 'top: the 4, fox 3, dog 2'];
 
-const SAMPLE = 'The quick brown fox jumps over the lazy dog.\nThe dog sleeps; the fox runs.\nA fox is quick.\n';
+export const PROJECT_SAMPLE = 'The quick brown fox jumps over the lazy dog.\nThe dog sleeps; the fox runs.\nA fox is quick.\n';
 
-const README = (lang: string, run: string, test: string) => `# wordstats (${lang})
+export const projectReadme = (lang: string, run: string, test: string) => `# wordstats (${lang})
 
 Counts the lines and words of a text file and shows the three most frequent words.
 
@@ -95,8 +95,8 @@ test('empty text', () => {
 });
 `,
       'package.json': `${JSON.stringify({ name: 'wordstats', version: '1.0.0', private: true, scripts: { start: 'node main.js', test: 'node --test' } }, null, 2)}\n`,
-      'sample.txt': SAMPLE,
-      'README.md': README('Node.js', 'node main.js notes.txt', 'npm test'),
+      'sample.txt': PROJECT_SAMPLE,
+      'README.md': projectReadme('Node.js', 'node main.js notes.txt', 'npm test'),
     },
   },
   {
@@ -175,8 +175,8 @@ dev = ["pytest>=8"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 `,
-      'sample.txt': SAMPLE,
-      'README.md': README('Python', 'uv run main.py notes.txt', 'uv run pytest'),
+      'sample.txt': PROJECT_SAMPLE,
+      'README.md': projectReadme('Python', 'uv run main.py notes.txt', 'uv run pytest'),
     },
   },
   {
@@ -300,8 +300,8 @@ func TestEmptyText(t *testing.T) {
 }
 `,
       'go.mod': 'module example.com/wordstats\n\ngo 1.22\n',
-      'sample.txt': SAMPLE,
-      'README.md': README('Go', 'go run . notes.txt', 'go test ./...'),
+      'sample.txt': PROJECT_SAMPLE,
+      'README.md': projectReadme('Go', 'go run . notes.txt', 'go test ./...'),
     },
   },
   {
@@ -409,8 +409,8 @@ mod tests {
 }
 `,
       'Cargo.toml': '[package]\nname = "wordstats"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
-      'sample.txt': SAMPLE,
-      'README.md': README('Rust', 'cargo run -- notes.txt', 'cargo test'),
+      'sample.txt': PROJECT_SAMPLE,
+      'README.md': projectReadme('Rust', 'cargo run -- notes.txt', 'cargo test'),
     },
   },
   {
@@ -533,8 +533,8 @@ class WordStatsTest {
   </build>
 </project>
 `,
-      'sample.txt': SAMPLE,
-      'README.md': README('Java', 'mvn -q compile exec:java -Dexec.mainClass=dev.example.wordstats.Main -Dexec.args=notes.txt', 'mvn verify'),
+      'sample.txt': PROJECT_SAMPLE,
+      'README.md': projectReadme('Java', 'mvn -q compile exec:java -Dexec.mainClass=dev.example.wordstats.Main -Dexec.args=notes.txt', 'mvn verify'),
     },
   },
   {
@@ -592,8 +592,8 @@ end
 `,
       Gemfile: "source 'https://rubygems.org'\n\ngem 'minitest', '~> 5.25'\ngem 'rake', '~> 13.2'\n",
       Rakefile: "require 'rake/testtask'\n\nRake::TestTask.new(:test) do |t|\n  t.test_files = FileList['test/**/*_test.rb']\nend\n\ntask default: :test\n",
-      'sample.txt': SAMPLE,
-      'README.md': README('Ruby', 'ruby main.rb notes.txt', 'bundle exec rake test'),
+      'sample.txt': PROJECT_SAMPLE,
+      'README.md': projectReadme('Ruby', 'ruby main.rb notes.txt', 'bundle exec rake test'),
     },
   },
   {
@@ -690,8 +690,8 @@ final class WordStatsTest extends TestCase
   </testsuites>
 </phpunit>
 `,
-      'sample.txt': SAMPLE,
-      'README.md': README('PHP', 'php main.php notes.txt', 'composer install && vendor/bin/phpunit'),
+      'sample.txt': PROJECT_SAMPLE,
+      'README.md': projectReadme('PHP', 'php main.php notes.txt', 'composer install && vendor/bin/phpunit'),
     },
   },
   {
@@ -833,8 +833,8 @@ test: tests/test_wordstats.c wordstats.c wordstats.h
 
 .PHONY: test
 `,
-      'sample.txt': SAMPLE,
-      'README.md': README('C', 'make && ./wordstats notes.txt', 'make test'),
+      'sample.txt': PROJECT_SAMPLE,
+      'README.md': projectReadme('C', 'make && ./wordstats notes.txt', 'make test'),
     },
   },
   {
@@ -965,8 +965,8 @@ add_executable(test_wordstats tests/test_wordstats.cpp)
 target_link_libraries(test_wordstats wordstats_lib)
 add_test(NAME wordstats COMMAND test_wordstats)
 `,
-      'sample.txt': SAMPLE,
-      'README.md': README('C++', 'cmake -B build && cmake --build build && ./build/wordstats notes.txt', 'ctest --test-dir build'),
+      'sample.txt': PROJECT_SAMPLE,
+      'README.md': projectReadme('C++', 'cmake -B build && cmake --build build && ./build/wordstats notes.txt', 'ctest --test-dir build'),
     },
   },
 ];

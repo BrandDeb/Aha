@@ -98,12 +98,13 @@ function hash(text: string): string {
 
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 
-/** The lockfile decides; npm otherwise */
+/** The lockfile decides, then a bunfig.toml or the packageManager field; npm otherwise */
 export function packageManagerFor(files: Record<string, string>): PackageManager {
-  if ('bun.lock' in files || 'bun.lockb' in files) return 'bun';
+  if ('bun.lock' in files || 'bun.lockb' in files || 'bunfig.toml' in files) return 'bun';
   if ('pnpm-lock.yaml' in files) return 'pnpm';
   if ('yarn.lock' in files) return 'yarn';
-  return 'npm';
+  const declared = files['package.json']?.match(/"packageManager"\s*:\s*"(npm|pnpm|yarn|bun)@/)?.[1];
+  return (declared as PackageManager | undefined) ?? 'npm';
 }
 
 export const INSTALL_ARGS: Record<PackageManager, string[]> = {
