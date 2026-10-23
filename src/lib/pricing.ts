@@ -36,6 +36,9 @@ export const PLANS: Plan[] = [
       'Editor, terminal, git, preview and history',
       '40+ languages and runtimes, smart contracts included, toolchains installed and patched for you',
       'The agent, with proposals you review and evidence that they work',
+      'Live values: what every line did, on the code, as you type',
+      'Contracts: rules the agent is held to, and evidence for every changed line',
+      'Full apps in 12 stacks and every CSS framework, with a live preview',
       'Debug this, on any failure',
       'The worker in Suggest mode',
       'Field kits: the built-in ones, and any you’re sent',
@@ -56,6 +59,8 @@ export const PLANS: Plan[] = [
       'The worker in Autonomous mode',
       'Automatic debugging of every new failure',
       'Best-of-3: each task raced three ways, the verified one recommended',
+      'A second reviewer on every proposal',
+      'CI on every save, and the morning report',
       'Export your own field kits',
       'The native app for Windows and macOS',
       'Email support',
@@ -74,6 +79,8 @@ export const PLANS: Plan[] = [
       'A private kit library for your team',
       'Publish kits to your customers and developers',
       'Single sign-on and an audit log',
+      'Team contracts and a model policy across every repo',
+      'Cloud workers that keep going when your laptop sleeps',
       'Help deploying in your cloud or air-gapped',
       'Priority support with a named engineer',
     ],
@@ -81,7 +88,13 @@ export const PLANS: Plan[] = [
 ];
 
 /** What is shipping today vs. on the way, so the page never oversells */
-export const COMING_SOON = new Set(['A private kit library for your team', 'Publish kits to your customers and developers', 'Single sign-on and an audit log']);
+export const COMING_SOON = new Set([
+  'A private kit library for your team',
+  'Publish kits to your customers and developers',
+  'Single sign-on and an audit log',
+  'Team contracts and a model policy across every repo',
+  'Cloud workers that keep going when your laptop sleeps',
+]);
 
 type Cell = boolean | string;
 export const COMPARISON: { group: string; rows: { label: string; free: Cell; pro: Cell; premium: Cell }[] }[] = [
@@ -93,6 +106,9 @@ export const COMPARISON: { group: string; rows: { label: string; free: Cell; pro
       { label: 'Toolchains installed and kept patched', free: true, pro: true, premium: true },
       { label: 'Web apps: dev servers and in-browser preview', free: true, pro: true, premium: true },
       { label: 'TypeScript to native binaries (scriptc)', free: true, pro: true, premium: true },
+      { label: 'Full apps in 12 stacks, every CSS framework', free: true, pro: true, premium: true },
+      { label: 'Live values on the code as you type', free: true, pro: true, premium: true },
+      { label: 'Why-history: the reason behind every line', free: true, pro: true, premium: true },
     ],
   },
   {
@@ -104,6 +120,11 @@ export const COMPARISON: { group: string; rows: { label: string; free: Cell; pro
       { label: 'Automatic debugging', free: false, pro: true, premium: true },
       { label: 'Worker', free: 'Suggest', pro: 'Autonomous', premium: 'Autonomous' },
       { label: 'Best-of-3 approaches', free: false, pro: true, premium: true },
+      { label: 'Contracts and evidence per changed line', free: true, pro: true, premium: true },
+      { label: 'Second reviewer on every proposal', free: false, pro: true, premium: true },
+      { label: 'CI on every save', free: false, pro: true, premium: true },
+      { label: 'Morning report', free: false, pro: true, premium: true },
+      { label: 'Cloud workers', free: false, pro: false, premium: 'Soon' },
     ],
   },
   {
@@ -114,6 +135,8 @@ export const COMPARISON: { group: string; rows: { label: string; free: Cell; pro
       { label: 'Export your own kits', free: false, pro: true, premium: true },
       { label: 'Private kit library', free: false, pro: false, premium: 'Soon' },
       { label: 'SSO and audit log', free: false, pro: false, premium: 'Soon' },
+      { label: 'Team contracts and model policy', free: false, pro: false, premium: 'Soon' },
+      { label: 'Outcome analytics (verified rate, time saved)', free: false, pro: false, premium: 'Soon' },
       { label: 'Deployment help', free: false, pro: false, premium: true },
     ],
   },
