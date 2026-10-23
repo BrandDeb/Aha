@@ -97,7 +97,9 @@ jobs:
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          # Tauri signs and notarizes when these are present; without them the app is unsigned
+          # Tauri signs and notarizes when these are present; without them the app is signed ad hoc
+          # (signingIdentity "-" in tauri.conf.json): an unsigned app downloaded on Apple silicon is reported
+          # as "damaged", while an ad-hoc signed one gets the usual prompt that System Settings can approve
           for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
             if [ -n "${!name}" ]; then
               echo "::add-mask::${!name}"
@@ -107,6 +109,14 @@ jobs:
 
       - name: Build with Tauri
         run: npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: Check the macOS signature
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          app="$(ls -d src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app | head -1)"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv "$app" 2>&1 | grep -E 'Identifier|Signature|TeamIdentifier' || true
 
       - name: Upload installer
         uses: actions/upload-artifact@v4

@@ -32,8 +32,8 @@ export const PLATFORMS: Platform[] = [
     requirement: 'Apple silicon (M1 or later), macOS 11 Big Sur or newer',
     file: 'NanoCLI-Studio-macOS-arm64.dmg',
     kind: 'Disk image (.dmg)',
-    steps: ['Open the downloaded .dmg.', 'Drag NanoCLI Studio to Applications.', 'Open it from Applications. The first start takes a few seconds while the studio starts.'],
-    unsigned: 'This build isn’t notarized yet, so macOS says it can’t check it. Right-click the app in Applications and choose Open, then Open again (once). Or run: xattr -dr com.apple.quarantine "/Applications/NanoCLI Studio.app"',
+    steps: ['Open the downloaded .dmg.', 'Drag NanoCLI Studio to Applications (don’t open it from the disk image).', 'Open it from Applications. The first start takes a few seconds while the studio starts.'],
+    unsigned: 'This build isn’t notarized by Apple yet, so the first time macOS says it can’t verify it. Choose Done, then open System Settings → Privacy & Security, scroll down and choose Open Anyway (once). On older macOS: right-click the app and choose Open. If it says the app is damaged, that copy came from an older build: run xattr -cr "/Applications/NanoCLI Studio.app" in Terminal, or download it again.',
   },
   {
     id: 'windows',
