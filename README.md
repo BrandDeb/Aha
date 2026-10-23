@@ -78,6 +78,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Risk score and auto-accept** | Every proposal is scored 0–100 with its reasons (dependencies, CI, auth, schema, secrets, eval and shell, removed tests, size, evidence, the reviewer). Optionally accept the low-risk, verified ones by themselves; anything sensitive always waits for you. See [Risk score and auto-accept](#risk-score-and-auto-accept) |
 | **Specs → property tests** | Write what must always be true about a function ("sortPrices returns the items in ascending order"): it becomes a fast-check or Hypothesis test that tries hundreds of random inputs and shrinks a failure to the smallest counterexample, plus a contract that runs it on every change. Common properties need no model. See [Specs](#specs-plain-english-to-property-tests) |
 | **Fork the future** | ⑂ Fork 3 ways builds one request in three deliberately different directions at once (Minimal / Bold / Playful for looks; Simplest / Robust / Fast for code), then shows them side by side, running live for web apps, so you pick from real results. See [Fork the future](#fork-the-future) |
+| **Build from a picture** | Paste a screenshot, a mock-up or a photo of a paper sketch in Create: the agent matches the screenshot (or interprets the sketch's layout) and builds a working app from it. See [Create](#create) |
 | **Contracts** | Rules that stay true, written in words and checked by a pattern or a command ("no console.log in src", "every route checks the session", "the tests pass"). The agent is told every one and checks them before it finishes, a proposal that breaks one is never marked verified, the worker fixes broken ones, and the status bar shows how they stand; see [Contracts](#contracts) |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
@@ -116,6 +117,12 @@ project is kept in History, so trying something costs nothing.
   and so on. A language or library you name always wins ("…in Go", "…with Vue and Bootstrap"). **Create and build
   it** makes the starter and hands the agent a brief; its work arrives as a proposal you review. **Create the
   starter only** if you'd rather write it yourself, and **Adjust the stack** to change any choice first.
+- **From a picture.** Paste, drop or choose a screenshot of an app you like, a mock-up, or a photo of a sketch on
+  paper, with or without words. Mark it a **screenshot** (match it closely: layout, hierarchy, colours, type,
+  spacing, every visible label) or a **sketch** (read boxes, scribbles and arrows as a layout and pick a tasteful
+  style). The picture goes to the model with the brief, and the agent makes it real: every visible control works and
+  it holds up on a phone. Big images are scaled down in the browser first. It needs a model that reads images
+  (Claude, GPT, Gemini, or a vision model in Ollama).
 - **Gallery.** 23 apps people actually build (Kanban, notes, habits, admin dashboard, expenses, invoices, landing
   page, blog, portfolio, AI chat, agent, data report, REST API, URL shortener, live chat, CLI, scraper, weather,
   Pomodoro, quiz, Snake, recipes, an ERC-20 token), each with why its stack fits. Many come in several languages: the

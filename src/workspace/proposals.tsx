@@ -27,7 +27,7 @@ import { Stage, type SerializedStage } from '@/lib/agent/stage';
 import { workspaceTools } from '@/lib/agent/tools';
 import { skillTools } from '@/lib/skills/format';
 import { fetchSkillIndex, skillLibrary } from './skills-client';
-import { DEFAULT_BUDGET, type AgentEvent, type Budget, type Message, type Risk, type StopReason, type ToolCall, type ToolResult } from '@/lib/agent/types';
+import { DEFAULT_BUDGET, type AgentEvent, type ImageInput, type Budget, type Message, type Risk, type StopReason, type ToolCall, type ToolResult } from '@/lib/agent/types';
 import { resolveFor, resolveProvider } from '@/lib/ai-providers';
 import { createAgentHost } from './agent-host';
 import { useAiConfig } from './ai-config';
@@ -142,7 +142,7 @@ interface ProposalsValue {
   setPrefs: (patch: Partial<AgentPrefs>) => void;
   /** Start a new proposal; returns its id, or null when no model is set up */
   /** `label` is what the tab shows when the task itself is long (a debugging brief); `quiet` skips the "choose a model" toast */
-  ask: (goal: string, options?: { approaches?: number; label?: string; quiet?: boolean; background?: boolean; origin?: Proposal['origin']; task?: string; forks?: ForkDirection[] }) => string | null;
+  ask: (goal: string, options?: { approaches?: number; label?: string; quiet?: boolean; background?: boolean; origin?: Proposal['origin']; task?: string; forks?: ForkDirection[]; images?: ImageInput[] }) => string | null;
   followUp: (id: string, text: string) => void;
   stop: (id: string) => void;
   answer: (id: string, allowed: boolean, always?: boolean) => void;
@@ -182,6 +182,8 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
   const controllers = useRef(new Map<string, AbortController>());
   const answers = useRef(new Map<string, (allowed: boolean, always?: boolean) => void>());
   const histories = useRef(new Map<string, Message[]>());
+  /** Images that come with a new request (a screenshot to build from), handed to its first run only */
+  const pendingImages = useRef(new Map<string, ImageInput[]>());
   const idCounter = useRef(0);
   const projectRef = useRef(project);
   useEffect(() => {
@@ -333,8 +335,11 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
         if (connected.connected.length) log(id, { kind: 'notice', text: `Connected: ${connected.connected.map((c) => c.name).join(', ')}` });
         for (const f of connected.failed) log(id, { kind: 'notice', text: `${f.name} is not available: ${f.error}` });
         const skills = (await fetchSkillIndex())?.skills ?? [];
+        const images = pendingImages.current.get(id);
+        pendingImages.current.delete(id);
         const run = await runAgent({
           goal,
+          ...(images ? { images } : {}),
           system: systemPromptFor(stage.files(), skills),
           tools: [...workspaceTools(host), ...connected.tools, ...skillTools(skillLibrary(skills, () => stage.files()))],
           callModel: callModelFor(target),
@@ -542,6 +547,7 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
         origin: options.origin ?? 'you',
         ...(options.task ? { task: options.task } : {}),
       };
+      if (options.images?.length) pendingImages.current.set(id, options.images);
       setProposals((prev) => [proposal, ...prev]);
       // Background work (the worker) opens as a tab but doesn't take the editor from you
       if (!options.background) setActiveId(id);

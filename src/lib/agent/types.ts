@@ -46,8 +46,14 @@ export interface Tool extends ToolSpec {
   run: (args: Record<string, unknown>, context: { signal?: AbortSignal }) => Promise<ToolResult>;
 }
 
+/** An image sent with a request (a screenshot or a sketch to build from), base64 without the data: prefix */
+export interface ImageInput {
+  mediaType: string;
+  data: string;
+}
+
 export type Message =
-  | { role: 'user'; content: string }
+  | { role: 'user'; content: string; images?: ImageInput[] }
   | { role: 'assistant'; content: string; toolCalls?: ToolCall[]; raw?: unknown[] }
   | { role: 'tool'; callId: string; name: string; content: string; ok: boolean };
 

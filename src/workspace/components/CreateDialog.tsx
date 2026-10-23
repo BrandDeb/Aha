@@ -15,6 +15,8 @@ import { parseBundle, type Kit } from '@/lib/kits';
 import { getLanguage } from '@/lib/languages';
 import { GALLERY, GALLERY_CATEGORIES, type GalleryApp, type GalleryCategory, type GallerySource } from '@/lib/gallery';
 import { planApp, PLAN_EXAMPLES } from '@/lib/planner';
+import { imageFromDataUrl, pictureBrief, pictureRequest, type PictureKind } from '@/lib/vision';
+import type { ImageInput } from '@/lib/agent/types';
 import { buildStack, CATEGORY_LABEL, DEFAULT_STACK, FRAMEWORKS, librariesByCategory, PY_FRAMEWORKS, resolveStack, STYLINGS, unavailable, type StackChoice } from '@/lib/stack';
 import { TEMPLATES, templateFiles, type Template } from '@/lib/templates';
 import { useActions } from '../actions';
@@ -58,14 +60,14 @@ export function CreateDialog({ onClose, initial = 'describe', templateFilter = '
   const hasModel = !!config.provider && (!!config.keys[config.provider]?.trim() || ['ollama', 'lmstudio', 'hosted'].includes(config.provider));
 
   /** Replace the project (the old one goes to History), then optionally hand the agent the brief */
-  const create = (files: Record<string, string>, entry: string, name: string, label: string, brief?: string) => {
+  const create = (files: Record<string, string>, entry: string, name: string, label: string, brief?: string, images?: ImageInput[]) => {
     saveSnapshot(`Before new project: ${name}`);
     dispatch({ type: 'replace', project: { name, files, folders: [], entry }, git: null });
     onClose();
     if (brief) {
       // Let the new project land before the agent snapshots it
       setTimeout(() => {
-        if (ask(brief, { label: `Build ${name}` }) === null) onNeedModel();
+        if (ask(brief, { label: `Build ${name}`, ...(images?.length ? { images } : {}) }) === null) onNeedModel();
       }, 250);
       notify({ kind: 'success', title: `Created ${name}: the agent is building it`, detail: `${label}. Its work arrives as a proposal tab you review before anything changes; your previous project (${project.name}) is in History.` });
     } else notify({ kind: 'success', title: `Created ${name}`, detail: `${label}. Press Run for a live preview. Your previous project (${project.name}) is in History.` });
@@ -104,13 +106,56 @@ export function CreateDialog({ onClose, initial = 'describe', templateFilter = '
   );
 }
 
-type CreateFn = (files: Record<string, string>, entry: string, name: string, label: string, brief?: string) => void;
+type CreateFn = (files: Record<string, string>, entry: string, name: string, label: string, brief?: string, images?: ImageInput[]) => void;
+
+/** A picture as a data: URL, scaled down so its longest side is at most 1600 px (what models read well) */
+async function readPicture(file: Blob): Promise<string> {
+  const url = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+  const img = new Image();
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = reject;
+    img.src = url;
+  });
+  const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+  if (scale === 1 && url.length < 4_000_000) return url;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.width * scale);
+  canvas.height = Math.round(img.height * scale);
+  canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.86);
+}
 
 // ─── Describe ────────────────────────────────────────────────────────────────
 
 function Describe({ hasModel, onNeedModel, create, openInBuilder, openGallery }: { hasModel: boolean; onNeedModel: () => void; create: CreateFn; openInBuilder: (c: StackChoice) => void; openGallery: () => void }) {
   const [text, setText] = useState('');
-  const plan = useMemo(() => (text.trim().length >= 6 ? planApp(text) : null), [text]);
+  // Build from a picture: a screenshot to match or a sketch to interpret
+  const [picture, setPicture] = useState<{ url: string; image: ImageInput } | null>(null);
+  const [pictureKind, setPictureKind] = useState<PictureKind>('screenshot');
+  const [pictureError, setPictureError] = useState<string | null>(null);
+  const pickRef = useRef<HTMLInputElement>(null);
+  const attach = async (file: Blob | null | undefined) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    try {
+      const url = await readPicture(file);
+      const image = imageFromDataUrl(url);
+      if ('error' in image) setPictureError(image.error);
+      else {
+        setPicture({ url, image });
+        setPictureError(null);
+      }
+    } catch {
+      setPictureError('That image could not be read.');
+    }
+  };
+  const request = picture ? pictureRequest(pictureKind, text) : text;
+  const plan = useMemo(() => (request.trim().length >= 6 ? planApp(request) : null), [request]);
   const made = useMemo(() => (plan ? materialize(plan.source, plan.name) : null), [plan]);
 
   const go = (withAgent: boolean) => {
@@ -119,7 +164,8 @@ function Describe({ hasModel, onNeedModel, create, openInBuilder, openGallery }:
       onNeedModel();
       return;
     }
-    create(made.files, made.entry, made.name, plan.label, withAgent ? plan.brief : undefined);
+    if (picture && withAgent) create(made.files, made.entry, made.name, plan.label, pictureBrief(pictureKind, text, plan.brief), [picture.image]);
+    else create(made.files, made.entry, made.name, plan.label, withAgent ? plan.brief : undefined);
   };
 
   return (
@@ -136,11 +182,50 @@ function Describe({ hasModel, onNeedModel, create, openInBuilder, openGallery }:
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) go(true);
           }}
+          onPaste={(e) => {
+            const file = [...e.clipboardData.files].find((f) => f.type.startsWith('image/'));
+            if (file) {
+              e.preventDefault();
+              void attach(file);
+            }
+          }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            const file = [...e.dataTransfer.files].find((f) => f.type.startsWith('image/'));
+            if (file) {
+              e.preventDefault();
+              void attach(file);
+            }
+          }}
           rows={3}
           autoFocus
           placeholder="An expense tracker that saves to a database, with charts by category"
           className="input mt-3 min-h-24 w-full resize-y py-2.5 text-[15px] leading-relaxed"
         />
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border px-3 py-2" aria-label="Build from a picture">
+          {picture ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element -- a local data: URL */}
+              <img src={picture.url} alt="The picture to build from" className="h-14 w-20 rounded-md border border-border object-cover" />
+              <div role="radiogroup" aria-label="What the picture is" className="flex rounded-md border border-border p-0.5 text-xs">
+                {(['screenshot', 'sketch'] as const).map((k) => (
+                  <button key={k} type="button" role="radio" aria-checked={pictureKind === k} onClick={() => setPictureKind(k)} className={`rounded px-2 py-0.5 ${pictureKind === k ? 'bg-white/[0.1] text-gray-100' : 'text-gray-400 hover:text-gray-100'}`}>
+                    {k === 'screenshot' ? 'Screenshot: match it' : 'Sketch: interpret it'}
+                  </button>
+                ))}
+              </div>
+              <button type="button" onClick={() => setPicture(null)} className="btn btn-ghost btn-sm ml-auto" aria-label="Remove the picture">Remove</button>
+            </>
+          ) : (
+            <>
+              <span className="text-xs text-gray-400">Or build from a picture: paste or drop a screenshot, a mock-up or a photo of a sketch.</span>
+              <button type="button" onClick={() => pickRef.current?.click()} className="btn btn-secondary btn-sm ml-auto">Choose image</button>
+            </>
+          )}
+          <input ref={pickRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden aria-label="Choose an image" onChange={(e) => void attach(e.target.files?.[0])} />
+          {pictureError && <p className="w-full text-xs text-danger" role="alert">{pictureError}</p>}
+          {picture && <p className="w-full text-[11px] text-gray-500">The agent sees the picture: use a model that reads images (Claude, GPT, Gemini, or a vision model in Ollama).</p>}
+        </div>
         <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Examples">
           {PLAN_EXAMPLES.map((ex) => (
             <button key={ex} onClick={() => setText(ex)} className="rounded-full border border-border px-2.5 py-1 text-xs text-gray-400 transition-colors hover:border-border-strong hover:text-gray-100">

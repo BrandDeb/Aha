@@ -7,7 +7,7 @@
  */
 
 import { DEFAULT_BUDGET } from './types.ts';
-import type { AgentEvent, AgentRun, Budget, CallModel, Message, Risk, StopReason, Tool, ToolCall, ToolResult, ToolSpec } from './types.ts';
+import type { AgentEvent, AgentRun, Budget, CallModel, ImageInput, Message, Risk, StopReason, Tool, ToolCall, ToolResult, ToolSpec } from './types.ts';
 
 export const MAX_TOOL_OUTPUT = 8000;
 const CONTEXT_LIMIT_CHARS = 120_000;
@@ -27,6 +27,8 @@ export interface AgentOptions {
   signal?: AbortSignal;
   /** Earlier turns of the conversation, so a follow-up can build on them */
   history?: Message[];
+  /** Images that come with the goal: a screenshot or sketch to build from (needs a model that reads images) */
+  images?: ImageInput[];
   /** How many times to retry a failed model call (rate limits, brief outages) */
   modelRetries?: number;
   sleep?: (ms: number) => Promise<void>;
@@ -96,7 +98,7 @@ export async function runAgent(options: AgentOptions): Promise<AgentRun> {
   const byName = new Map(options.tools.map((t) => [t.name, t]));
   const started = now();
 
-  const messages: Message[] = [...(options.history ?? []), { role: 'user', content: options.goal }];
+  const messages: Message[] = [...(options.history ?? []), { role: 'user', content: options.goal, ...(options.images?.length ? { images: options.images } : {}) }];
   let steps = 0;
   let toolCalls = 0;
   let failedVerifies = 0;

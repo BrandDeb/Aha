@@ -15,7 +15,7 @@ import type { CallModel, Message, ModelTurn, ToolCall, ToolSpec } from './types.
 export function toOpenAiMessages(system: string, messages: Message[]): unknown[] {
   const out: unknown[] = [{ role: 'system', content: system }];
   for (const m of messages) {
-    if (m.role === 'user') out.push({ role: 'user', content: m.content });
+    if (m.role === 'user') out.push({ role: 'user', content: m.images?.length ? [{ type: 'text', text: m.content }, ...m.images.map((i) => ({ type: 'image_url', image_url: { url: `data:${i.mediaType};base64,${i.data}` } }))] : m.content });
     else if (m.role === 'tool') out.push({ role: 'tool', tool_call_id: m.callId, content: m.content });
     else {
       out.push({
@@ -71,7 +71,7 @@ export function parseOpenAiTurn(data: unknown): ModelTurn {
 export function toAnthropicMessages(messages: Message[]): unknown[] {
   const out: { role: 'user' | 'assistant'; content: unknown[] | string }[] = [];
   for (const m of messages) {
-    if (m.role === 'user') out.push({ role: 'user', content: m.content });
+    if (m.role === 'user') out.push({ role: 'user', content: m.images?.length ? [...m.images.map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.mediaType, data: i.data } })), { type: 'text', text: m.content }] : m.content });
     else if (m.role === 'assistant') {
       // Claude's own blocks, exactly as it sent them: its thinking blocks are signed and must come back unchanged
       if (m.raw?.length) {
