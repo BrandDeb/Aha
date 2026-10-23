@@ -73,6 +73,11 @@ export function toAnthropicMessages(messages: Message[]): unknown[] {
   for (const m of messages) {
     if (m.role === 'user') out.push({ role: 'user', content: m.content });
     else if (m.role === 'assistant') {
+      // Claude's own blocks, exactly as it sent them: its thinking blocks are signed and must come back unchanged
+      if (m.raw?.length) {
+        out.push({ role: 'assistant', content: m.raw });
+        continue;
+      }
       const blocks: unknown[] = [];
       if (m.content) blocks.push({ type: 'text', text: m.content });
       for (const c of m.toolCalls ?? []) blocks.push({ type: 'tool_use', id: c.id, name: c.name, input: c.args });
@@ -102,7 +107,9 @@ export function parseAnthropicTurn(data: unknown): ModelTurn {
     .map((b, i) => ({ id: b.id || `call_${i}`, name: b.name!, args: parseArgs(b.input) }));
   const text = body.content.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('');
   const reason = body.stop_reason ?? '';
+  const thinks = body.content.some((b) => b.type === 'thinking' || b.type === 'redacted_thinking');
   return {
+    ...(thinks ? { raw: body.content } : {}),
     text,
     toolCalls,
     stop: toolCalls.length ? 'tool_use' : reason === 'max_tokens' ? 'length' : reason === 'refusal' ? 'refusal' : 'end',
@@ -124,27 +131,56 @@ function headers(target: ResolvedProvider): Record<string, string> {
   return h;
 }
 
+/** Claude models that always think and bind thinking blocks to their conversation (Opus/Sonnet/Haiku 5.x, Fable, Mythos) */
+const THINKING_BINDING = /^(?:anthropic\.)?claude-(?:(?:opus|sonnet|haiku)-[5-9]|fable|mythos)/;
+const THINKING_BINDING_BETA = 'thinking-binding-controls-2026-08-01';
+
+/** Every thinking block out of a history; each turn's text and tool calls stay */
+export function stripThinking(messages: { role: string; content: unknown }[]): { role: string; content: unknown }[] {
+  return messages.map((m) => {
+    if (m.role !== 'assistant' || !Array.isArray(m.content)) return m;
+    const kept = (m.content as { type?: string }[]).filter((b) => b.type !== 'thinking' && b.type !== 'redacted_thinking');
+    return { ...m, content: kept.length ? kept : [{ type: 'text', text: '…' }] };
+  });
+}
+
 /** A CallModel that talks to the chosen provider directly from this tab */
 export function callModelFor(target: ResolvedProvider, fetchImpl: typeof fetch = fetch): CallModel {
   const anthropic = target.provider.kind === 'anthropic';
   return async ({ system, messages, tools, signal }) => {
     const url = anthropic ? `${target.baseUrl}/v1/messages` : `${target.baseUrl}/chat/completions`;
-    const body = anthropic
+    // Claude 5 models always think: a block whose conversation changed (the loop trims old tool output) is dropped, not a 400
+    const binding = anthropic && THINKING_BINDING.test(target.model);
+    const body: Record<string, unknown> = anthropic
       ? {
           model: target.model,
-          max_tokens: 8192,
+          max_tokens: 16000,
           system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
           messages: toAnthropicMessages(messages),
           tools: toAnthropicTools(tools),
+          ...(binding ? { thinking: { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } } } : {}),
         }
       : { model: target.model, messages: toOpenAiMessages(system, messages), tools: toOpenAiTools(tools) };
 
-    let response: Response;
-    try {
-      response = await fetchImpl(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers(target) }, body: JSON.stringify(body), signal });
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') throw error;
-      throw new Error(unreachableMessage(target));
+    const send = async (payload: Record<string, unknown>, extra: Record<string, string>) => {
+      try {
+        return await fetchImpl(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers(target), ...extra }, body: JSON.stringify(payload), signal });
+      } catch (error) {
+        if ((error as Error).name === 'AbortError') throw error;
+        throw new Error(unreachableMessage(target));
+      }
+    };
+    let response = await send(body, binding ? { 'anthropic-beta': THINKING_BINDING_BETA } : {});
+    if (anthropic && response.status === 400) {
+      const detail = await response.clone().text().catch(() => '');
+      if (binding && /block_binding|anthropic-beta|thinking-binding/i.test(detail)) {
+        // An endpoint without the controls beta: the same request without them
+        const { thinking: _thinking, ...plain } = body;
+        response = await send(plain, {});
+      } else if (/signature.{0,40}thinking|thinking.{0,40}signature/i.test(detail)) {
+        // The documented one-time recovery: the turns stay, the reasoning blocks go
+        response = await send({ ...body, messages: stripThinking(body.messages as { role: string; content: unknown }[]) }, binding ? { 'anthropic-beta': THINKING_BINDING_BETA } : {});
+      }
     }
     if (!response.ok) throw new Error(await describeFailure(response, target));
     const data = await response.json().catch(() => null);

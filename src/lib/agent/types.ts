@@ -48,7 +48,7 @@ export interface Tool extends ToolSpec {
 
 export type Message =
   | { role: 'user'; content: string }
-  | { role: 'assistant'; content: string; toolCalls?: ToolCall[] }
+  | { role: 'assistant'; content: string; toolCalls?: ToolCall[]; raw?: unknown[] }
   | { role: 'tool'; callId: string; name: string; content: string; ok: boolean };
 
 export interface ModelTurn {
@@ -57,6 +57,8 @@ export interface ModelTurn {
   /** 'end' | 'tool_use' | 'length' | 'refusal' or the provider's own reason */
   stop: string;
   usage?: { input: number; output: number };
+  /** The provider's own content blocks, replayed verbatim (Claude's signed thinking blocks must come back unchanged) */
+  raw?: unknown[];
 }
 
 export type CallModel = (input: { system: string; messages: Message[]; tools: ToolSpec[]; signal?: AbortSignal }) => Promise<ModelTurn>;

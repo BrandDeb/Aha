@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { Stage } from '../src/lib/agent/stage.ts';
 import { workspaceTools, type AgentHost } from '../src/lib/agent/tools.ts';
 import { compactMessages, runAgent, truncate, validateArgs } from '../src/lib/agent/loop.ts';
-import { callModelFor, parseAnthropicTurn, parseOpenAiTurn, toAnthropicMessages, toOpenAiMessages } from '../src/lib/agent/model.ts';
+import { callModelFor, parseAnthropicTurn, parseOpenAiTurn, stripThinking, toAnthropicMessages, toOpenAiMessages } from '../src/lib/agent/model.ts';
 import { systemPromptFor } from '../src/lib/agent/prompt.ts';
 import { getProvider, type ResolvedProvider } from '../src/lib/ai-providers.ts';
 import type { AgentEvent, CallModel, Message, ModelTurn, Tool, ToolCall } from '../src/lib/agent/types.ts';
@@ -550,4 +550,53 @@ test('arguments: a list where text is asked for, and a number sent as text, are 
   assert.equal(args.steps, '- [ ] read files\n- [ ] fix bug');
   assert.equal(args.n, 3);
   assert.match(validateArgs(spec, { steps: [{ a: 1 }] }) ?? '', /must be string, got array/);
+});
+
+test('Claude 5: signed thinking blocks are replayed verbatim, and a changed history degrades instead of failing', async () => {
+  const content = [
+    { type: 'thinking', thinking: '', signature: 'SIG1' },
+    { type: 'text', text: 'Reading the file.' },
+    { type: 'tool_use', id: 't1', name: 'read_file', input: { path: 'a.ts' } },
+  ];
+  const turn = parseAnthropicTurn({ content, stop_reason: 'tool_use' });
+  assert.deepEqual(turn.raw, content);
+  const wire = toAnthropicMessages([{ role: 'user', content: 'go' }, { role: 'assistant', content: turn.text, toolCalls: turn.toolCalls, raw: turn.raw }, { role: 'tool', callId: 't1', name: 'read_file', content: 'x', ok: true }]) as { content: unknown }[];
+  assert.deepEqual(wire[1].content, content, 'exactly as Claude sent it');
+  assert.equal(parseAnthropicTurn({ content: [{ type: 'text', text: 'hi' }] }).raw, undefined, 'nothing to keep without thinking');
+  assert.deepEqual(stripThinking([{ role: 'assistant', content }]), [{ role: 'assistant', content: content.slice(1) }]);
+
+  const provider = getProvider('anthropic')!;
+  const calls: { body: Record<string, unknown>; headers: Record<string, string> }[] = [];
+  const ok = { content: [{ type: 'text', text: 'done' }], stop_reason: 'end_turn' };
+  const fake = (replies: { status: number; body: unknown }[]) => (async (_url: string, init: RequestInit) => {
+    calls.push({ body: JSON.parse(String(init.body)), headers: init.headers as Record<string, string> });
+    const r = replies.shift()!;
+    return new Response(JSON.stringify(r.body), { status: r.status });
+  }) as unknown as typeof fetch;
+  const target = (model: string) => ({ provider, model, apiKey: 'sk-ant-x', baseUrl: provider.baseUrl }) as unknown as ResolvedProvider;
+
+  await callModelFor(target('claude-opus-5-5'), fake([{ status: 200, body: ok }]))({ system: 's', messages: [{ role: 'user', content: 'hi' }], tools: [] });
+  assert.deepEqual(calls[0].body.thinking, { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } });
+  assert.equal(calls[0].headers['anthropic-beta'], 'thinking-binding-controls-2026-08-01');
+  assert.equal(calls[0].body.temperature, undefined, 'no sampling parameters: the API rejects them');
+
+  calls.length = 0;
+  await callModelFor(target('claude-haiku-4-5'), fake([{ status: 200, body: ok }]))({ system: 's', messages: [{ role: 'user', content: 'hi' }], tools: [] });
+  assert.equal(calls[0].body.thinking, undefined, 'older models keep their own defaults');
+  assert.equal(calls[0].headers['anthropic-beta'], undefined);
+
+  // A rejected signature: strip the thinking blocks and retry once
+  calls.length = 0;
+  const history = [{ role: 'user' as const, content: 'go' }, { role: 'assistant' as const, content: '', toolCalls: turn.toolCalls, raw: content }, { role: 'tool' as const, callId: 't1', name: 'read_file', content: 'x', ok: true }];
+  const signatureError = { type: 'error', error: { type: 'invalid_request_error', message: 'messages.1.content.0: Invalid `signature` in `thinking` block. The block is bound to a different conversation.' } };
+  const turn2 = await callModelFor(target('claude-sonnet-5-5'), fake([{ status: 400, body: signatureError }, { status: 200, body: ok }]))({ system: 's', messages: history, tools: [] });
+  assert.equal(turn2.text, 'done');
+  assert.equal(calls.length, 2);
+  assert.equal(JSON.stringify(calls[1].body.messages).includes('SIG1'), false);
+
+  // An endpoint without the controls beta: retried without them
+  calls.length = 0;
+  await callModelFor(target('claude-opus-5-5'), fake([{ status: 400, body: { error: { message: 'block_binding: Extra inputs are not permitted' } } }, { status: 200, body: ok }]))({ system: 's', messages: [{ role: 'user', content: 'hi' }], tools: [] });
+  assert.equal(calls[1].body.thinking, undefined);
+  assert.equal(calls[1].headers['anthropic-beta'], undefined);
 });

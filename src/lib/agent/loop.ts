@@ -166,7 +166,7 @@ export async function runAgent(options: AgentOptions): Promise<AgentRun> {
       lastText = reply.text;
       emit({ type: 'text', text: reply.text });
     }
-    messages.push({ role: 'assistant', content: reply.text, toolCalls: reply.toolCalls.length ? reply.toolCalls : undefined });
+    messages.push({ role: 'assistant', content: reply.text, toolCalls: reply.toolCalls.length ? reply.toolCalls : undefined, ...(reply.raw ? { raw: reply.raw } : {}) });
 
     if (reply.stop === 'refusal' && !reply.toolCalls.length) return finish('declined', reply.text || 'The model declined this request.');
     if (!reply.toolCalls.length) {
