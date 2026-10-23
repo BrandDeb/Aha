@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CONTRACT_EXAMPLES, CONTRACTS_FILE, contractsOf, describeContracts, serializeContracts, type Contract, type ContractKind } from '@/lib/contracts';
+import { findFunctions, parseSpec, specFiles, specPrompt, specSuggestions } from '@/lib/specs';
 import { useActions } from '../actions';
 import { useContracts, type ContractView } from '../contracts-client';
 import { useProposals } from '../proposals';
@@ -136,6 +137,15 @@ export function ContractsPanel({ onOpen }: { onOpen: (path: string, line?: numbe
           </ul>
         )}
 
+        <SpecSection
+          files={project.files}
+          onAdd={(files, rule, test) => {
+            dispatch({ type: 'put', files });
+            notify({ kind: 'success', title: `Property test added: ${rule}`, detail: `${test} tries hundreds of random inputs; its contract runs it. Press Check all to run it now.` });
+          }}
+          onAsk={ask}
+        />
+
         <section className="space-y-2 border-b border-border p-4" aria-label="Add a contract">
           <h3 className="eyebrow">{contracts.length ? 'Add a rule' : 'Your first rule'}</h3>
           <form
@@ -215,5 +225,72 @@ function ContractForm({ onAdd, onCancel }: { onAdd: (c: Omit<Contract, 'id'>) =>
         <button type="button" onClick={onCancel} className="btn btn-ghost btn-sm">Cancel</button>
       </div>
     </form>
+  );
+}
+
+const KIND_TEXT: Record<string, string> = {
+  'never-throws': 'never throws',
+  deterministic: 'same input, same answer',
+  idempotent: 'twice is the same as once',
+  'length-preserved': 'keeps the number of items',
+  sorted: 'ascending order',
+  'non-negative': 'never negative',
+  commutative: 'argument order doesn’t matter',
+  'round-trip': 'round trip',
+  'in-range': 'stays in range',
+};
+
+/** Specs: a sentence about a function becomes a property-based test and the contract that runs it */
+function SpecSection({ files, onAdd, onAsk }: { files: Record<string, string>; onAdd: (files: Record<string, string>, rule: string, test: string) => void; onAsk: (goal: string, label: string) => void }) {
+  const [text, setText] = useState('');
+  const fns = useMemo(() => findFunctions(files), [files]);
+  const suggestions = useMemo(() => specSuggestions(fns, 6), [fns]);
+  const spec = text.trim() ? parseSpec(text, fns) : null;
+  const tool = spec?.fn.lang === 'py' ? 'Hypothesis' : 'fast-check';
+  const submit = () => {
+    if (!text.trim()) return;
+    if (spec) {
+      const out = specFiles(spec, files);
+      onAdd(out.files, spec.rule, out.test);
+    } else onAsk(specPrompt(text, fns), `Spec · ${text.trim().slice(0, 40)}`);
+    setText('');
+  };
+  return (
+    <section className="space-y-2 border-b border-border p-4" aria-label="Specs">
+      <h3 className="eyebrow">Specs</h3>
+      <p className="text-xs leading-relaxed text-gray-400">Say what must always be true about a function. It becomes a property test that throws hundreds of random inputs at it, and a contract that runs it on every change.</p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+        className="space-y-2"
+      >
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder={suggestions[0] ? `“${suggestions[0]}”` : '“sortPrices keeps the number of items”'} aria-label="A spec, in your words" className="input h-8 text-xs" />
+        {text.trim() && (
+          <p className="text-[11px] text-gray-500" role="status">
+            {spec ? (
+              <>
+                <span className="text-accent">✓ {KIND_TEXT[spec.kind]}</span> · <span className="font-mono">{spec.fn.name}</span>
+                {spec.partner ? <> ↔ <span className="font-mono">{spec.partner.name}</span></> : null} in {spec.fn.file} · {tool}, 200 random cases
+              </>
+            ) : (
+              'Not one of the common properties (or no function named): the agent will write the test.'
+            )}
+          </p>
+        )}
+        <button type="submit" disabled={!text.trim()} className="btn btn-secondary btn-sm w-full">{spec || !text.trim() ? 'Add the property test' : '✦ Have the agent write it'}</button>
+      </form>
+      {!text && suggestions.length > 0 && (
+        <div className="space-y-0.5" aria-label="Suggested specs">
+          <p className="text-[11px] text-gray-500">From your functions:</p>
+          {suggestions.map((s) => (
+            <button key={s} onClick={() => setText(s)} className="block w-full truncate rounded px-2 py-1 text-left text-xs text-gray-300 hover:bg-white/5">
+              + {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

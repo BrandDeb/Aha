@@ -76,6 +76,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Rewind** | Every live run is recorded: scrub back and forth through it, play it back, and see each variable as it was at that moment, with the line that ran highlighted. Click a variable to jump to where it changes; a crash opens on the line that threw; ask the agent about any moment. See [Rewind](#rewind) |
 | **Click to edit** | In the in-browser preview, press ⌖ Edit and click any element: its code opens (exact for React and Preact), its text and classes can be edited right there (written into the source), or describe a change and the agent makes it. ⇩ saves the app as one HTML page to share. See [Web apps and live preview](#web-apps-and-live-preview) |
 | **Risk score and auto-accept** | Every proposal is scored 0–100 with its reasons (dependencies, CI, auth, schema, secrets, eval and shell, removed tests, size, evidence, the reviewer). Optionally accept the low-risk, verified ones by themselves; anything sensitive always waits for you. See [Risk score and auto-accept](#risk-score-and-auto-accept) |
+| **Specs → property tests** | Write what must always be true about a function ("sortPrices returns the items in ascending order"): it becomes a fast-check or Hypothesis test that tries hundreds of random inputs and shrinks a failure to the smallest counterexample, plus a contract that runs it on every change. Common properties need no model. See [Specs](#specs-plain-english-to-property-tests) |
 | **Contracts** | Rules that stay true, written in words and checked by a pattern or a command ("no console.log in src", "every route checks the session", "the tests pass"). The agent is told every one and checks them before it finishes, a proposal that breaks one is never marked verified, the worker fixes broken ones, and the status bar shows how they stand; see [Contracts](#contracts) |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
@@ -222,6 +223,38 @@ What holds the agent to them:
   failed, is never marked verified ("Breaks a contract"). A proposal that edits the contracts is flagged
   ("changes a contract") and needs a closer look, so a rule can't be quietly loosened.
 - **The worker keeps them.** A broken contract is the worker's next task after a failing build or run.
+
+### Specs: plain English to property tests
+
+In the Contracts tab, **Specs** takes a sentence about a function and turns it into a property-based test: instead
+of a few examples you thought of, it throws a few hundred random inputs at the function and, when one breaks the
+rule, shrinks it to the smallest counterexample (`Counterexample: [[-1,-2]]` is how `[...prices].sort()` sorting
+numbers as text gets caught).
+
+```text
+sortPrices returns the items in ascending order      fast-check · random number arrays
+decodeName(encodeName(x)) gives back x               round trip, both functions imported
+add(a, b) is the same as add(b, a)                    argument order doesn't matter
+dedupe keeps the number of items                      Hypothesis · lists of ints
+clamp returns a number between 0 and 100              stays in range
+```
+
+The studio reads your exported TypeScript and JavaScript functions and your Python functions (with their types),
+suggests the properties that fit each one's shape, and recognises these without a model: never throws, same input
+same answer, twice is the same as once, keeps the number of items, ascending order, never negative, in a range,
+argument order doesn't matter, and round trips (it pairs `encode`/`decode`, `serialize`/`deserialize`,
+`toX`/`fromX`, `format`/`parse` and the like by name). Inputs are generated from the parameter types. It writes:
+
+- the test: `tests/props/<function>-<property>.prop.test.ts` with [fast-check](https://fast-check.dev) (on vitest
+  when the project uses it, otherwise `node:test`), or `tests/test_<function>_<property>.py` with
+  [Hypothesis](https://hypothesis.works) and pytest;
+- `fast-check` in `devDependencies` (a `package.json` is created when there is none); Python needs nothing, as
+  `uv` brings pytest and Hypothesis along for the run;
+- a **command contract** whose rule is your sentence and whose command runs the test (installing packages first
+  on a fresh checkout), so every proposal is held to it from then on.
+
+A sentence that isn't one of these goes to the agent with the same instructions: find the function, write the
+property test, add the contract, run it, and report the smallest counterexample rather than quietly "fixing" it.
 
 ### A second reviewer
 
