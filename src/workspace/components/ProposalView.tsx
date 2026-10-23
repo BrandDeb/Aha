@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { DiffView } from '@/components/CodeEditor';
 import { chipsFor, type Tone } from '@/lib/agent/evidence';
+import { ChangeProof } from './ChangeProof';
 import { problemOf } from '@/lib/agent/problems';
 import type { ToolCall } from '@/lib/agent/types';
 import { useActions } from '../actions';
@@ -288,6 +289,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
                 </div>
               </div>
             )}
+            {!working && !settled && project.length > 0 && lane && <ChangeProof id={`${proposal.id}:${lane.id}`} changes={project} onPick={setPicked} />}
             <Plan text={proposal.plan} />
             {proposal.lessons.length > 0 && (
               <section>

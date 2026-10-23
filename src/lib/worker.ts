@@ -9,7 +9,7 @@
  * Pure: finding and ranking tasks, and writing their briefs.
  */
 
-export type WorkerTaskKind = 'failure' | 'problem' | 'focus' | 'improve' | 'todo' | 'tests';
+export type WorkerTaskKind = 'failure' | 'contract' | 'problem' | 'focus' | 'improve' | 'todo' | 'tests';
 
 export interface WorkerTask {
   /** Stable: the same task is never done twice */
@@ -35,6 +35,8 @@ export interface WorkerContext {
   entry?: string;
   /** What the developer says they are building; the worker takes the next step toward it */
   focus?: string;
+  /** Contracts that are broken, each with its report (lib/contracts.ts describeContracts) */
+  brokenContracts?: { id: string; rule: string; report: string; signature?: string }[];
   /** Errors the editor shows (type errors and the like) */
   problems?: EditorProblem[];
   /** The latest failure, already turned into a debugging brief */
@@ -47,7 +49,7 @@ export interface WorkerContext {
   weights?: Partial<Record<WorkerTaskKind, number>>;
 }
 
-const PRIORITY: Record<WorkerTaskKind, number> = { failure: 100, problem: 80, focus: 70, improve: 60, todo: 50, tests: 30 };
+const PRIORITY: Record<WorkerTaskKind, number> = { failure: 100, contract: 90, problem: 80, focus: 70, improve: 60, todo: 50, tests: 30 };
 
 const CODE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|scala|cs|fs|rb|php|swift|dart|c|cc|cpp|h|hpp|zig|ex|exs|erl|hs|ml|lua|r|jl|nim|cr|odin|d|sol|vy|move|cairo|vue|svelte|astro)$/i;
 const TEST_FILE = /(^|\/)(tests?|__tests__|spec)\/|[._-](test|spec)\.[^/]+$|_test\.go$|Test\.(java|kt)$|^test_.*\.py$|\/test_[^/]*\.py$|\.t\.sol$/i;
@@ -104,6 +106,17 @@ export function discoverTasks(ctx: WorkerContext): WorkerTask[] {
   const tasks: WorkerTask[] = [];
   if (ctx.failure) {
     tasks.push({ key: `failure:${ctx.failure.signature}`, kind: 'failure', title: `Fix: ${ctx.failure.title.slice(0, 80)}`, reason: 'The last build or run failed', priority: PRIORITY.failure, brief: ctx.failure.brief });
+  }
+
+  for (const c of ctx.brokenContracts ?? []) {
+    tasks.push({
+      key: `contract:${c.id}:${hash(c.signature ?? c.report)}`,
+      kind: 'contract',
+      title: `Keep: ${c.rule.slice(0, 70)}`,
+      reason: 'A contract of this project is broken',
+      priority: PRIORITY.contract,
+      brief: `A contract of this project is broken. Make it hold again by fixing the code, never by changing the contract.\n\n${c.report}\n\nRun check_contracts at the end to prove every contract holds.\n- ${RULES}`,
+    });
   }
 
   const problems = (ctx.problems ?? []).filter((p) => p.file in ctx.files).slice(0, 20);

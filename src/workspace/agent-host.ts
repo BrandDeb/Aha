@@ -15,6 +15,7 @@ import { getPythonEnv, pythonProjectId, streamPython } from './python-client';
 import { pipelineFiles } from '@/lib/pipelines/parse';
 import { describeResult, runPipelineFile } from './pipelines-client';
 import { runProject } from './run-client';
+import { contractRunner } from './contracts-client';
 import { base64ToArrayBuffer, runWasm } from './runner';
 
 const RUN_TIMEOUT_MS = 20_000;
@@ -107,6 +108,7 @@ export function createAgentHost(options: { stage: Stage; projectName: string; en
       return { ok: done.code === 0 && !done.error, text: `${status}\n${text}${size > MAX_OUTPUT ? '\n… output truncated' : ''}`.trim(), changed: done.changed, removed: done.removed };
     };
   }
+  host.runContractCommand = (staged, command, signal) => contractRunner(projectName, staged)(command, signal);
   const ci = pipelineFiles(files);
   if (ci.length) {
     host.pipelineFiles = ci;

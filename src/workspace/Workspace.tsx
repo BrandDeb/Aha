@@ -36,6 +36,8 @@ import { useWorker } from './worker';
 import { useWorkspace } from './store';
 import { useToast } from './toasts';
 import { useLiveValues } from './live-client';
+import { useContracts } from './contracts-client';
+import { describeContracts } from '@/lib/contracts';
 import { liveSummary } from '@/lib/live/display';
 
 // Everything beyond the editor, terminal and Build panel loads the first time it is opened, so the studio starts with
@@ -49,6 +51,7 @@ const HistoryPanel = dynamic(() => import('./panels/HistoryPanel').then((m) => m
 const PackagePanel = dynamic(() => import('./panels/PackagePanel').then((m) => m.PackagePanel), { ssr: false, loading: PanelLoading });
 const LanguagePanel = dynamic(() => import('./panels/LanguagePanel').then((m) => m.LanguagePanel), { ssr: false, loading: PanelLoading });
 const PythonPanel = dynamic(() => import('./panels/PythonPanel').then((m) => m.PythonPanel), { ssr: false, loading: PanelLoading });
+const ContractsPanel = dynamic(() => import('./panels/ContractsPanel').then((m) => m.ContractsPanel), { ssr: false, loading: PanelLoading });
 const KitPanel = dynamic(() => import('./panels/KitPanel').then((m) => m.KitPanel), { ssr: false, loading: PanelLoading });
 const PipelinesPanel = dynamic(() => import('./panels/PipelinesPanel').then((m) => m.PipelinesPanel), { ssr: false, loading: PanelLoading });
 const WorkerPanel = dynamic(() => import('./panels/WorkerPanel').then((m) => m.WorkerPanel), { ssr: false, loading: PanelLoading });
@@ -99,6 +102,7 @@ const GROUPS: { id: string; label: string; panels: { id: PanelId; label: string;
     id: 'project',
     label: 'Project',
     panels: [
+      { id: 'contracts', label: 'Contracts', hint: 'Rules that stay true: the agent keeps them, every proposal is checked against them' },
       { id: 'graph', label: 'Graph', hint: 'How the files import each other' },
       { id: 'kit', label: 'Kit', hint: 'The field kit: playbook, checks and setup' },
     ],
@@ -654,11 +658,18 @@ export function Workspace() {
     () => (failure && !debugProposals[failure.signature] && !proposals.prefs.autoDebug ? { signature: failure.signature, title: failure.title, brief: debugBrief(failure, project.files, lastGood()) } : null),
     [failure, debugProposals, proposals.prefs.autoDebug, lastGood, project.files]
   );
+  // Contracts: how they stand, for the status bar and the worker (a stale command result is not a task)
+  const contractStatus = useContracts(project.name, project.files);
+  const brokenContracts = useMemo(
+    () => contractStatus.views.filter((v) => v.status === 'fail' && !v.stale).map((v) => ({ id: v.id, rule: v.rule, report: describeContracts([v]), signature: v.where ? [...new Set(v.where.map((w) => w.path))].join('|') : v.detail.split('\n')[0] })),
+    [contractStatus.views]
+  );
   const worker = useWorker({
     projectName: project.name,
     files: project.files,
     entry: project.entry,
     failure: workerFailure,
+    brokenContracts,
     onStart: useCallback((task: { kind: string; key: string }, id: string) => {
       // A failure the worker took on shows in the debug bar like any other
       if (task.kind === 'failure') setDebugProposals((prev) => ({ ...prev, [task.key.slice('failure:'.length)]: id }));
@@ -1125,6 +1136,7 @@ export function Workspace() {
                 }} />}
                 {shownPanel === 'agent' && <AgentPanel />}
                 {shownPanel === 'worker' && <WorkerPanel worker={worker} />}
+                {shownPanel === 'contracts' && <ContractsPanel onOpen={(file, line) => openLocation({ file, line: line ?? 1 })} />}
                 {shownPanel === 'kit' && <KitPanel onFocus={(focus) => worker.setSettings({ focus })} />}
                 {shownPanel === 'history' && <HistoryPanel />}
                 {shownPanel === 'graph' && <GraphPanel />}
@@ -1168,6 +1180,15 @@ export function Workspace() {
             if (review) return <button onClick={() => openPanel('agent')} className="rounded px-1.5 text-accent hover:bg-white/[0.06]">{review} to review</button>;
             return null;
           })()}
+          {contractStatus.contracts.length > 0 && (
+            <button
+              onClick={() => openPanel('contracts')}
+              className={`rounded px-1.5 hover:bg-white/[0.06] ${contractStatus.counts.fail ? 'text-danger' : 'text-accent'}`}
+              title={contractStatus.counts.fail ? contractStatus.views.filter((v) => v.status === 'fail').map((v) => `✕ ${v.rule}`).join('\n') : 'Every contract checked here holds'}
+            >
+              {contractStatus.counts.fail ? `${contractStatus.counts.fail} contract${contractStatus.counts.fail > 1 ? 's' : ''} broken` : `contracts ${contractStatus.counts.pass}/${contractStatus.views.length}`}
+            </button>
+          )}
           {worker.settings.mode !== 'off' && (
             <button onClick={() => openPanel('worker')} className={`rounded px-1.5 hover:bg-white/[0.06] ${worker.status.kind === 'waiting-for-you' ? 'text-amber-300' : ''}`} title="Keep going: the worker">
               {worker.status.kind === 'working' ? 'worker on it' : worker.status.kind === 'waiting-for-you' ? 'worker needs you' : worker.status.kind === 'paused' ? 'worker paused' : `worker · ${worker.queue.length} queued`}

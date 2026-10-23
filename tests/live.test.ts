@@ -121,3 +121,23 @@ test('display: a line reads as its values, a loop as a sequence, and unrun lines
   assert.equal(liveSummary({ ok: true, files: {}, output: '', code: 0, ms: 140 }), 'Ran in 140 ms');
   assert.match(liveSummary({ ok: false, files: {}, output: '', code: 124, ms: 4100, truncated: true }), /start of the run/);
 });
+
+test('evidence per change: which changed lines ran, and which never did', async () => {
+  const { changedLines, changeCoverage, coverageHeadline } = await import('../src/lib/live/coverage.ts');
+  assert.deepEqual(changedLines('a\nb\nc\n', 'a\nB\nc\nd\n'), [2, 4]);
+  assert.deepEqual(changedLines('a\nb\n', 'x\na\nb\n'), [1]);
+  assert.deepEqual(changedLines('same', 'same'), []);
+  assert.deepEqual(changedLines('', 'one\ntwo'), [1, 2]);
+
+  const before = 'export function total(items: number[]): number {\n  let t = 0;\n  for (const x of items) t += x;\n  return t;\n}\n';
+  const after = 'export function total(items: number[]): number {\n  if (items.length === 0) {\n    return -1;\n  }\n  let t = 0;\n  for (const x of items) t += x;\n  return Math.max(t, 0);\n}\n';
+  const files = { 'main.ts': "import { total } from './cart';\nconsole.log(total([3, 4]));\n", 'cart.ts': after };
+  const r = await runLive({ projectId: 'live-test-cov', files, entry: 'main.ts', args: [] });
+  assert.equal(r.ok, true, r.output);
+  const c = changeCoverage([{ path: 'cart.ts', kind: 'modified', before, after }, { path: 'tool.go', kind: 'added', before: '', after: 'package main' }], r);
+  assert.deepEqual(c.ran.map((x) => x.line), [2, 7]);
+  assert.match(c.ran[1].text, /↩ 7/);
+  assert.deepEqual(c.unrun, [{ path: 'cart.ts', line: 3 }], 'the empty-list branch nothing exercised');
+  assert.deepEqual(c.untraced, []);
+  assert.equal(coverageHeadline(c), '2 of 3 changed lines ran; 1 never did');
+});

@@ -7,6 +7,7 @@
 
 import { lineDelta } from '../../workspace/project.ts';
 import type { Stage } from './stage.ts';
+import { checkContracts, contractsOf, describeContracts, type CommandRunner } from '../contracts.ts';
 import type { Tool, ToolResult } from './types.ts';
 
 export interface HostOutcome {
@@ -38,6 +39,8 @@ export interface AgentHost {
   runPipeline?: (files: Record<string, string>, file: string, job: string | undefined, signal?: AbortSignal) => Promise<HostOutcome>;
   /** The CI files in the project, for the tool's description */
   pipelineFiles?: string[];
+  /** Run the project's command contracts against the staged files; pattern contracts are checked here */
+  runContractCommand?: (files: Record<string, string>, ...rest: Parameters<CommandRunner>) => ReturnType<CommandRunner>;
   onPlan?: (plan: string) => void;
 }
 
@@ -317,6 +320,24 @@ export function workspaceTools(host: AgentHost): Tool[] {
         if (!stage.has(file)) return fail(`“${file}” does not exist. CI files: ${files.join(', ')}`);
         const outcome = await host.runPipeline!(stage.files(), file, str(args.job) || undefined, signal);
         return { ok: outcome.ok, content: outcome.text };
+      },
+    });
+  }
+
+  const { contracts } = contractsOf(stage.files());
+  if (contracts.length) {
+    const commands = contracts.filter((c) => c.kind === 'command');
+    tools.push({
+      name: 'check_contracts',
+      description: `Check the project's contracts (the rules in .nanocli/contracts.json that must stay true) against your pending edits. Returns each rule with ✓ or ✕ and, for a broken one, where and why. Run it before you finish.${commands.length ? ' Command contracts run on this machine, so the user is asked first.' : ''}`,
+      risk: commands.length ? 'exec' : 'read',
+      verify: true,
+      parameters: { type: 'object', properties: {} },
+      run: async (_args, { signal }) => {
+        const files = stage.files();
+        const run = host.runContractCommand;
+        const results = await checkContracts(files, run && ((command, sig) => run(files, command, sig)), { signal });
+        return { ok: results.every((r) => r.status !== 'fail'), content: describeContracts(results) };
       },
     });
   }

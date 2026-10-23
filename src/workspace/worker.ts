@@ -58,11 +58,13 @@ interface Options {
   entry: string;
   /** The current failure, unless the debugger already has it */
   failure: { signature: string; title: string; brief: string } | null;
+  /** Contracts that are broken now (checked commands that failed, and patterns) */
+  brokenContracts?: { id: string; rule: string; report: string; signature?: string }[];
   /** A task became a proposal */
   onStart?: (task: WorkerTask, proposalId: string) => void;
 }
 
-export function useWorker({ projectName, files, entry, failure, onStart }: Options) {
+export function useWorker({ projectName, files, entry, failure, brokenContracts, onStart }: Options) {
   const proposals = useProposals();
   const [settings, setSettingsState] = useState<WorkerSettings>(DEFAULTS);
   const [done, setDone] = useState<{ keys: string[]; focusSteps: number }>({ keys: [], focusSteps: 0 });
@@ -125,15 +127,15 @@ export function useWorker({ projectName, files, entry, failure, onStart }: Optio
     () => (needsImprovement(outcomes, lastImprovedAt) ? { key: `improve:${lastImprovedAt}`, brief: improvementBrief(outcomes, lastImprovedAt), reason: 'Its recent results here could be better' } : null),
     [outcomes, lastImprovedAt]
   );
-  const weights = useMemo(() => Object.fromEntries((['problem', 'focus', 'todo', 'tests', 'improve'] as const).map((k) => [k, kindWeight(outcomes, k)])), [outcomes]);
+  const weights = useMemo(() => Object.fromEntries((['contract', 'problem', 'focus', 'todo', 'tests', 'improve'] as const).map((k) => [k, kindWeight(outcomes, k)])), [outcomes]);
 
   const queue = useMemo<WorkerTask[]>(() => {
     if (settings.mode === 'off') return [];
     const doneKeys = new Set(done.keys);
-    return discoverTasks({ files, entry, focus: settings.focus, problems: editorProblems(), failure, focusSteps: done.focusSteps, improve, weights }).filter((t) => !doneKeys.has(t.key));
+    return discoverTasks({ files, entry, focus: settings.focus, problems: editorProblems(), failure, brokenContracts, focusSteps: done.focusSteps, improve, weights }).filter((t) => !doneKeys.has(t.key));
     // tick: editor problems are read fresh every few seconds
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [files, entry, settings.mode, settings.focus, failure, done, tick, improve, weights]);
+  }, [files, entry, settings.mode, settings.focus, failure, brokenContracts, done, tick, improve, weights]);
 
   const workerProposals = proposals.proposals.filter((p) => p.origin === 'worker');
   const current = workerProposals.find((p) => p.status === 'working');

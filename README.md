@@ -71,6 +71,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Layout** | The side panel has four groups: Run (Build, Language, Python, Packages), Agent (Do, Ask, Keep going), Source (Git, Pipelines, History) and Project (Graph, Kit). Run takes program arguments in the field beside it; a program that answers with its usage gets a hint instead of a failure. The status bar shows the branch, the last build and run, the current failure, the agent and the worker, each one click from its panel. A first visit gets a one-minute welcome (what you're building, a model, GitHub) |
 | **Build** | Nine outputs from one menu — native, WASM, LLVM IR, scriptc IR (JSON), assembly, WASM text (WAT), object file, static library, WASM reactor — with an output viewer (highlighted text, or a hexdump for binaries), build options (release/dev, strip, dynamic engine, sanitizers, Windows window), pipeline timings, scriptc coverage and a run profile |
 | **Live values** | Turn on **Live** above the editor and the entry file (TypeScript, JavaScript or Python) runs after each pause in typing: every line shows what it did, right after the code — the values it set (`sum = 3, 7, 12 ×3` for a loop), what it returned, what it printed and the error it threw — and lines that never ran fade. Hover a line for every value. Local only, like Run; see [Live values](#live-values) |
+| **Contracts** | Rules that stay true, written in words and checked by a pattern or a command ("no console.log in src", "every route checks the session", "the tests pass"). The agent is told every one and checks them before it finishes, a proposal that breaks one is never marked verified, the worker fixes broken ones, and the status bar shows how they stand; see [Contracts](#contracts) |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
 | **Pipelines** | CI/CD from the project: GitHub Actions or GitLab CI with lint, test and build, deploys (Pages, containers, Vercel, Netlify, Fly.io, release binaries), run locally before you push, GitHub run status in the Git tab, failures fixed by the agent; see [DevOps](#devops-pipelines-in-the-studio) |
@@ -133,6 +134,46 @@ your edits until the next run lands.
 Live values run your program on the server, so they work where Run does: on your own machine (or with
 `NANOCLI_RUN=1`). Your program runs on every pause, so keep it off for code that sends email or writes to a
 real database.
+
+## Contracts
+
+A contract is a rule about your project that has to stay true, in words, with the check that proves it.
+They live in `.nanocli/contracts.json`, so they travel with the project and get reviewed like code:
+
+```json
+{
+  "contracts": [
+    { "rule": "No console.log left in the source", "kind": "forbid", "pattern": "console\\.log\\(", "files": "src/**/*.{ts,tsx}" },
+    { "rule": "Every source file starts with the licence header", "kind": "require", "pattern": "^// Copyright", "files": "src/**/*.ts" },
+    { "rule": "The tests pass", "kind": "command", "command": "npm test", "expect": "pass" }
+  ]
+}
+```
+
+- `forbid`: a regular expression that must not match in the files a glob selects (default: every code file).
+- `require`: one that must match in every one of them.
+- `command`: a command that must exit 0 in the project folder, and optionally print something matching `expect`.
+
+Open **Project → Contracts** to add one (describe it and the agent writes it, pick a starter, or write it by
+hand), see each rule with ✓ or ✕ and exactly where it breaks (click to jump to the line), and hand a broken
+one to the agent. Pattern contracts are checked on every change; command contracts when you press
+**Check all** (on your own machine, like the terminal), and their results are marked stale once the files change.
+
+What holds the agent to them:
+
+- **It is told.** Every rule goes into the agent's instructions, with the order not to change the contracts unless asked.
+- **It checks.** A `check_contracts` tool runs them against its pending edits; it is told to run it before it finishes.
+- **Its proposals are judged by them.** A proposal that breaks a pattern contract, or whose last contract check
+  failed, is never marked verified ("Breaks a contract"). A proposal that edits the contracts is flagged
+  ("changes a contract") and needs a closer look, so a rule can't be quietly loosened.
+- **The worker keeps them.** A broken contract is the worker's next task after a failing build or run.
+
+### Evidence per change
+
+Every proposal also says what its changed lines actually did. Its version of the program runs once with
+[live values](#live-values) (automatically when Live is on, otherwise on a click), and the proposal lists
+each changed line of code that ran, with the values it produced, and each one that **never ran**: an
+untested branch the agent added shows up before you ship it, not after.
 
 ## Assistant
 

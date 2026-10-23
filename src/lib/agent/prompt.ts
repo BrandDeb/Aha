@@ -1,5 +1,6 @@
 import { projectSkills, skillsPrompt, type SkillMeta } from '../skills/format.ts';
 import { harnessPrompt, NOTES_FILE } from './harness.ts';
+import { contractsOf, contractsPrompt } from '../contracts.ts';
 
 export { NOTES_FILE };
 
@@ -37,6 +38,8 @@ export function systemPromptFor(files: Record<string, string>, skills: SkillMeta
   if (notes) sections.push(`Project notes (${NOTES_FILE}):\n${notes.length > MAX_NOTES ? `${notes.slice(0, MAX_NOTES)}\n… (truncated)` : notes}`);
   const harness = harnessPrompt(files);
   if (harness) sections.push(harness);
+  const contracts = contractsPrompt(contractsOf(files).contracts);
+  if (contracts) sections.push(contracts);
   const skillSection = skillsPrompt([...projectSkills(files).map((s) => s.meta), ...skills]);
   if (skillSection) sections.push(skillSection);
   return sections.join('\n\n');

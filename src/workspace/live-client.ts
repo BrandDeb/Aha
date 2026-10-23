@@ -11,6 +11,28 @@ import { liveSupported, type LiveResult } from '@/lib/live/shared';
 import { pythonProjectId } from './python-client';
 
 const KEY = 'nanocli:live';
+
+let enabledCheck: Promise<boolean> | null = null;
+/** Whether this server runs programs for live values (asked once per page) */
+export function liveEnabled(): Promise<boolean> {
+  enabledCheck ??= fetch('/api/live', { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : { enabled: false }))
+    .then((s: { enabled?: boolean }) => !!s.enabled)
+    .catch(() => false);
+  return enabledCheck;
+}
+
+/** Run a project once with live values (not the editor's live mode): proposals use it for their evidence */
+export async function traceOnce(projectName: string, files: Record<string, string>, entry: string, signal?: AbortSignal): Promise<LiveResult> {
+  const response = await fetch('/api/live', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ projectId: pythonProjectId(projectName), files, entry, args: [] }),
+    signal,
+  });
+  const value = (await response.json()) as LiveResult;
+  return response.ok ? value : { ok: false, files: {}, output: '', code: null, ms: 0, error: value.error ?? `The trace failed (${response.status})` };
+}
 const DEBOUNCE_MS = 900;
 
 export type LiveState = 'off' | 'running' | 'ready';
@@ -32,10 +54,7 @@ export function useLiveValues(options: { projectName: string; files: Record<stri
       // eslint-disable-next-line react-hooks/set-state-in-effect -- restored once from this browser's storage
       setOnState(localStorage.getItem(KEY) === '1');
     } catch {}
-    fetch('/api/live', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : { enabled: false }))
-      .then((s: { enabled: boolean }) => live && setEnabledOnServer(!!s.enabled))
-      .catch(() => live && setEnabledOnServer(false));
+    liveEnabled().then((enabled) => live && setEnabledOnServer(enabled));
     return () => {
       live = false;
     };
