@@ -5,6 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/supervise.js",
+    "prebuild": "node scripts/build-docs.mjs",
+    "docs:sync": "node scripts/build-docs.mjs",
     "build": "next build",
     "start": "node scripts/supervise.js",
     "start:plain": "node server.js",
@@ -19,7 +21,7 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "verify:templates": "node --experimental-strip-types scripts/verify-templates.ts",
-    "verify:apps": "node --experimental-strip-types --no-warnings scripts/verify-apps.ts"
+    "verify:apps": "node --experimental-strip-types --no-warnings scripts/verify-apps.ts",
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",

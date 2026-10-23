@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { README } from '../src/lib/docs-readme.ts';
 import { docHref, docsFromReadme, parseBlocks, parseInline, searchDocs, slugify } from '../src/lib/docs.ts';
 
 const pages = docsFromReadme(readFileSync('README.md', 'utf8'));
@@ -42,4 +43,8 @@ test('docs: search ranks titles first and needs every word', () => {
   assert.ok(searchDocs(pages, 'tauri desktop').some((p) => p.title.startsWith('Desktop app')));
   assert.deepEqual(searchDocs(pages, 'zzqx-nothing'), []);
   assert.deepEqual(searchDocs(pages, '  '), []);
+});
+
+test('docs: the baked-in README is up to date (npm run docs:sync)', () => {
+  assert.equal(README, readFileSync('README.md', 'utf8'));
 });
