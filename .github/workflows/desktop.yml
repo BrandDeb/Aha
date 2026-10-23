@@ -117,6 +117,30 @@ jobs:
           app="$(ls -d src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app | head -1)"
           codesign --verify --deep --strict --verbose=2 "$app"
           codesign -dv "$app" 2>&1 | grep -E 'Identifier|Signature|TeamIdentifier' || true
+          echo "Node.js entitlements:"
+          codesign -d --entitlements - "$app/Contents/MacOS/node"
+
+      # Start the signed app's server the way the app does (bundled Node, supervisor, production) and
+      # wait for it to answer: a signing or packaging problem shows up here, not on someone's Mac
+      - name: Smoke test (the signed app's server starts and answers)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          app="$(ls -d src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app | head -1)"
+          root="$app/Contents/Resources/app"
+          temp="$(mktemp -d)"
+          (cd "$root" && NODE_ENV=production HOST=127.0.0.1 PORT=47123 NEXT_PUBLIC_BASE_URL=http://127.0.0.1:47123 \
+            NANOCLI_TEMP_DIR="$temp" NANOCLI_DESKTOP=1 NEXT_TELEMETRY_DISABLED=1 NANOCLI_HOME="$temp/home" \
+            "$app/Contents/MacOS/node" scripts/supervise.js > "$temp/server.log" 2>&1) &
+          ok=""
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:47123/api/health > /dev/null 2>&1; then ok=1; break; fi
+            sleep 1
+          done
+          curl -fsS -o /dev/null -w "studio page: %{http_code}\n" http://127.0.0.1:47123/ || true
+          pkill -f "supervise.js" || true
+          echo "--- server log"; cat "$temp/server.log"
+          [ -n "$ok" ] || { echo "::error::The signed app's server did not start"; exit 1; }
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
