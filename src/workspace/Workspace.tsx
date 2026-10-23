@@ -31,7 +31,7 @@ import { OutputMenu } from './components/OutputMenu';
 import { TARGET_GROUPS, targetInfo } from './targets';
 import { outputRecorder, useFailureTracker } from './debugging';
 import { useDevServer } from './devserver-client';
-import { useProposals } from './proposals';
+import { laneOf, useProposals, verdict } from './proposals';
 import { useWorker } from './worker';
 import { useWorkspace } from './store';
 import { useToast } from './toasts';
@@ -40,6 +40,10 @@ import { useContracts } from './contracts-client';
 import { useCiOnSave } from './ci-on-save';
 import { describeContracts } from '@/lib/contracts';
 import { describeWhy, parseWhy, whyByLine, WHY_FILE } from '@/lib/why';
+import { AWAY_MS, morningReport, type MorningReport } from '@/lib/morning';
+import { MorningReportDialog } from './components/MorningReportDialog';
+
+const SEEN_KEY = 'nanocli:last-seen';
 import { liveSummary } from '@/lib/live/display';
 
 // Everything beyond the editor, terminal and Build panel loads the first time it is opened, so the studio starts with
@@ -214,7 +218,8 @@ export function Workspace() {
   const [showTerminal, setShowTerminal] = useState(true);
   const [terminalHeight, setTerminalHeight] = useState(220);
   const [zen, setZen] = useState(false);
-  const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project' | 'signin' | 'welcome'>(null);
+  const [awaySince, setAwaySince] = useState<number | null>(null);
+  const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project' | 'signin' | 'welcome' | 'morning'>(null);
   const [templatesFilter, setTemplatesFilter] = useState<'all' | 'typescript' | 'web' | 'python' | 'other' | 'kits'>('all');
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
   const { status: update, refresh: refreshUpdate } = useUpdateStatus();
@@ -250,10 +255,29 @@ export function Workspace() {
       const firstVisit = !localStorage.getItem('nanocli:welcomed') && !localStorage.getItem('nanocli:ai') && !localStorage.getItem('nanocli:workspace') && !window.location.search;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- storage is only readable after hydration
       if (firstVisit) setDialog('welcome');
+      else {
+        // Back after a long absence: the morning report (once the proposals and the worker have loaded)
+        const seen = Number(localStorage.getItem(SEEN_KEY));
+        if (seen && Date.now() - seen > AWAY_MS) setAwaySince(seen);
+      }
     } catch {
       // storage blocked: no welcome
     }
   }, [hydrated]);
+  // When you were last here: a heartbeat while the studio is open
+  useEffect(() => {
+    const beat = () => {
+      try {
+        localStorage.setItem(SEEN_KEY, String(Date.now()));
+      } catch {}
+    };
+    const timer = setInterval(beat, 60_000);
+    window.addEventListener('pagehide', beat);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('pagehide', beat);
+    };
+  }, []);
 
   // ?project= / ?template= / ?share= links (once, after storage hydration)
   useEffect(() => {
@@ -686,6 +710,48 @@ export function Workspace() {
     }, []),
   });
 
+  // The morning report: built from how things stand when it opens
+  const [report, setReport] = useState<MorningReport | null>(null);
+  const buildMorning = () =>
+    morningReport({
+      since: awaySince ?? Date.now() - 24 * 60 * 60_000,
+      now: Date.now(),
+      proposals: proposals.proposals.map((p) => {
+        const lane = laneOf(p);
+        const judged = lane?.evidence ? verdict(lane.evidence) : null;
+        return {
+          id: p.id,
+          goal: p.goal,
+          status: p.status,
+          origin: p.origin,
+          createdAt: p.createdAt,
+          headline: judged?.headline,
+          verified: judged?.verified,
+          review: lane?.review?.status === 'done' ? lane.review.verdict : undefined,
+          waiting: !!p.pending,
+        };
+      }),
+      brokenContracts: brokenContracts.map((c) => c.rule),
+      failure: failure ? { title: failure.title, source: failure.source } : null,
+      ci: ci.on && (ci.state.status === 'passed' || ci.state.status === 'failed') && !ci.stale ? { status: ci.state.status, step: ci.state.step } : null,
+      nextTask: worker.queue[0] ? { title: worker.queue[0].title, reason: worker.queue[0].reason } : null,
+      workerMode: worker.settings.mode,
+    });
+  const buildRef = useRef(buildMorning);
+  useEffect(() => {
+    buildRef.current = buildMorning;
+  });
+  const openMorning = useCallback(() => {
+    setReport(buildRef.current());
+    setDialog('morning');
+  }, []);
+  // Back after a long absence: open it once the proposals have loaded, unless another dialog is up
+  useEffect(() => {
+    if (awaySince === null || dialog) return;
+    const timer = setTimeout(openMorning, 1200);
+    return () => clearTimeout(timer);
+  }, [awaySince, dialog, openMorning]);
+
   const openLocation = useCallback(
     (location: SourceLocation) => {
       if (!(location.file in projectRef.current.files)) return;
@@ -723,6 +789,7 @@ export function Workspace() {
     ...(liveAvailable ? [{ id: 'view.live', category: 'Editor', title: liveOn ? 'Turn off live values' : 'Turn on live values (show what each line did)', run: () => setLiveOn(!liveOn) }] : []),
     { id: 'file.new-project', category: 'File', title: 'New project from template…', keys: DEFAULT_KEYS['file.new-project'], run: () => setDialog('templates') },
     { id: 'file.import-export', category: 'File', title: 'Import & export…', keys: DEFAULT_KEYS['file.import-export'], run: () => setDialog('project') },
+    { id: 'view.morning', category: 'View', title: 'What happened while I was away (morning report)', run: openMorning },
     { id: 'view.palette', category: 'View', title: 'Command palette', keys: DEFAULT_KEYS['view.palette'], run: () => setDialog('palette') },
     { id: 'view.explorer', category: 'View', title: 'Toggle explorer', keys: DEFAULT_KEYS['view.explorer'], run: () => setShowExplorer((v) => !v) },
     { id: 'view.panel', category: 'View', title: 'Toggle side panel', keys: DEFAULT_KEYS['view.panel'], run: () => setShowPanel((v) => !v) },
@@ -743,7 +810,7 @@ export function Workspace() {
     { id: 'collab.toggle', category: 'Collaboration', title: collab ? 'Leave live session' : 'Start live session', run: () => setCollab((v) => !v) },
     { id: 'prefs.settings', category: 'Preferences', title: 'Settings', keys: DEFAULT_KEYS['prefs.settings'], run: () => { setSettingsTab('general'); setDialog('settings'); } },
     { id: 'prefs.maintenance', category: 'Preferences', title: 'Updates and health checks', run: () => { setSettingsTab('maintenance'); setDialog('settings'); } },
-  ], [compileOrRun, runApp, web, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, collab, liveAvailable, liveOn, setLiveOn, ciAvailable, ciOn, setCiOn]);
+  ], [compileOrRun, runApp, web, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, openMorning, collab, liveAvailable, liveOn, setLiveOn, ciAvailable, ciOn, setCiOn]);
 
   const bindings = useMemo(() => {
     const map: Record<string, string> = { ...DEFAULT_KEYS, ...settings.keybindings };
@@ -1244,6 +1311,20 @@ export function Workspace() {
       )}
       {dialog === 'settings' && <SettingsDialog commands={commands} isMac={isMac} onClose={() => setDialog(null)} initialTab={settingsTab} update={update} refreshUpdate={refreshUpdate} />}
       {dialog === 'templates' && <TemplatesDialog initial={templatesFilter} onClose={() => { setDialog(null); setTemplatesFilter('all'); }} />}
+      {dialog === 'morning' && report && (
+        <MorningReportDialog
+          report={report}
+          onAction={(action) => {
+            if (action.kind === 'proposal') openProposal(action.id);
+            else if (action.kind === 'debug') startDebug(false);
+            else openPanel(action.panel);
+          }}
+          onClose={() => {
+            setDialog(null);
+            setAwaySince(null);
+          }}
+        />
+      )}
       {dialog === 'welcome' && (
         <WelcomeDialog
           onClose={() => {

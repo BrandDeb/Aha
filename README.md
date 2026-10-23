@@ -186,6 +186,13 @@ was accepted, its evidence ("Verified") and the reviewer's verdict. The history 
 is committed with the code and travels with the repository; lines are matched by their text, so the reason
 stays attached while the code around them moves or is re-indented.
 
+### The morning report
+
+Come back after a few hours and the studio opens on **While you were away**: what waits on you (finished
+proposals with their verdict and the reviewer's, questions the agent asked), what is broken now (the last
+failure, CI on save, contracts), what got done, and the worker's next step. Each item opens where you act on
+it. Any time from ⌘K: "What happened while I was away".
+
 ### Evidence per change
 
 Every proposal also says what its changed lines actually did. Its version of the program runs once with
