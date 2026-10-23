@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
 
 // The editor is served from this server (see src/app/monaco), under its own version in the URL
 const monacoVersion = JSON.parse(readFileSync("node_modules/monaco-editor/package.json", "utf8")).version as string;
@@ -38,6 +39,35 @@ const securityHeaders = [
   { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
 ];
 
+/**
+ * The editor's largest files, preloaded with the studio page (an HTTP Link header) so they download while
+ * the page hydrates instead of after. Found by following the AMD define() dependencies of Monaco's entry,
+ * so the hashed chunk names always match the installed version.
+ */
+function monacoPreloadLinks(): string {
+  const root = path.join("node_modules", "monaco-editor", "min", "vs");
+  if (!existsSync(path.join(root, "loader.js"))) return "";
+  const seen = new Set<string>();
+  const queue = ["editor/editor.main.js"];
+  while (queue.length && seen.size < 60) {
+    const rel = queue.shift()!;
+    if (seen.has(rel) || !existsSync(path.join(root, rel))) continue;
+    seen.add(rel);
+    const deps = /define\(\s*(?:"[^"]*"\s*,\s*)?\[([^\]]*)\]/.exec(readFileSync(path.join(root, rel), "utf8").slice(0, 4000))?.[1] ?? "";
+    for (const [, dep] of deps.matchAll(/"(\.\.?\/[^"]+)"/g)) {
+      const next = path.posix.normalize(path.posix.join(path.posix.dirname(rel), dep)) + ".js";
+      if (!next.startsWith("..")) queue.push(next);
+    }
+  }
+  const size = (rel: string) => statSync(path.join(root, rel)).size;
+  const big = [...seen].filter((rel) => rel !== "editor/editor.main.js" && size(rel) >= 20_000).sort((a, b) => size(b) - size(a));
+  const url = (rel: string) => `/monaco/${monacoVersion}/vs/${rel}`;
+  const scripts = ["loader.js", "editor/editor.main.js", ...big].map((rel) => `<${url(rel)}>; rel=preload; as=script`);
+  return [...scripts, `<${url("editor/editor.main.css")}>; rel=preload; as=style`].join(", ");
+}
+
+const monacoLinks = monacoPreloadLinks();
+
 const nextConfig: NextConfig = {
   // The dev-mode route badge sits over the editor chrome; compile and runtime errors still show
   devIndicators: false,
@@ -47,7 +77,11 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
     // The preview frame sends its own, looser policy (it runs the project's code, on an opaque origin)
-    return [{ source: "/:path((?!preview-frame$).*)", headers: securityHeaders }];
+    return [
+      { source: "/:path((?!preview-frame$).*)", headers: securityHeaders },
+      // Only when the studio page itself loads: not on prefetches from other pages (they send an RSC header)
+      ...(monacoLinks ? [{ source: "/", missing: [{ type: "header" as const, key: "rsc" }], headers: [{ key: "Link", value: monacoLinks }] }] : []),
+    ];
   },
 };
 

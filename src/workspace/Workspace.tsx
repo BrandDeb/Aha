@@ -704,7 +704,7 @@ export function Workspace() {
       <div className="flex h-dvh flex-col bg-background text-gray-100">
         {/* Top bar */}
         <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-[var(--bar)] px-3" data-zen-hide>
-          <Link href="/landing" className="flex items-center gap-2 pl-1" aria-label="NanoCLI overview">
+          <Link href="/landing" prefetch={false} className="flex items-center gap-2 pl-1" aria-label="NanoCLI overview">
             <span className="wordmark text-[20px] text-gray-100">NANOCLI</span>
           </Link>
           <span className="h-5 w-px bg-border" aria-hidden="true" />

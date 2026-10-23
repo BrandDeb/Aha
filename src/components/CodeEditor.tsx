@@ -11,6 +11,9 @@ import { DEFAULT_APPEARANCE, accentTokens, syntaxColors } from '@/workspace/appe
 // Serve the editor from this server instead of a public CDN: it works offline, loads from the same
 // origin as the app, and never sends a request to a third party. (See src/app/monaco/.)
 loader.config({ paths: { vs: `/monaco/${process.env.NEXT_PUBLIC_MONACO_VERSION}/vs` } });
+// Start loading the editor as soon as this module runs, not when the editor component mounts
+// (the page preloads the files; this begins executing them). init() is memoized: the editor reuses it.
+if (typeof window !== 'undefined') loader.init().catch(() => {});
 
 const loading = (
   <div className="flex h-full items-center justify-center font-mono text-sm text-gray-500">Loading editor…</div>

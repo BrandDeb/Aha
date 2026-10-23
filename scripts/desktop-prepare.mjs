@@ -105,6 +105,20 @@ drop('monaco-editor/esm');
 drop('monaco-editor/dev');
 // Linux: npm installs both libc flavours of scriptc; keep the one this target uses
 if (target.includes('linux-gnu')) for (const name of readdirSync(path.join(nm, '@scriptc'))) if (name.endsWith('-musl')) drop(`@scriptc/${name}`);
+// Build-time and debugging leftovers: source maps, Next's development-only runtimes and docs, and type
+// definitions (except scriptc's, which it type-checks programs with). About a quarter of what's left.
+const KEEP_TYPES = /[\\/]node_modules[\\/](scriptc|@scriptc|typescript)[\\/]/;
+function dropLeftovers(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) dropLeftovers(full);
+    else if (entry.isFile() && (entry.name.endsWith('.map') || (entry.name.endsWith('.d.ts') && !KEEP_TYPES.test(full)))) rmSync(full, { force: true });
+  }
+}
+dropLeftovers(nm);
+const nextServer = path.join(nm, 'next', 'dist', 'compiled', 'next-server');
+if (existsSync(nextServer)) for (const name of readdirSync(nextServer)) if (name.endsWith('.runtime.dev.js')) rmSync(path.join(nextServer, name), { force: true });
+drop('next/dist/docs');
 // npm's command shortcuts for what was dropped (zig, and its .cmd/.ps1 shims on Windows), and any other
 // link left pointing at nothing: the bundler follows links and stops at a missing target
 for (const name of readdirSync(path.join(nm, '.bin'))) if (/^zig(\.cmd|\.ps1)?$/i.test(name)) drop(`.bin/${name}`);
