@@ -37,6 +37,7 @@ import { useWorkspace } from './store';
 import { useToast } from './toasts';
 import { useLiveValues } from './live-client';
 import { useContracts } from './contracts-client';
+import { useAutocomplete } from './autocomplete';
 import { usePersistedFlag } from './layout';
 import { Box, Branch, Code, Command as CommandIcon, Files, FilePlus, Gear, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, Search, Sparkle, Wrench } from './components/Icons';
 import type { CreateTab } from './components/CreateDialog';
@@ -201,6 +202,7 @@ export function Workspace() {
   // Works here = works in CI: the project's CI file runs on every save when that is on
   const ciHooks = useMemo(() => ({ onFailure: (report: string) => reportFailure('pipeline', report), onPassed: () => markGood('pipeline') }), [reportFailure, markGood]);
   const ci = useCiOnSave(project.name, project.files, ciHooks);
+  useAutocomplete(project.files, settings.extensions.aiComplete !== false);
   const { onSave: ciOnSave, available: ciAvailable, on: ciOn, setOn: setCiOn } = ci;
   // A program that answered with its usage wants arguments: say so, and offer the field next to Run
   const hintArguments = useCallback(

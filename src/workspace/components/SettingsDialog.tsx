@@ -15,6 +15,7 @@ import type { Command } from './CommandPalette';
 import { Dialog } from './Dialog';
 
 export const EXTENSIONS: { id: keyof Settings['extensions'] | string; name: string; description: string }[] = [
+  { id: 'aiComplete', name: 'AI autocomplete', description: 'Grey-text suggestions as you type, from the model chosen for Autocomplete (Settings → AI models). Tab accepts, Ctrl/⌘ + → accepts a word, Esc dismisses.' },
   { id: 'wordWrap', name: 'Word wrap', description: 'Wrap long lines in the editor.' },
   { id: 'minimap', name: 'Minimap', description: 'Code overview along the editor’s right edge.' },
   { id: 'bracketPairs', name: 'Bracket pairs', description: 'Colourise matching brackets and draw pair guides.' },

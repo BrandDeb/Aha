@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import loader from '@monaco-editor/loader';
 import type { BeforeMount, DiffOnMount, Monaco, OnMount } from '@monaco-editor/react';
+import type { editor as MonacoEditorNs, Position as MonacoPosition, CancellationToken, languages as MonacoLanguages } from 'monaco-editor';
 import type { Diagnostic } from '@/lib/compiler-browser';
 import { NODE_TYPES } from '@/lib/monaco-node-types';
 import { DEFAULT_APPEARANCE, accentTokens, syntaxColors } from '@/workspace/appearance';
@@ -235,6 +236,15 @@ export function setEditorProjectKind(web: { jsxImportSource: string } | null): v
   if (monacoInstance) applyProjectKind(monacoInstance);
 }
 
+/** Asks for the text to suggest at the cursor (AI autocomplete); set by the workspace, null when off */
+export type InlineCompleter = (req: { path: string; language: string; prefix: string; suffix: string }, signal: AbortSignal) => Promise<string>;
+let inlineCompleter: InlineCompleter | null = null;
+export function setInlineCompleter(fn: InlineCompleter | null): void {
+  inlineCompleter = fn;
+}
+/** Wait this long after the last keystroke before asking: typing fast shouldn't fire a request per key */
+const COMPLETE_DEBOUNCE_MS = 280;
+
 export const configureMonaco: BeforeMount = (monaco) => {
   // scriptc programs target Node, not the browser: no DOM lib, Node globals,
   // and every file is its own module so top-level names don't collide.
@@ -247,6 +257,30 @@ export const configureMonaco: BeforeMount = (monaco) => {
     ts.javascriptDefaults.setEagerModelSync(true);
     ts.typescriptDefaults.addExtraLib(NODE_TYPES, 'file:///node_modules/@types/node-lite/index.d.ts');
     registerCompilerOutputLanguages(monaco);
+    // AI autocomplete: grey text at the cursor, Tab accepts, Ctrl+→ accepts a word
+    monaco.languages.registerInlineCompletionsProvider('*', {
+      async provideInlineCompletions(model: MonacoEditorNs.ITextModel, position: MonacoPosition, _context: MonacoLanguages.InlineCompletionContext, token: CancellationToken) {
+        const complete = inlineCompleter;
+        if (!complete) return { items: [] };
+        await new Promise((resolve) => setTimeout(resolve, COMPLETE_DEBOUNCE_MS));
+        if (token.isCancellationRequested) return { items: [] };
+        const full = model.getValue();
+        const offset = model.getOffsetAt(position);
+        const controller = new AbortController();
+        const listener = token.onCancellationRequested(() => controller.abort());
+        try {
+          const path = model.uri.path.replace(/^\//, '');
+          const text = await complete({ path, language: model.getLanguageId(), prefix: full.slice(0, offset), suffix: full.slice(offset) }, controller.signal);
+          if (!text || token.isCancellationRequested) return { items: [] };
+          return { items: [{ insertText: text, range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column) }] };
+        } catch {
+          return { items: [] };
+        } finally {
+          listener.dispose();
+        }
+      },
+      disposeInlineCompletions() {},
+    });
   }
 
   monacoInstance = monaco;
@@ -275,6 +309,7 @@ function editorOptions(fontSize: number, extensions: EditorExtensions) {
     scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
     accessibilitySupport: 'auto' as const,
     ariaLabel: 'Code editor',
+    inlineSuggest: { enabled: true, mode: 'subwordSmart' as const, showToolbar: 'onHover' as const },
   };
 }
 

@@ -11,7 +11,7 @@
 
 import { getProvider } from './ai-providers.ts';
 
-export type JobId = 'agent' | 'reviewer' | 'ask' | 'worker';
+export type JobId = 'agent' | 'reviewer' | 'ask' | 'worker' | 'complete';
 export type Priority = 'best' | 'free' | 'private';
 
 export interface Job {
@@ -27,6 +27,7 @@ export const JOBS: Job[] = [
   { id: 'agent', name: 'Agent', does: 'Does tasks: reads your project, edits files, builds and runs them, many tool calls in a row.', needs: 'Reliable tool calling over long runs, and strong coding.' },
   { id: 'reviewer', name: 'Second reviewer', does: 'Reads each finished proposal once and lists what it would fix.', needs: 'Careful reading of a diff; a different model from the agent catches different mistakes.' },
   { id: 'ask', name: 'Ask', does: 'Answers questions and explains code; changes nothing.', needs: 'Speed and low cost; it is a conversation.' },
+  { id: 'complete', name: 'Autocomplete', does: 'Suggests the rest of the line (or the next few) as you type; Tab accepts.', needs: 'Speed above all: an answer in well under a second, many times a minute, so the smallest fast model.' },
   { id: 'worker', name: 'Worker', does: 'Keeps going in the background: fixes, TODOs, tests, one task after another.', needs: 'Low cost per task, since it runs many; still good tool calling.' },
 ];
 
@@ -59,6 +60,11 @@ const CHOICES: Record<Priority, Record<JobId, Choice[]>> = {
       { provider: 'anthropic', model: 'claude-haiku-5-5', why: 'Claude Haiku 5.5 answers in a second or two and costs almost nothing, and it knows code well.', cost: '$0.10 in / $0.50 out per million tokens.' },
       { provider: 'groq', model: 'openai/gpt-oss-120b', why: 'Groq runs open models extremely fast, and its free tier covers everyday questions.', cost: 'Free tier.' },
     ],
+    complete: [
+      { provider: 'anthropic', model: 'claude-haiku-5-5', why: 'Claude Haiku 5.5 answers fast and costs almost nothing per suggestion, and it matches your code style well; the same key as the agent.', cost: '$0.10 in / $0.50 out per million tokens.' },
+      { provider: 'groq', model: 'openai/gpt-oss-20b', why: 'Groq answers in a few hundred milliseconds, which is what grey-text suggestions need, and its free tier covers a day of typing.', cost: 'Free tier.' },
+      { provider: 'gemini', model: 'gemini-flash-lite-latest', why: 'Gemini Flash-Lite is quick and has a free tier.', cost: 'Free tier.' },
+    ],
     worker: [
       { provider: 'anthropic', model: 'claude-sonnet-5-5', why: 'The worker runs many tasks unattended, so cost per task matters; Claude Sonnet 5.5 keeps strong tool calling at half the price of Opus.', cost: '$2 in / $10 out per million tokens.' },
       { provider: 'gemini', model: 'gemini-flash-latest', why: 'Gemini Flash is fast and cheap with good tool calling.', cost: 'Free tier, then low prices.' },
@@ -78,6 +84,10 @@ const CHOICES: Record<Priority, Record<JobId, Choice[]>> = {
       { provider: 'groq', model: 'openai/gpt-oss-20b', why: 'Answers almost instantly; a smaller model is plenty for questions and keeps you well inside the free limits.', cost: 'Free; per-minute limits.' },
       { provider: 'gemini', model: 'gemini-flash-lite-latest', why: 'Fast and light, on the same free Google account.', cost: 'Free.' },
     ],
+    complete: [
+      { provider: 'groq', model: 'openai/gpt-oss-20b', why: 'The fastest free option: suggestions appear while you are still looking at the line.', cost: 'Free; per-minute limits.' },
+      { provider: 'gemini', model: 'gemini-flash-lite-latest', why: 'Fast and light on a free Google account.', cost: 'Free.' },
+    ],
     worker: [
       { provider: 'cerebras', model: 'gpt-oss-120b', why: 'The worker would use up the agent’s free limits; Cerebras has its own generous daily allowance and is very fast.', cost: 'Free; daily token limits.' },
       { provider: 'gemini', model: 'gemini-flash-lite-latest', why: 'Lighter than Flash, so its free limits stretch across more tasks.', cost: 'Free.' },
@@ -90,6 +100,7 @@ const CHOICES: Record<Priority, Record<JobId, Choice[]>> = {
     ],
     reviewer: [{ provider: 'ollama', model: 'qwen2.5-coder:7b', why: 'The same local model reviews the diff; it never leaves your machine.', cost: 'Free.' }],
     ask: [{ provider: 'ollama', model: 'qwen2.5-coder:7b', why: 'Local answers with no network round trip.', cost: 'Free.' }],
+    complete: [{ provider: 'ollama', model: 'qwen2.5-coder:1.5b', why: 'A small local coder model answers fast enough for suggestions on most laptops; nothing leaves your machine.', cost: 'Free; uses your machine.' }],
     worker: [{ provider: 'ollama', model: 'qwen2.5-coder:7b', why: 'A local worker costs nothing per task; keep it on Suggest so it doesn’t keep your machine busy.', cost: 'Free; uses your machine.' }],
   },
 };

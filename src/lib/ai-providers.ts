@@ -195,7 +195,7 @@ export interface AiConfig {
   /** Base URL overrides for local/custom providers */
   baseUrls: Record<string, string>;
   /** A different provider and model for a job (the second reviewer, Ask, the worker); unset jobs use the main one */
-  jobs?: Partial<Record<'reviewer' | 'ask' | 'worker', { provider: string; model: string }>>;
+  jobs?: Partial<Record<'reviewer' | 'ask' | 'worker' | 'complete', { provider: string; model: string }>>;
 }
 
 export const EMPTY_AI_CONFIG: AiConfig = { provider: '', models: {}, keys: {}, baseUrls: {} };
@@ -227,7 +227,7 @@ export function resolveProvider(config: AiConfig): ResolvedProvider | { error: s
 }
 
 /** The provider and model for one job: its own choice when it has one that is ready, else the main one */
-export function resolveFor(config: AiConfig, job: 'agent' | 'reviewer' | 'ask' | 'worker'): ResolvedProvider | { error: string } {
+export function resolveFor(config: AiConfig, job: 'agent' | 'reviewer' | 'ask' | 'worker' | 'complete'): ResolvedProvider | { error: string } {
   const own = job === 'agent' ? undefined : config.jobs?.[job];
   if (own?.provider) {
     const resolved = resolveProvider({ ...config, provider: own.provider, models: { ...config.models, [own.provider]: own.model || config.models[own.provider] || '' } });

@@ -9,11 +9,12 @@ test('no keys yet: the first choice for each job, why, and the keys to get', () 
     ['agent', 'anthropic', 'claude-opus-5-5'],
     ['reviewer', 'gemini', 'gemini-pro-latest'],
     ['ask', 'anthropic', 'claude-haiku-5-5'],
+    ['complete', 'anthropic', 'claude-haiku-5-5'],
     ['worker', 'anthropic', 'claude-sonnet-5-5'],
   ]);
   assert.ok(advice.every((a) => !a.ready && a.why.length > 40 && a.cost));
   const keys = keysToGet(advice);
-  assert.deepEqual(keys.map((k) => [k.provider, k.jobs]), [['anthropic', ['Agent', 'Ask', 'Worker']], ['gemini', ['Second reviewer']]], 'each key once, with the jobs it unlocks');
+  assert.deepEqual(keys.map((k) => [k.provider, k.jobs]), [['anthropic', ['Agent', 'Ask', 'Autocomplete', 'Worker']], ['gemini', ['Second reviewer']]], 'each key once, with the jobs it unlocks');
   assert.match(keys[0].keyUrl, /console\.anthropic\.com/);
 });
 
@@ -34,7 +35,7 @@ test('free and private: no paid provider, and local needs no key', () => {
   // The free reviewer is a different family from the free agent: a real second opinion
   const free = advise('free', {});
   assert.notEqual(free.find((a) => a.job.id === 'agent')!.provider, free.find((a) => a.job.id === 'reviewer')!.provider);
-  assert.equal(JOBS.length, 4);
+  assert.equal(JOBS.length, 5);
   assert.equal(PRIORITIES.length, 3);
 });
 
