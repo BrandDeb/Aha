@@ -9,7 +9,7 @@ import type { AddressInfo } from 'node:net';
 import { resolveUv, runPython } from '../src/lib/python.ts';
 import { TEMPLATES, templateFiles } from '../src/lib/templates.ts';
 
-const python = TEMPLATES.filter((t) => t.language === 'python');
+const python = TEMPLATES.filter((t) => t.language === 'python' && !t.app);
 const uv = await resolveUv();
 const skipNoUv = uv ? false : 'uv is not installed';
 // These install real packages from PyPI, so they only run when asked: NANOCLI_TEST_NETWORK=1 npm test

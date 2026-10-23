@@ -5,6 +5,8 @@
  * one is reported as skipped. `npm run verify:apps [-- app-go,app-rust]`
  */
 
+export {};
+
 const { startServer, stopServer, syncServer, stateOf } = await import('../src/lib/devserver.ts');
 const { APP_STARTERS } = await import('../src/lib/app-templates.ts');
 
