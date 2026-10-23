@@ -79,6 +79,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Specs → property tests** | Write what must always be true about a function ("sortPrices returns the items in ascending order"): it becomes a fast-check or Hypothesis test that tries hundreds of random inputs and shrinks a failure to the smallest counterexample, plus a contract that runs it on every change. Common properties need no model. See [Specs](#specs-plain-english-to-property-tests) |
 | **Fork the future** | ⑂ Fork 3 ways builds one request in three deliberately different directions at once (Minimal / Bold / Playful for looks; Simplest / Robust / Fast for code), then shows them side by side, running live for web apps, so you pick from real results. See [Fork the future](#fork-the-future) |
 | **Build from a picture** | Paste a screenshot, a mock-up or a photo of a paper sketch in Create: the agent matches the screenshot (or interprets the sketch's layout) and builds a working app from it. See [Create](#create) |
+| **Remix** | Start from a public GitHub repo (copied in, licence shown) or any website (read for its structure and rebuilt as your own original app), and tell the agent what to change. See [Create](#create) |
 | **Contracts** | Rules that stay true, written in words and checked by a pattern or a command ("no console.log in src", "every route checks the session", "the tests pass"). The agent is told every one and checks them before it finishes, a proposal that breaks one is never marked verified, the worker fixes broken ones, and the status bar shows how they stand; see [Contracts](#contracts) |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
@@ -123,6 +124,12 @@ project is kept in History, so trying something costs nothing.
   style). The picture goes to the model with the brief, and the agent makes it real: every visible control works and
   it holds up on a phone. Big images are scaled down in the browser first. It needs a model that reads images
   (Claude, GPT, Gemini, or a vision model in Ollama).
+- **Remix.** Paste a public GitHub repository (`owner/repo` or its link, optionally `/tree/<branch>`) and it is
+  copied in as one tarball (no sign-in, no API rate limit; dependencies, build output and binaries are left out),
+  with its licence shown, since a remix is only yours to ship when the licence allows it. Say what to change and the
+  agent does it, or just import it. Paste any other web address and the page is read for its title, navigation,
+  sections and copy (through the same public-only fetcher the connectors use, which never reaches private networks),
+  then rebuilt by the agent as an original app with the same structure, in your own design and words.
 - **Gallery.** 23 apps people actually build (Kanban, notes, habits, admin dashboard, expenses, invoices, landing
   page, blog, portfolio, AI chat, agent, data report, REST API, URL shortener, live chat, CLI, scraper, weather,
   Pomodoro, quiz, Snake, recipes, an ERC-20 token), each with why its stack fits. Many come in several languages: the

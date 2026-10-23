@@ -15,6 +15,7 @@ import { parseBundle, type Kit } from '@/lib/kits';
 import { getLanguage } from '@/lib/languages';
 import { GALLERY, GALLERY_CATEGORIES, type GalleryApp, type GalleryCategory, type GallerySource } from '@/lib/gallery';
 import { planApp, PLAN_EXAMPLES } from '@/lib/planner';
+import { parseRemixSource, remixBrief, type RemixSource, type SiteOutline } from '@/lib/remix-brief';
 import { imageFromDataUrl, pictureBrief, pictureRequest, type PictureKind } from '@/lib/vision';
 import type { ImageInput } from '@/lib/agent/types';
 import { buildStack, CATEGORY_LABEL, DEFAULT_STACK, FRAMEWORKS, librariesByCategory, PY_FRAMEWORKS, resolveStack, STYLINGS, unavailable, type StackChoice } from '@/lib/stack';
@@ -28,11 +29,12 @@ import { useToast } from '../toasts';
 import { Dialog } from './Dialog';
 import { Check, Sparkle } from './Icons';
 
-export type CreateTab = 'describe' | 'gallery' | 'stack' | 'templates' | 'kits';
+export type CreateTab = 'describe' | 'remix' | 'gallery' | 'stack' | 'templates' | 'kits';
 type TemplateFilter = 'all' | 'typescript' | 'web' | 'apps' | 'python' | 'other';
 
 const TABS: { id: CreateTab; label: string; hint: string }[] = [
   { id: 'describe', label: 'Describe it', hint: 'Say what you want; get a plan' },
+  { id: 'remix', label: 'Remix', hint: 'A GitHub repo or a website, your way' },
   { id: 'gallery', label: 'Gallery', hint: 'Apps, each on the stack that suits it' },
   { id: 'stack', label: 'Stack builder', hint: 'Pick framework, styling, libraries' },
   { id: 'templates', label: 'Templates', hint: 'Starters in 70+ languages' },
@@ -96,6 +98,7 @@ export function CreateDialog({ onClose, initial = 'describe', templateFilter = '
         </nav>
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto pr-1">
           {tab === 'describe' && <Describe hasModel={hasModel} onNeedModel={onNeedModel} create={create} openInBuilder={openInBuilder} openGallery={() => setTab('gallery')} />}
+          {tab === 'remix' && <Remix hasModel={hasModel} onNeedModel={onNeedModel} create={create} />}
           {tab === 'gallery' && <Gallery hasModel={hasModel} create={create} openInBuilder={openInBuilder} />}
           {tab === 'stack' && <StackBuilder key={stackSeed ? JSON.stringify(stackSeed) : 'default'} seed={stackSeed ?? DEFAULT_STACK} create={create} />}
           {tab === 'templates' && <Templates initial={templateFilter} create={create} />}
@@ -129,6 +132,105 @@ async function readPicture(file: Blob): Promise<string> {
   canvas.height = Math.round(img.height * scale);
   canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL('image/jpeg', 0.86);
+}
+
+// ─── Remix ───────────────────────────────────────────────────────────────────
+
+type Remixed =
+  | { kind: 'repo'; name: string; files: Record<string, string>; entry: string; license: string | null; skipped: number; ref: string; source: RemixSource }
+  | { kind: 'site'; name: string; outline: SiteOutline; source: RemixSource };
+
+const REMIX_EXAMPLES = ['vercel/next-learn', 'tastejs/todomvc', 'https://news.ycombinator.com', 'https://example.com'];
+
+function Remix({ hasModel, onNeedModel, create }: { hasModel: boolean; onNeedModel: () => void; create: CreateFn }) {
+  const [source, setSource] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [got, setGot] = useState<Remixed | null>(null);
+  const parsed = parseRemixSource(source);
+
+  const fetchIt = async () => {
+    if (!parsed) return;
+    setBusy(true);
+    setError(null);
+    setGot(null);
+    try {
+      const r = await fetch('/api/remix', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source }) });
+      const data = (await r.json()) as Remixed | { error: string };
+      if ('error' in data) setError(data.error);
+      else setGot(data);
+    } catch {
+      setError('The studio did not answer.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const go = (withAgent: boolean) => {
+    if (!got) return;
+    if (withAgent && !hasModel) return onNeedModel();
+    if (got.kind === 'repo') {
+      create(got.files, got.entry, got.name, `Remix of ${got.source.kind === 'repo' ? `${got.source.owner}/${got.source.repo}` : ''}`, withAgent ? remixBrief(got.source, note, { license: got.license }) : undefined);
+      return;
+    }
+    // A site: start from the web app the planner picks, and the agent rebuilds the page's structure in it
+    const plan = planApp(note.trim().length >= 6 ? note : `A website like ${got.outline.title || 'this one'}`);
+    const made = materialize(plan.source, got.name);
+    if (made) create(made.files, made.entry, got.name, `${plan.label}, inspired by ${got.outline.title || got.outline.url}`, remixBrief(got.source, note, { outline: got.outline }));
+  };
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <label htmlFor="remix-source" className="text-lg font-semibold tracking-tight text-gray-100">Remix something that exists</label>
+        <p className="mt-1 text-sm text-gray-400">A public GitHub repository is copied in (no sign-in) and the agent changes it your way. A website is read for its structure, sections and copy, and rebuilt as your own original app.</p>
+        <form
+          className="mt-3 flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void fetchIt();
+          }}
+        >
+          <input id="remix-source" value={source} onChange={(e) => setSource(e.target.value)} placeholder="owner/repo, a GitHub link, or https://a-site-you-like.com" spellCheck={false} className="input h-9 min-w-0 flex-1 font-mono text-sm" />
+          <button type="submit" disabled={!parsed || busy} className="btn btn-primary btn-sm h-9">{busy ? 'Reading…' : parsed?.kind === 'site' ? 'Read the site' : 'Fetch the repo'}</button>
+        </form>
+        <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Remix examples">
+          {REMIX_EXAMPLES.map((ex) => (
+            <button key={ex} onClick={() => setSource(ex)} className="rounded-full border border-border px-2.5 py-1 font-mono text-[11px] text-gray-400 hover:border-border-strong hover:text-gray-100">{ex}</button>
+          ))}
+        </div>
+        {source.trim() && !parsed && <p className="mt-2 text-xs text-warn">That isn&apos;t a repository or a web address.</p>}
+        {error && <p className="mt-2 text-xs text-danger" role="alert">{error}</p>}
+      </div>
+
+      {got && (
+        <section aria-label="What was read" className="space-y-3 rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)]/40 p-4">
+          {got.kind === 'repo' ? (
+            <>
+              <div className="font-mono text-sm text-gray-100">{got.name} · {Object.keys(got.files).length} files · {got.ref}</div>
+              <p className={`text-xs ${got.license ? 'text-gray-400' : 'text-warn'}`}>{got.license ? `Licence: ${got.license}. Keep it, and credit the original.` : 'No licence file: the code is all rights reserved by its authors. Fine to learn from; ask them before you ship it.'}</p>
+              {got.skipped > 0 && <p className="text-xs text-gray-500">{got.skipped} files left out (dependencies, build output, binaries, or over the size limits).</p>}
+            </>
+          ) : (
+            <>
+              <div className="text-sm text-gray-100">{got.outline.title || got.outline.url}</div>
+              <ul className="max-h-40 space-y-0.5 overflow-auto text-xs text-gray-400">
+                {got.outline.nav.length > 0 && <li>Navigation: {got.outline.nav.join(' · ')}</li>}
+                {got.outline.headings.map((h, i) => <li key={i} style={{ paddingLeft: (h.level - 1) * 12 }}>{h.text}</li>)}
+              </ul>
+              <p className="text-xs text-gray-500">Rebuilt in your own design and words: no logos, brand names or copied text.</p>
+            </>
+          )}
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder={got.kind === 'repo' ? 'What to change: “add dark mode and a settings page”, “port it to TypeScript”…' : 'Make it yours: “for a bakery”, “dark and minimal”…'} aria-label="What to change" className="input w-full resize-y py-2 text-sm" />
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => go(true)} className="btn btn-primary btn-sm"><Sparkle size={14} /> {hasModel ? 'Remix it with the agent' : 'Set up a model to remix it'}</button>
+            {got.kind === 'repo' && <button onClick={() => go(false)} className="btn btn-secondary btn-sm">Just import it</button>}
+          </div>
+        </section>
+      )}
+    </div>
+  );
 }
 
 // ─── Describe ────────────────────────────────────────────────────────────────
