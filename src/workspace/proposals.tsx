@@ -85,6 +85,8 @@ export interface Proposal {
   closed?: boolean;
   /** Who started it: you, the debugger, or the worker */
   origin?: 'you' | 'debug' | 'worker';
+  /** The worker's task kind (todo, tests, improve…), for its track record */
+  task?: string;
 }
 
 export interface AgentPrefs {
@@ -125,7 +127,7 @@ interface ProposalsValue {
   setPrefs: (patch: Partial<AgentPrefs>) => void;
   /** Start a new proposal; returns its id, or null when no model is set up */
   /** `label` is what the tab shows when the task itself is long (a debugging brief); `quiet` skips the "choose a model" toast */
-  ask: (goal: string, options?: { approaches?: number; label?: string; quiet?: boolean; background?: boolean; origin?: Proposal['origin'] }) => string | null;
+  ask: (goal: string, options?: { approaches?: number; label?: string; quiet?: boolean; background?: boolean; origin?: Proposal['origin']; task?: string }) => string | null;
   followUp: (id: string, text: string) => void;
   stop: (id: string) => void;
   answer: (id: string, allowed: boolean, always?: boolean) => void;
@@ -410,6 +412,7 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
         laneId: k ? '' : 'main',
         lessons: [],
         origin: options.origin ?? 'you',
+        ...(options.task ? { task: options.task } : {}),
       };
       setProposals((prev) => [proposal, ...prev]);
       // Background work (the worker) opens as a tab but doesn't take the editor from you

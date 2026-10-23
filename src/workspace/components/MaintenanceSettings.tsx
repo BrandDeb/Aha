@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { Check } from '@/lib/doctor';
-import { applyDoctorFix, fetchDoctor, restartStudio, runUpdate, type DoctorReport, type UpdateResult, type UpdateStatus } from '../maintenance-client';
+import { applyDoctorFix, fetchAutopilot, fetchDoctor, restartStudio, runUpdate, saveAutopilot, type AutopilotState, type DoctorReport, type UpdateResult, type UpdateStatus } from '../maintenance-client';
 
 const DOT: Record<Check['status'], string> = { ok: 'bg-accent', warn: 'bg-warn', fail: 'bg-danger' };
 const LABEL: Record<Check['status'], string> = { ok: 'OK', warn: 'Needs attention', fail: 'Failing' };
@@ -183,6 +183,63 @@ function Updates({ status, refresh }: { status: UpdateStatus | null; refresh: (f
   );
 }
 
+const KIND_LABEL: Record<AutopilotState['journal'][number]['kind'], string> = { repair: 'Repaired', restart: 'Restarted', update: 'Updated', verify: 'Verified', rollback: 'Rolled back', error: 'Problem' };
+
+/** Self-healing and self-updating: the switches and what the autopilot did */
+function Autopilot() {
+  const [state, setState] = useState<AutopilotState | null | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    fetchAutopilot().then((s) => live && setState(s));
+    return () => {
+      live = false;
+    };
+  }, []);
+  if (state === undefined) return <p className="text-sm text-gray-500">Loading…</p>;
+  if (state === null) return <p className="text-sm text-gray-400">The autopilot is managed here only when the studio runs on your own machine.</p>;
+  const save = async (body: Parameters<typeof saveAutopilot>[0]) => {
+    setBusy(true);
+    const next = await saveAutopilot(body);
+    if (next) setState(next);
+    setBusy(false);
+  };
+  return (
+    <div className="space-y-3">
+      <label className="flex items-start gap-2 text-sm text-gray-300">
+        <input type="checkbox" className="mt-1" checked={state.autoRepair} disabled={busy} onChange={(e) => void save({ autoRepair: e.target.checked })} />
+        <span>
+          Repair automatically
+          <span className="block text-xs text-gray-500">Every 10 minutes: cleans build leftovers and package caches when they grow or the disk runs low, and restarts a server that has grown too large or stopped responding (only when nothing is running).</span>
+        </span>
+      </label>
+      <label className="flex items-start gap-2 text-sm text-gray-300">
+        <input type="checkbox" className="mt-1" checked={state.autoUpdate} disabled={busy} onChange={(e) => void save({ autoUpdate: e.target.checked })} />
+        <span>
+          Update automatically
+          <span className="block text-xs text-gray-500">When the studio has been idle for 30 minutes, at most every 6 hours: the same update as the button above, then a restart. If the new version doesn’t come up healthy, the previous one is put back.</span>
+        </span>
+      </label>
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-xs text-gray-400">What it did</h4>
+        <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void save({ action: 'run' })}>{busy ? 'Checking…' : 'Check now'}</button>
+      </div>
+      {state.journal.length === 0 ? (
+        <p className="text-xs text-gray-500">Nothing yet: everything has been fine.</p>
+      ) : (
+        <ul className="max-h-48 space-y-1 overflow-y-auto text-xs" aria-label="Autopilot journal">
+          {state.journal.slice(0, 20).map((entry) => (
+            <li key={`${entry.at}-${entry.message}`} className="flex gap-2">
+              <span className="shrink-0 font-mono text-gray-500">{new Date(entry.at).toLocaleString()}</span>
+              <span className={entry.kind === 'error' || entry.kind === 'rollback' ? 'text-warn' : 'text-gray-300'}>{KIND_LABEL[entry.kind]}: {entry.message}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function MaintenanceSettings({ update, refresh }: { update: UpdateStatus | null; refresh: (force?: boolean) => Promise<void> }) {
   return (
     <div className="space-y-6">
@@ -193,6 +250,10 @@ export function MaintenanceSettings({ update, refresh }: { update: UpdateStatus 
       <section aria-labelledby="health-heading" className="space-y-2">
         <h3 id="health-heading" className="eyebrow">Health</h3>
         <Health />
+      </section>
+      <section aria-labelledby="autopilot-heading" className="space-y-2">
+        <h3 id="autopilot-heading" className="eyebrow">Self-healing and self-updating</h3>
+        <Autopilot />
       </section>
     </div>
   );

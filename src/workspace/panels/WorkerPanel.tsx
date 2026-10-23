@@ -10,7 +10,7 @@ const MODES: { id: WorkerMode; label: string; hint: string }[] = [
   { id: 'auto', label: 'Autonomous', hint: 'It takes the next task whenever you pause typing, one at a time, in the background.' },
 ];
 
-const KIND: Record<string, string> = { failure: 'Fix', problem: 'Errors', focus: 'Goal', todo: 'TODO', tests: 'Tests' };
+const KIND: Record<string, string> = { failure: 'Fix', problem: 'Errors', focus: 'Goal', improve: 'Learn', todo: 'TODO', tests: 'Tests' };
 
 function describe(status: WorkerStatus): { text: string; tone: string } {
   switch (status.kind) {
@@ -126,7 +126,14 @@ export function WorkerPanel({ worker }: { worker: WorkerHandle }) {
         )}
 
         <section className="p-4">
-          <h3 className="eyebrow mb-2">Its work</h3>
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <h3 className="eyebrow">Its work</h3>
+            {worker.record.total > 0 && (
+              <span className="font-mono text-[11px] text-gray-500" title="The agent's results in this project (all proposals): how many verified, and what you did with them. When they slip, the worker proposes improving how the agent works here.">
+                {worker.record.verified}/{worker.record.total} verified · {worker.record.accepted} accepted · {worker.record.discarded} discarded
+              </span>
+            )}
+          </div>
           {results.length === 0 ? (
             <p className="text-sm text-gray-500">Nothing yet.</p>
           ) : (

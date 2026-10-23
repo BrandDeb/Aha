@@ -185,6 +185,14 @@ your files until you accept it. It keeps itself in check: a per-hour budget, nev
 three of its results need review, and pausing after three results that didn't come out verified. **Best of 3** quality runs
 each task Harness²-style (the current setup against two variations) and recommends the one that verified.
 
+**It learns from its record.** The studio notes how every proposal turns out in each project: whether it verified, whether
+you shipped or discarded it, and which errors kept coming back (the Worker tab shows the tally). Task kinds you keep
+shipping move up the list; kinds you keep discarding move down. When results slip (fewer than three in four verified, three
+discarded, or the same error three times in the last six or more), the worker adds an **Improve how the agent works here**
+task: the agent studies its own failures and proposes changes to `agent/prompt.md`, `agent/lessons.md`, a project skill or
+`AGENTS.md`, each tied to the evidence. It never edits your code in that task, and like everything else it is a proposal you
+review. The record stays in your browser.
+
 ### Skills: what the agent knows how to do
 
 The agent uses **skills** in the open [Agent Skills](https://agentskills.io) format: a folder with a `SKILL.md` whose
@@ -460,7 +468,17 @@ The studio looks after itself, and asks before it changes anything.
 - **Updates, with your approval.** **Settings → Maintenance** checks the git remote (at most every six hours, or **Check now**)
   and lists what is new; the footer shows `↑ N updates`. **Update now** only fast-forwards a clean checkout, reinstalls
   dependencies only if `package.json` or the lock file changed, rebuilds when the server is a production one, and puts the previous
-  commit back if any step fails. Nothing updates on its own. A copy without git (or in a container) just says so.
+  commit back if any step fails. A copy without git (or in a container) just says so.
+- **Autopilot.** While it runs, the studio checks itself every ten minutes: free disk, build leftovers, package caches, its own
+  memory and how quickly it responds. It applies the safe fixes on its own (clear build leftovers, prune caches, and when the
+  disk is nearly full remove idle Python environments, which are rebuilt on demand), and a server that has grown past 2 GB
+  or stopped responding restarts itself under the supervisor, only once nobody has used it for ten minutes. **Update
+  automatically** (off by default) applies updates the same way **Update now** does, once the studio has been idle for 30
+  minutes and at most every six hours; after the restart the new version must answer its health check, and if it keeps
+  crashing instead the supervisor puts the previous commit back. Everything it does is listed in **Settings → Maintenance →
+  Autopilot**, where both switches and **Check now** live.
+- **Out-of-date pages fix themselves.** After an update, a tab that is still open asks for code that no longer exists; the page
+  reloads itself once (never more than once a minute) instead of showing an error.
 - **Health checks.** The same tab tests the scriptc compiler with a real build, zig, a C toolchain, uv and Python, `npx`/`uvx`
   for the MCP presets, and how much disk the studio uses, and offers one-click fixes that only touch the studio's own folders
   (download uv, prune its cache, remove idle Python environments, clear build leftovers). **Copy report** gives you something to
@@ -593,6 +611,13 @@ Paths and environment variable names are validated; `PATH`, `HOME`, loader and t
 `POST { action: "restart" }` asks the supervisor to restart. Same-origin and trusted-host checks apply, and all of it is refused
 when the server listens beyond localhost.
 
+### `/api/autopilot` and `/api/health`
+
+`GET /api/autopilot` → `{ autoRepair, autoUpdate, journal: [{ at, kind, message }], lastUpdateCheck?, pendingVerify? }`;
+`POST { autoRepair?, autoUpdate? }` saves the switches and `POST { action: "run" }` runs a round now (local only, like the
+doctor). `GET /api/health` → `{ ok: true }` for anyone (for load balancers and the updater's check); on your own machine it
+also reports uptime, memory, Node version and the latest autopilot entries.
+
 ### `POST /api/coverage`
 
 ```json
@@ -658,6 +683,9 @@ ALLOWED_HOSTS=               # extra Host names allowed for Python commands, com
 NANOCLI_PYTHON=1             # 0 turns Python (uv) off entirely
 UV_BIN=                      # path to a specific uv binary
 NANOCLI_HOME=                # where Python environments and caches live (default ~/.nanocli)
+NANOCLI_AUTOPILOT=1          # 0 = no background checks at all
+NANOCLI_AUTOREPAIR=1         # default for "Repair automatically" (0 = off)
+NANOCLI_AUTOUPDATE=0         # default for "Update automatically" (1 = on)
 NANOCLI_PY_TIMEOUT_MS=300000          # per program run
 NANOCLI_PY_INSTALL_TIMEOUT_MS=1200000 # per install / sync / lock
 NANOCLI_PY_JOBS=3                     # concurrent Python commands

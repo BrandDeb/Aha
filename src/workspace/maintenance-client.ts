@@ -102,3 +102,28 @@ export function useUpdateStatus(): { status: UpdateStatus | null; refresh: (forc
   }, []);
   return { status, refresh };
 }
+
+// ---------------------------------------------------------------------------
+// Autopilot: self-healing and opt-in self-updating (/api/autopilot)
+// ---------------------------------------------------------------------------
+
+export type { AutopilotState } from '@/lib/autopilot';
+import type { AutopilotState } from '@/lib/autopilot';
+
+export async function fetchAutopilot(): Promise<AutopilotState | null> {
+  try {
+    const response = await fetch('/api/autopilot', { cache: 'no-store' });
+    return response.ok ? ((await response.json()) as AutopilotState) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveAutopilot(body: { autoRepair?: boolean; autoUpdate?: boolean } | { action: 'run' }): Promise<AutopilotState | null> {
+  try {
+    const response = await fetch('/api/autopilot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return response.ok ? ((await response.json()) as AutopilotState) : null;
+  } catch {
+    return null;
+  }
+}

@@ -138,7 +138,11 @@ function serveBrotli(req, res) {
   return false;
 }
 
+/** Requests that do work (not static files or health checks): the autopilot only acts when there have been none for a while */
+const PASSIVE = /^\/(?:_next\/|monaco\/|esbuild\/|favicon|api\/health)/;
+
 const server = http.createServer((req, res) => {
+  if (!PASSIVE.test(req.url || '/')) globalThis.__nanocliLastActivity = Date.now();
   if (serveBrotli(req, res)) return;
   // Handle Next.js requests
   handle(req, res);

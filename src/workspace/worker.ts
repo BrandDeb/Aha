@@ -12,6 +12,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { editorProblems } from '@/components/CodeEditor';
 import { verdict } from '@/lib/agent/evidence';
 import { discoverTasks, nextTask, recentCount, type WorkerTask } from '@/lib/worker';
+import { improvementBrief, kindWeight, needsImprovement, summarize } from '@/lib/agent/outcomes';
+import { useOutcomes } from './outcomes-client';
 import { laneOf, useProposals, type Proposal } from './proposals';
 
 export type WorkerMode = 'off' | 'suggest' | 'auto';
@@ -117,13 +119,21 @@ export function useWorker({ projectName, files, entry, failure, onStart }: Optio
     [projectName]
   );
 
+  // The agent's track record here: ranks task kinds, and says when to improve the agent itself
+  const { outcomes, lastImprovedAt, markImproved } = useOutcomes(projectName, proposals.proposals);
+  const improve = useMemo(
+    () => (needsImprovement(outcomes, lastImprovedAt) ? { key: `improve:${lastImprovedAt}`, brief: improvementBrief(outcomes, lastImprovedAt), reason: 'Its recent results here could be better' } : null),
+    [outcomes, lastImprovedAt]
+  );
+  const weights = useMemo(() => Object.fromEntries((['problem', 'focus', 'todo', 'tests', 'improve'] as const).map((k) => [k, kindWeight(outcomes, k)])), [outcomes]);
+
   const queue = useMemo<WorkerTask[]>(() => {
     if (settings.mode === 'off') return [];
     const doneKeys = new Set(done.keys);
-    return discoverTasks({ files, entry, focus: settings.focus, problems: editorProblems(), failure, focusSteps: done.focusSteps }).filter((t) => !doneKeys.has(t.key));
+    return discoverTasks({ files, entry, focus: settings.focus, problems: editorProblems(), failure, focusSteps: done.focusSteps, improve, weights }).filter((t) => !doneKeys.has(t.key));
     // tick: editor problems are read fresh every few seconds
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [files, entry, settings.mode, settings.focus, failure, done, tick]);
+  }, [files, entry, settings.mode, settings.focus, failure, done, tick, improve, weights]);
 
   const workerProposals = proposals.proposals.filter((p) => p.origin === 'worker');
   const current = workerProposals.find((p) => p.status === 'working');
@@ -131,17 +141,18 @@ export function useWorker({ projectName, files, entry, failure, onStart }: Optio
   /** Start a task now (from the queue, or the autonomous loop) */
   const start = useCallback(
     (task: WorkerTask, auto: boolean) => {
-      const id = proposals.ask(task.brief, { label: `Worker · ${task.title}`, background: true, quiet: auto, origin: 'worker', approaches: settings.quality === 'best' ? 2 : 0 });
+      const id = proposals.ask(task.brief, { label: `Worker · ${task.title}`, background: true, quiet: auto, origin: 'worker', task: task.kind, approaches: settings.quality === 'best' ? 2 : 0 });
       if (!id) {
         if (auto) setPausedReason('Choose a model in the Agent tab: the worker uses it.');
         return false;
       }
       setStarted((prev) => [...prev.slice(-50), Date.now()]);
       remember(task.key, task.kind === 'focus');
+      if (task.kind === 'improve') markImproved();
       onStart?.(task, id);
       return true;
     },
-    [proposals, settings.quality, remember, onStart]
+    [proposals, settings.quality, remember, onStart, markImproved]
   );
 
   const skip = useCallback((task: WorkerTask) => remember(task.key, task.kind === 'focus'), [remember]);
@@ -189,6 +200,7 @@ export function useWorker({ projectName, files, entry, failure, onStart }: Optio
     status,
     queue,
     results: workerProposals,
+    record: summarize(outcomes),
     budgetLeft: Math.max(0, settings.perHour - recentCount(started)),
     start: (task: WorkerTask) => start(task, false),
     skip,

@@ -5,6 +5,7 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "@fontsource/ibm-plex-mono/600.css";
 import "./globals.css";
+import { healScript } from "@/lib/self-heal";
 
 /* Fonts are bundled with the app (no request to Google at build or run time) */
 
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: healScript }} />
       </head>
       <body className="min-h-full flex flex-col text-gray-100">
         <a href="#main" className="skip-link">Skip to content</a>

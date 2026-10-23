@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { healStaleCode } from '@/lib/self-heal';
 import { exportWorkspace, hasLastGood, recordCrash, resetSettings, restoreLastGood } from '@/workspace/recovery';
 
 /**
@@ -14,12 +15,14 @@ export function CrashScreen({ error, retry, standalone = false }: { error: Error
   const [done, setDone] = useState('');
 
   useEffect(() => {
+    // Out-of-date code after an update: a reload fixes it, so do that instead of showing this screen
+    if (healStaleCode(error?.message, sessionStorage, () => window.location.reload())) return;
     // Reading storage is only possible in the browser, after the crash has rendered
     /* eslint-disable react-hooks/set-state-in-effect */
     setCrashes(recordCrash(localStorage));
     setCanRestore(hasLastGood(localStorage));
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
+  }, [error]);
 
   const download = () => {
     const raw = exportWorkspace(localStorage);

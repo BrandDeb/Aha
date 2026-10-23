@@ -9,7 +9,7 @@
  * Pure: finding and ranking tasks, and writing their briefs.
  */
 
-export type WorkerTaskKind = 'failure' | 'problem' | 'focus' | 'todo' | 'tests';
+export type WorkerTaskKind = 'failure' | 'problem' | 'focus' | 'improve' | 'todo' | 'tests';
 
 export interface WorkerTask {
   /** Stable: the same task is never done twice */
@@ -41,9 +41,13 @@ export interface WorkerContext {
   failure?: { signature: string; title: string; brief: string } | null;
   /** How many focus steps were already taken, so each one gets a new key */
   focusSteps?: number;
+  /** The agent's own results call for improving how it works here (lib/agent/outcomes.ts) */
+  improve?: { key: string; brief: string; reason: string } | null;
+  /** How much to favour each task kind, from what you accepted or discarded before (1 = no record) */
+  weights?: Partial<Record<WorkerTaskKind, number>>;
 }
 
-const PRIORITY: Record<WorkerTaskKind, number> = { failure: 100, problem: 80, focus: 70, todo: 50, tests: 30 };
+const PRIORITY: Record<WorkerTaskKind, number> = { failure: 100, problem: 80, focus: 70, improve: 60, todo: 50, tests: 30 };
 
 const CODE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|scala|cs|fs|rb|php|swift|dart|c|cc|cpp|h|hpp|zig|ex|exs|erl|hs|ml|lua|r|jl|nim|cr|odin|d|sol|vy|move|cairo|vue|svelte|astro)$/i;
 const TEST_FILE = /(^|\/)(tests?|__tests__|spec)\/|[._-](test|spec)\.[^/]+$|_test\.go$|Test\.(java|kt)$|^test_.*\.py$|\/test_[^/]*\.py$|\.t\.sol$/i;
@@ -154,6 +158,12 @@ export function discoverTasks(ctx: WorkerContext): WorkerTask[] {
     });
   }
 
+  if (ctx.improve) {
+    tasks.push({ key: ctx.improve.key, kind: 'improve', title: 'Improve how the agent works here', reason: ctx.improve.reason, priority: PRIORITY.improve, brief: ctx.improve.brief });
+  }
+
+  // Your record: kinds you keep accepting move up, kinds you keep discarding move down (a failure always comes first)
+  for (const t of tasks) if (t.kind !== 'failure') t.priority = Math.round(t.priority * (ctx.weights?.[t.kind] ?? 1));
   return tasks.sort((a, b) => b.priority - a.priority);
 }
 

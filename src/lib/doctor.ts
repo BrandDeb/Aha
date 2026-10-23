@@ -191,9 +191,12 @@ export async function applyFix(id: string, onProgress: (message: string) => void
     case 'remove-python-envs':
       await cleanupPythonProjects(10 * 60_000); // not ones a command is using right now
       return { ok: true, message: 'Removed Python environments that weren’t used in the last 10 minutes. They are recreated when a project runs again.' };
-    case 'clean-temp':
+    case 'clean-temp': {
+      const before = await folderSize(TEMP_DIR);
       await cleanupOldTempFiles(60_000); // not what a build is writing right now
-      return { ok: true, message: 'Removed temporary build files.' };
+      const freed = before - (await folderSize(TEMP_DIR));
+      return { ok: true, message: freed > 0 ? `Removed ${formatBytes(freed)} of temporary build files.` : 'Nothing to remove yet: the build files there are from builds still running.' };
+    }
     default:
       return { ok: false, message: 'Unknown fix.' };
   }
