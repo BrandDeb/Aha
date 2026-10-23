@@ -1,5 +1,6 @@
 'use client';
 
+import { AUTO_ACCEPT } from '@/lib/agent/risk';
 import { useState } from 'react';
 import { maxModelCalls } from '@/lib/agent/harness';
 import { getProvider } from '@/lib/ai-providers';
@@ -148,6 +149,12 @@ export function AgentPanel() {
           <label className="flex items-center gap-1.5 text-xs text-gray-400" title="When the agent finishes, a second reviewer reads the change cold (the goal, the diff, the evidence and your contracts) and lists what it would fix. Uses the same model; one extra call per proposal.">
             <input type="checkbox" checked={prefs.review} onChange={(e) => setPrefs({ review: e.target.checked })} />
             Second reviewer on every proposal
+          </label>
+          <label className="flex items-center justify-between gap-2 text-xs text-gray-400" title="Accept finished proposals by themselves when they are verified, score at or under this risk, and touch nothing sensitive (secrets, CI, auth, database schema, contracts, removed tests). Each one is saved to History first and announced, so it can be undone.">
+            Auto-accept
+            <select value={prefs.autoAccept} onChange={(e) => setPrefs({ autoAccept: Number(e.target.value) })} className="input h-7 w-auto text-xs">
+              {AUTO_ACCEPT.map((o) => <option key={o.value} value={o.value} title={o.detail}>{o.label}</option>)}
+            </select>
           </label>
           </div>
         </details>

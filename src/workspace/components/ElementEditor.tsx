@@ -40,7 +40,7 @@ export function ElementEditor({ element, location, source, onOpen, onWrite, onAs
   };
 
   return (
-    <section className="absolute inset-x-3 bottom-3 z-10 rounded-xl border border-border-strong bg-[var(--color-surface)] p-3 shadow-2xl" aria-label="Edit the picked element">
+    <section className="absolute inset-x-3 bottom-3 z-10 rounded-xl border border-border-strong bg-[var(--panel)] p-3 shadow-2xl" aria-label="Edit the picked element">
       <div className="flex items-center gap-2">
         <span className="rounded-md border border-[var(--accent-line)] bg-[var(--accent-soft)] px-1.5 font-mono text-[11px] text-accent">&lt;{element.tag}&gt;</span>
         {location ? (

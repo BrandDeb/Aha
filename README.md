@@ -75,6 +75,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Live values** | Turn on **Live** above the editor and the entry file (TypeScript, JavaScript or Python) runs after each pause in typing: every line shows what it did, right after the code — the values it set (`sum = 3, 7, 12 ×3` for a loop), what it returned, what it printed and the error it threw — and lines that never ran fade. Hover a line for every value. Local only, like Run; see [Live values](#live-values) |
 | **Rewind** | Every live run is recorded: scrub back and forth through it, play it back, and see each variable as it was at that moment, with the line that ran highlighted. Click a variable to jump to where it changes; a crash opens on the line that threw; ask the agent about any moment. See [Rewind](#rewind) |
 | **Click to edit** | In the in-browser preview, press ⌖ Edit and click any element: its code opens (exact for React and Preact), its text and classes can be edited right there (written into the source), or describe a change and the agent makes it. ⇩ saves the app as one HTML page to share. See [Web apps and live preview](#web-apps-and-live-preview) |
+| **Risk score and auto-accept** | Every proposal is scored 0–100 with its reasons (dependencies, CI, auth, schema, secrets, eval and shell, removed tests, size, evidence, the reviewer). Optionally accept the low-risk, verified ones by themselves; anything sensitive always waits for you. See [Risk score and auto-accept](#risk-score-and-auto-accept) |
 | **Contracts** | Rules that stay true, written in words and checked by a pattern or a command ("no console.log in src", "every route checks the session", "the tests pass"). The agent is told every one and checks them before it finishes, a proposal that breaks one is never marked verified, the worker fixes broken ones, and the status bar shows how they stand; see [Contracts](#contracts) |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
@@ -231,6 +232,22 @@ support, and contracts. Its verdict shows next to the evidence (`reviewer ✓`, 
 under **Second opinion** (severity, file and line, the issue, the fix), and **Send to the agent** hands them back
 in one click. A blocking review turns **Ship** into **Accept anyway**. It uses your model, one extra call per
 proposal; turn it off in the Agent tab.
+
+### Risk score and auto-accept
+
+Every proposal carries a **risk score** from 0 to 100 next to its evidence (`risk 12 · low`); click it for the
+reasons, biggest first. It weighs what the change touches (new or re-versioned dependencies, CI and deploy files,
+auth and session code, configuration, database migrations, the contracts), what it adds (a key or password written
+into the code, `eval`, shell commands, raw HTML, destructive SQL, deleted files, disabled type or lint checks), its
+size, whether it removes or adds tests, and what the evidence and the reviewer say: a passing build lowers it, a
+failing check or a blocking review raises it.
+
+**Auto-accept** (Agent tab, off by default) lets the low-risk ones through on their own: **Very low risk**
+(score ≤ 15) or **Low risk** (≤ 25). A proposal is only accepted by itself when it is verified, scores at or under
+your threshold, the reviewer (when on) has approved, and nothing holds it back: secrets, CI, auth code, schemas,
+contract edits, removed tests, failing checks or a reviewer's concerns always wait for you, and say so on the
+proposal. Each auto-accept is announced, marked on the proposal (`auto-accepted (risk 8)`), and saved to History
+first, so it is one click to undo. Proposals restored from an earlier session are never accepted behind your back.
 
 ### Why-history
 

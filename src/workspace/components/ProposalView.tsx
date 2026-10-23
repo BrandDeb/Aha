@@ -10,6 +10,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { DiffView } from '@/components/CodeEditor';
 import { chipsFor, type Tone } from '@/lib/agent/evidence';
+import { riskOf, type RiskScore } from '@/lib/agent/risk';
 import { ChangeProof } from './ChangeProof';
 import { REVIEW_LABEL, reviewFollowUp, type Review } from '@/lib/agent/review';
 import { problemOf } from '@/lib/agent/problems';
@@ -25,6 +26,31 @@ const TONE: Record<Tone, string> = {
   warn: 'border-warn/40 bg-warn/10 text-warn',
   neutral: 'border-border text-gray-400',
 };
+
+const RISK_TONE: Record<RiskScore['level'], string> = { low: TONE.good, medium: TONE.warn, high: TONE.bad };
+
+/** The change's risk: a score with its reasons, biggest first */
+function RiskChip({ risk }: { risk: RiskScore }) {
+  return (
+    <details className="relative">
+      <summary className={`cursor-pointer list-none rounded-md border px-2 py-0.5 font-mono text-[11px] ${RISK_TONE[risk.level]}`} title="How risky this change is, and why">
+        risk {risk.score} · {risk.level}
+      </summary>
+      <ul className="absolute left-0 top-7 z-20 w-80 space-y-1 rounded-lg border border-border-strong bg-[var(--panel)] p-2.5 text-xs shadow-2xl" aria-label="Why this risk">
+        {risk.factors.map((f) => (
+          <li key={f.label} className="flex gap-2">
+            <span className={`w-8 shrink-0 text-right font-mono ${f.points > 0 ? 'text-warn' : f.points < 0 ? 'text-accent' : 'text-gray-500'}`}>{f.points > 0 ? `+${f.points}` : f.points}</span>
+            <span className="min-w-0 text-gray-300">
+              {f.label}
+              {f.hold ? <span className="ml-1 text-[10px] uppercase tracking-wide text-warn">needs you</span> : null}
+              <span className="block text-gray-500">{f.detail}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
 
 const STATUS: Record<Proposal['status'], string> = {
   working: 'Working',
@@ -177,6 +203,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
   const settled = proposal.status === 'accepted' || proposal.status === 'discarded';
   const evidence = lane?.evidence;
   const judged = evidence ? verdict(evidence) : null;
+  const risk = working || !files.length ? null : riskOf({ files, evidence, review: lane?.review?.status === 'done' ? lane.review : null });
   const project = files.filter((f) => !f.path.startsWith('agent/') && f.path !== 'AGENTS.md');
   const problem = working ? null : problemOf(proposal.outcome?.reason === 'finished' ? undefined : proposal.outcome?.summary);
 
@@ -196,6 +223,14 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
               <span className="truncate font-mono">{proposal.model}</span>
               <span aria-hidden="true">·</span>
               <span>{ago(proposal.createdAt)}</span>
+              {proposal.auto && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className={proposal.auto.accepted ? 'text-accent' : 'text-warn'} title="Auto-accept">
+                    {proposal.auto.accepted ? `auto-accepted (risk ${proposal.auto.score})` : `waits for you: ${proposal.auto.why.replace(/^Held for you: /, '')}`}
+                  </span>
+                </>
+              )}
             </div>
             <h2 className="mt-0.5 text-[17px] font-medium leading-snug text-gray-100">{proposal.goal}</h2>
           </div>
@@ -227,6 +262,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
                 {judged.verified ? '✓ ' : ''}{judged.headline}
               </span>
             )}
+            {risk && <RiskChip risk={risk} />}
             {lane?.review && <ReviewChip review={lane.review} />}
             {evidence &&
               chipsFor(evidence).map((chip) => (

@@ -18,6 +18,7 @@ import { isHarnessFile, runHarnessLoop, type HarnessEvent } from '@/lib/agent/ha
 import { runAgent } from '@/lib/agent/loop';
 import { callModelFor } from '@/lib/agent/model';
 import { parseReview, REVIEW_LABEL, REVIEWER_PROMPT, reviewInput, type Review } from '@/lib/agent/review';
+import { autoAcceptable, riskOf } from '@/lib/agent/risk';
 import { linesWritten, recordWhy, WHY_FILE } from '@/lib/why';
 import { contractsOf } from '@/lib/contracts';
 import { systemPromptFor } from '@/lib/agent/prompt';
@@ -92,6 +93,8 @@ export interface Proposal {
   origin?: 'you' | 'debug' | 'worker';
   /** The worker's task kind (todo, tests, improve…), for its track record */
   task?: string;
+  /** What auto-accept decided once the proposal was ready: accepted, or why it waits for you */
+  auto?: { accepted: boolean; why: string; score: number };
 }
 
 export interface AgentPrefs {
@@ -103,6 +106,8 @@ export interface AgentPrefs {
   autoDebug: boolean;
   /** A second reviewer reads every finished proposal before you do */
   review: boolean;
+  /** Accept finished proposals at or under this risk score by themselves (0 = never) */
+  autoAccept: number;
 }
 
 export const BUDGETS: Record<AgentPrefs['budget'], { label: string; budget: Partial<Budget> }> = {
@@ -114,7 +119,7 @@ export const BUDGETS: Record<AgentPrefs['budget'], { label: string; budget: Part
 const STORE_KEY = 'nanocli:proposals';
 const PREFS_KEY = 'nanocli:agent-prefs';
 const MAX_KEPT = 15;
-const DEFAULT_PREFS: AgentPrefs = { budget: 'standard', trustCommands: false, approaches: 0, autoDebug: false, review: true };
+const DEFAULT_PREFS: AgentPrefs = { budget: 'standard', trustCommands: false, approaches: 0, autoDebug: false, review: true, autoAccept: 0 };
 
 /** Plain data the interface renders from */
 export function snapshotFiles(stage: Stage, hide: (p: string) => boolean = () => false): FileChange[] {
@@ -587,6 +592,31 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
   );
 
   const selectLane = useCallback((id: string, laneId: string) => update(id, (p) => ({ ...p, laneId })), [update]);
+
+  // Auto-accept: when a proposal started in this session is ready (and reviewed, when the reviewer is on), decide once.
+  // Proposals restored from an earlier session are never accepted behind your back.
+  const startedHere = useRef(new Set<string>());
+  useEffect(() => {
+    for (const p of proposals) if (p.status === 'working') startedHere.current.add(p.id);
+    if (!prefs.autoAccept) return;
+    for (const p of proposals) {
+      if (p.status !== 'review' || p.auto || p.pending || !startedHere.current.has(p.id)) continue;
+      const lane = laneOf(p);
+      if (!lane || lane.status !== 'done' || !lane.evidence) continue;
+      if (prefs.review && (!lane.review || lane.review.status === 'running')) continue;
+      const files = lane.files.filter((f) => !isHarnessFile(f.path));
+      if (!files.length) continue;
+      const risk = riskOf({ files, evidence: lane.evidence, review: lane.review?.status === 'done' ? lane.review : null });
+      const decision = autoAcceptable(risk, prefs.autoAccept, verdict(lane.evidence).verified);
+      // Decided once per proposal (auto is set), when it becomes ready: not a cascade
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      update(p.id, (x) => ({ ...x, auto: { accepted: decision.ok, why: decision.why, score: risk.score } }));
+      if (decision.ok) {
+        accept(p.id);
+        notify({ kind: 'success', title: `Auto-accepted: ${p.goal.slice(0, 60)}`, detail: `Risk ${risk.score}, verified. The version before it is in History.` });
+      }
+    }
+  }, [proposals, prefs.autoAccept, prefs.review, update, accept, notify]);
 
   const open = useCallback(
     (id: string | null) => {
