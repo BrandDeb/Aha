@@ -210,3 +210,24 @@ test('store: built-ins listed, installed skills written whole, turned off, remov
   assert.equal(await store.removeSkill('pdf'), true);
   assert.equal((await store.listSkills()).some((s) => s.name === 'pdf'), false);
 });
+
+test('ecosystem skills: the ones that fit the project are described, the rest listed by name', async () => {
+  const { relevantEcosystemSkills, ECOSYSTEM_SKILLS } = await import('../src/lib/skills/ecosystem.ts');
+  const { skillsPrompt } = await import('../src/lib/skills/format.ts');
+  const files = {
+    'package.json': JSON.stringify({ dependencies: { next: '16', react: '19', viem: '2' }, devDependencies: { tailwindcss: '4', vitest: '4' } }),
+    'app/page.tsx': '',
+    'contracts/Token.sol': '',
+    'pyproject.toml': '[project]\ndependencies = [\n  "fastapi>=0.1",\n  "pandas",\n]\n',
+    '.github/workflows/ci.yml': '',
+  };
+  const fit = relevantEcosystemSkills(files);
+  for (const name of ['react', 'nextjs', 'tailwind', 'vitest-jest', 'solidity-foundry', 'dapp-viem-wagmi', 'fastapi', 'pandas-data', 'github-actions', 'typescript-strict']) assert.ok(fit.has(name), name);
+  for (const name of ['vue', 'django', 'go', 'rust', 'kubernetes']) assert.ok(!fit.has(name), name);
+  assert.ok(ECOSYSTEM_SKILLS.length >= 30);
+  const metas = ECOSYSTEM_SKILLS.map(([name]) => ({ name, description: `about ${name}`, origin: 'builtin' as const, enabled: true }));
+  const prompt = skillsPrompt(metas, files);
+  assert.match(prompt, /- react: about react/);
+  assert.doesNotMatch(prompt, /- django: about django/);
+  assert.match(prompt, /Also available \(load by name when the task needs it\): .*django/);
+});

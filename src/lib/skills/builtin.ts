@@ -4,6 +4,8 @@
  * the agent reads only when the instructions point to them.
  */
 
+import { ECOSYSTEM_SKILLS } from './ecosystem.ts';
+
 type Folder = Record<string, string>;
 
 const skill = (name: string, description: string, body: string, extra: Folder = {}): [string, Folder] => [
@@ -390,4 +392,5 @@ Where to put it:
 Test a new skill by running a task that should trigger it and checking the agent loads and follows it.
 `
   ),
+  ...ECOSYSTEM_SKILLS,
 ]);

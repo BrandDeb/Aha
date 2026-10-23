@@ -15,7 +15,14 @@ interface Found {
   error?: string;
 }
 
-const SUGGESTED = [{ source: 'anthropics/skills', label: 'Anthropic’s skills' }];
+/** Popular open-source skill collections (each checked to hold SKILL.md folders) */
+const SUGGESTED = [
+  { source: 'anthropics/skills', label: 'Anthropic’s skills' },
+  { source: 'obra/superpowers', label: 'Superpowers (workflows)' },
+  { source: 'trailofbits/skills', label: 'Trail of Bits (security)' },
+  { source: 'huggingface/skills', label: 'Hugging Face (ML)' },
+  { source: 'vercel-labs/agent-skills', label: 'Vercel (web)' },
+];
 
 const TEMPLATE = `# What this skill does
 

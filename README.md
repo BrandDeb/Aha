@@ -455,6 +455,15 @@ use one directly.
 - **Built in:** systematic debugging, test-driven development, writing tests, code review, refactoring, security review
   (with a full checklist), performance, API design, CLI design, accessible frontend components, database changes, smart
   contract security (with Foundry patterns), documentation, dependency upgrades, and creating skills.
+- **Built in for the open-source ecosystems** (31 more, nothing to install): React, Next.js, Vue/Nuxt, Svelte/SvelteKit,
+  Tailwind, shadcn/ui, Vite, strict TypeScript, Node APIs (Hono, Express, Fastify), Prisma/Drizzle, FastAPI, Django,
+  pandas/Polars, pytest, Go, Rust, Vitest/Jest, Playwright, GitHub Actions, Docker, Kubernetes, OpenAPI, GraphQL,
+  PostgreSQL, Redis, accessibility (WCAG 2.2), SEO/AEO, i18n, Conventional Commits and releases, Solidity with
+  Foundry/Hardhat, and dapps with viem/wagmi. Each holds the conventions, commands and traps maintainers of that
+  ecosystem know. The agent sees the descriptions of the ones that fit your project (read from package.json,
+  pyproject, config files and file types) and the rest by name, so a big library never crowds its context.
+- **Popular collections, one click:** Anthropic's skills, Superpowers, Trail of Bits (security), Hugging Face (ML)
+  and Vercel (web) are listed under Settings → Skills → Add from GitHub.
 - **From GitHub:** **Settings → Skills → Add from GitHub** takes `owner/repo`, a folder in it, or a link to a `SKILL.md`,
   lists every skill it finds with its description, and installs the ones you pick, pinned to the commit it read (for example
   `anthropics/skills`). **Update** moves a skill to the latest commit. Private repositories work when you're signed in with

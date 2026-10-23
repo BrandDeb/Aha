@@ -40,7 +40,7 @@ export function systemPromptFor(files: Record<string, string>, skills: SkillMeta
   if (harness) sections.push(harness);
   const contracts = contractsPrompt(contractsOf(files).contracts);
   if (contracts) sections.push(contracts);
-  const skillSection = skillsPrompt([...projectSkills(files).map((s) => s.meta), ...skills]);
+  const skillSection = skillsPrompt([...projectSkills(files).map((s) => s.meta), ...skills], files);
   if (skillSection) sections.push(skillSection);
   return sections.join('\n\n');
 }
