@@ -219,7 +219,7 @@ export function detectStacks(files: Record<string, string>): Stack[] {
     const checks: Check[] = [];
     if (/rubocop/.test(files.Gemfile)) checks.push({ id: 'lint', label: 'Lint', run: 'bundle exec rubocop' });
     checks.push(anyPath(files, (p) => p.startsWith('spec/')) ? { id: 'test', label: 'Test', run: 'bundle exec rspec' } : { id: 'test', label: 'Test', run: 'bundle exec rake test' });
-    add(simple({ id: 'ruby', name: 'Ruby', setup: [{ name: 'Set up Ruby', uses: ACTIONS.ruby, with: { 'ruby-version': files['.ruby-version']?.trim() || '3.4', 'bundler-cache': true } }], install: [], image: 'ruby:3.4', checks }));
+    add(simple({ id: 'ruby', name: 'Ruby', setup: [{ name: 'Set up Ruby', uses: ACTIONS.ruby, with: { 'ruby-version': files['.ruby-version']?.trim() || '3.4', 'bundler-cache': true } }], install: ['bundle install'], image: 'ruby:3.4', checks }));
   }
   if ('composer.json' in files) {
     add(simple({ id: 'php', name: 'PHP · Composer', setup: [{ name: 'Set up PHP', uses: ACTIONS.php, with: { 'php-version': '8.4', tools: 'composer' } }], install: ['composer install --no-interaction --prefer-dist'], image: 'composer:2', checks: has(files, 'phpunit.xml', 'phpunit.xml.dist') ? [{ id: 'test', label: 'Test', run: 'vendor/bin/phpunit' }] : [{ id: 'lint', label: 'Validate', run: 'composer validate --strict' }] }));

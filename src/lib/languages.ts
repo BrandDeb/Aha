@@ -55,6 +55,8 @@ const ext = (p: string) => (p.includes('.') ? p.slice(p.lastIndexOf('.')).toLowe
 const dir = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
 const base = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 const withExt = (paths: string[], exts: string[]) => paths.filter((p) => exts.includes(ext(p))).sort();
+/** Test sources (tests/, src/test/, *_test.c, FooTest.java) are built by the test runner, not into the program */
+const notTests = (paths: string[]) => paths.filter((p) => !/(^|\/)(tests?|src\/test)\/|_test\.(c|cc|cpp|cxx)$|Tests?\.java$/.test(p));
 /** The entry first, then the other files, so the compiler sees the entry point first */
 const entryFirst = (entry: string, others: string[]) => [entry, ...others.filter((p) => p !== entry)];
 const runOutput = (args: string[]): LangStep => ({ label: 'run', tool: null, args, timeoutMs: RUN });
@@ -150,7 +152,7 @@ export const LANGUAGES: Language[] = [
     versionArgs: ['--version'],
     install: { windows: 'the bundled zig works out of the box (npm install), or winget install LLVM.LLVM', mac: 'xcode-select --install', linux: 'sudo apt install build-essential' },
     plan: ({ entry, paths, args, windows }) => [
-      { label: 'compile', tool: [['cc'], ['gcc'], ['clang'], ['zig', 'cc']], args: ['-O1', '-o', `${OUT_DIR}/main${windows ? '.exe' : ''}`, ...entryFirst(entry, withExt(paths, ['.c'])), '-lm'], timeoutMs: COMPILE },
+      { label: 'compile', tool: [['cc'], ['gcc'], ['clang'], ['zig', 'cc']], args: ['-O1', '-o', `${OUT_DIR}/main${windows ? '.exe' : ''}`, ...entryFirst(entry, notTests(withExt(paths, ['.c']))), '-lm'], timeoutMs: COMPILE },
       runOutput(args),
     ],
   },
@@ -163,7 +165,7 @@ export const LANGUAGES: Language[] = [
     versionArgs: ['--version'],
     install: { windows: 'the bundled zig works out of the box (npm install), or winget install LLVM.LLVM', mac: 'xcode-select --install', linux: 'sudo apt install build-essential' },
     plan: ({ entry, paths, args, windows }) => [
-      { label: 'compile', tool: [['c++'], ['g++'], ['clang++'], ['zig', 'c++']], args: ['-std=c++17', '-O1', '-o', `${OUT_DIR}/main${windows ? '.exe' : ''}`, ...entryFirst(entry, withExt(paths, ['.cpp', '.cc', '.cxx'])), '-lm'], timeoutMs: COMPILE },
+      { label: 'compile', tool: [['c++'], ['g++'], ['clang++'], ['zig', 'c++']], args: ['-std=c++17', '-O1', '-o', `${OUT_DIR}/main${windows ? '.exe' : ''}`, ...entryFirst(entry, notTests(withExt(paths, ['.cpp', '.cc', '.cxx']))), '-lm'], timeoutMs: COMPILE },
       runOutput(args),
     ],
   },
@@ -186,7 +188,7 @@ export const LANGUAGES: Language[] = [
     versionArgs: ['-version'],
     install: { windows: 'winget install EclipseAdoptium.Temurin.21.JDK', mac: 'brew install openjdk', linux: 'sudo apt install default-jdk' },
     plan: ({ entry, paths, read, args }) => {
-      const sources = withExt(paths, ['.java']);
+      const sources = notTests(withExt(paths, ['.java']));
       if (sources.length === 1) return [{ label: 'java', tool: [['java']], args: [entry, ...args], timeoutMs: COMPILE }];
       const pkg = /^\s*package\s+([\w.]+)\s*;/m.exec(read(entry) ?? '')?.[1];
       const main = `${pkg ? `${pkg}.` : ''}${base(entry).replace(/\.java$/i, '')}`;

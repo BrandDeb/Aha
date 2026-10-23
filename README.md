@@ -87,6 +87,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Accessibility** | Light, dark and high-contrast themes; ARIA tree, tabs and dialogs with focus management; skip link; live regions for builds and toasts; reduced motion respected |
 | **Python (uv)** | Python projects managed with [uv](https://docs.astral.sh/uv/): run files, add/remove/sync/lock/tree from a Packages panel or the terminal, pin a Python version, inline-script dependencies, environment variables for API keys, files your program writes land in the explorer. uv is detected, or downloaded from the official release with a checksum |
 | **Templates** | Eleven TypeScript starters (CI compiles every one with scriptc) and six Python/AI starters: LLM agent with tool calling, embeddings + search (RAG), local models (Ollama), pandas data analysis, an MCP server, a single-file uv script |
+| **Project templates** | A real project per language (Node.js, Python, Go, Rust, Java, Ruby, PHP, C, C++): a library and a CLI with unit tests in the language's usual framework (node:test, pytest, go test, cargo test, JUnit, Minitest, PHPUnit, make, CTest) and a CI workflow. Run works straight away; the Pipelines tab runs the tests. `npm run verify:templates` runs every one for real |
 
 Native executables are linked for the machine the server runs on. Use the WASM target (or `run`) for a
 portable artifact.

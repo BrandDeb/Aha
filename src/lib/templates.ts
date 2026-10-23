@@ -8,6 +8,9 @@
  */
 
 import { LANGUAGE_STARTERS } from './language-templates.ts';
+import { generatePipeline } from './pipelines/generate.ts';
+import { detectStacks } from './pipelines/stack.ts';
+import { PROJECT_TEMPLATES } from './project-templates.ts';
 import { PYTHON_TEMPLATES } from './python-templates.ts';
 import { WEB_STARTERS } from './web-templates.ts';
 
@@ -420,6 +423,16 @@ countdown(Number(process.argv[2] ?? '3'));
 `,
   },
   ...PYTHON_TEMPLATES,
+  ...PROJECT_TEMPLATES.map(({ id, name, description, filename, files, language }): Template => {
+    const { [filename]: code, ...rest } = files;
+    return { id, name, description, filename, code, files: { ...rest, ...ciFor(files) }, language };
+  }),
   ...LANGUAGE_STARTERS.map(({ id, name, description, filename, code, files, language }): Template => ({ id, name, description, filename, code, files, language })),
   ...WEB_STARTERS.map(({ id, name, description, filename, code, files }): Template => ({ id, name, description, filename, code, files, language: 'web' })),
 ];
+
+/** The CI workflow the Pipelines tab would generate for these files (a project template ships with it) */
+function ciFor(files: Record<string, string>): Record<string, string> {
+  const generated = generatePipeline(detectStacks(files), files, { provider: 'github' });
+  return 'error' in generated ? {} : { [generated.path]: generated.content };
+}

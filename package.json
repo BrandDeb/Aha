@@ -17,7 +17,8 @@
     "clean": "rm -rf temp .next dist",
     "docker:build": "docker-compose build",
     "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down"
+    "docker:down": "docker-compose down",
+    "verify:templates": "node --experimental-strip-types scripts/verify-templates.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
