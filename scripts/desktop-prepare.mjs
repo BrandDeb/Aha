@@ -105,6 +105,18 @@ drop('monaco-editor/esm');
 drop('monaco-editor/dev');
 // Linux: npm installs both libc flavours of scriptc; keep the one this target uses
 if (target.includes('linux-gnu')) for (const name of readdirSync(path.join(nm, '@scriptc'))) if (name.endsWith('-musl')) drop(`@scriptc/${name}`);
+// npm's command shortcuts for what was dropped (zig, and its .cmd/.ps1 shims on Windows), and any other
+// link left pointing at nothing: the bundler follows links and stops at a missing target
+for (const name of readdirSync(path.join(nm, '.bin'))) if (/^zig(\.cmd|\.ps1)?$/i.test(name)) drop(`.bin/${name}`);
+function dropDangling(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) {
+      if (!existsSync(full)) rmSync(full, { force: true });
+    } else if (entry.isDirectory()) dropDangling(full);
+  }
+}
+dropDangling(nm);
 
 function size(dir) {
   let total = 0;
