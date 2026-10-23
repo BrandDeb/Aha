@@ -594,6 +594,11 @@ terminal's `run`) show the output, take arguments and standard input.
 | R, Julia | Swift, Dart | Elixir, Erlang, Gleam, Haskell |
 | Nim, Crystal, Odin, D | OCaml, Racket, Fortran | |
 
+**Projects with tests and CI:** besides a single-file starter, 17 languages have a real project to start from (Node, Python,
+Go, Rust, Java, Ruby, PHP, C, C++, Bun, Deno, C#, Kotlin, Swift, Zig, Dart, Elixir): the same small command-line tool,
+split into a library and a program, with unit tests in the language's own framework and a CI workflow. `npm run
+verify:templates` runs every one and its CI for real.
+
 **Smart contracts:** Solidity with Foundry (build plus unit and fuzz tests; `forge` fetches the `solc` each contract asks for),
 Vyper (ABI and bytecode), Cairo for Starknet (Scarb), and Move for Sui (build and test).
 
@@ -725,6 +730,7 @@ Maintenance only works when the studio listens on your own machine (the default)
 | `/` | Workspace |
 | `/landing` | Product page |
 | `/pricing` | Plans (Free, Pro, Premium) and a comparison; edit them in `src/lib/pricing.ts` |
+| `/docs` | Developer docs, made from this README: one page per section, with search |
 | `/faq` | Searchable FAQ |
 | `/onboarding` | Three-step tour ending in the workspace with a template (`/?template=<id>`) |
 | `/?kit=<id>` | Opens a built-in [field kit](#field-kits) |

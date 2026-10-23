@@ -5,6 +5,7 @@ const NAV = [
   { href: '/landing', label: 'Product' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/download', label: 'Download' },
+  { href: '/docs', label: 'Docs' },
   { href: '/faq', label: 'FAQ' },
   { href: '/', label: 'Studio' },
 ] as const;
@@ -78,6 +79,7 @@ export function SiteFooter() {
         <nav className="flex flex-wrap items-center gap-x-5 gap-y-2" aria-label="Footer">
           <Link href="/landing" className="hover:text-gray-100 transition-colors">Product</Link>
           <Link href="/pricing" className="hover:text-gray-100 transition-colors">Pricing</Link>
+          <Link href="/docs" className="hover:text-gray-100 transition-colors">Docs</Link>
           <Link href="/faq" className="hover:text-gray-100 transition-colors">FAQ</Link>
           <a href="https://scriptc.dev" className="hover:text-gray-100 transition-colors">scriptc</a>
         </nav>
