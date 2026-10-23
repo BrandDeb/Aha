@@ -62,12 +62,13 @@ jobs:
       - name: Rust tests
         working-directory: src-tauri
         shell: bash
-        # The build script wants the bundled Node.js to exist; tests don't run it
+        # Tauri's build script wants the bundled Node.js and the app folder to exist; the tests use neither,
+        # so placeholders stand in until the next step assembles the real ones
         run: |
-          mkdir -p binaries
+          mkdir -p binaries ../desktop/app
           touch "binaries/node-${{ matrix.target }}$([ '${{ runner.os }}' = 'Windows' ] && echo .exe)"
           cargo test --target ${{ matrix.target }}
-          rm -f binaries/node-*
+          rm -rf binaries/node-* ../desktop
 
       - name: Assemble the app (studio build, production dependencies, verified Node.js)
         run: node scripts/desktop-prepare.mjs --target ${{ matrix.target }}
