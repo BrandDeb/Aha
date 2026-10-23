@@ -479,3 +479,17 @@ html.zen [data-zen-hide] {
   text-underline-offset: 3px;
   font-weight: 600;
 }
+
+/* Live values: what each line did, after the code; lines that never ran fade */
+.live-value {
+  color: color-mix(in srgb, var(--color-accent) 75%, transparent);
+  font-style: italic;
+  padding-left: 1.5ch;
+}
+.live-threw {
+  color: var(--color-danger);
+  font-style: normal;
+}
+.live-unrun {
+  opacity: 0.4;
+}

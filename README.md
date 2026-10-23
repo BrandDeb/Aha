@@ -70,6 +70,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Terminal** | Built-in commands over the project (`ls cd cat mv rm tree echo > file …`, `run`) plus a real shell: anything else (`npm test`, `go test ./...`, `cargo build`, `make`, pipes and `&&`) runs in the project's folder on your machine, and files it changes come back into the editor. `sh …` or `!…` forces the real shell |
 | **Layout** | The side panel has four groups: Run (Build, Language, Python, Packages), Agent (Do, Ask, Keep going), Source (Git, Pipelines, History) and Project (Graph, Kit). Run takes program arguments in the field beside it; a program that answers with its usage gets a hint instead of a failure. The status bar shows the branch, the last build and run, the current failure, the agent and the worker, each one click from its panel. A first visit gets a one-minute welcome (what you're building, a model, GitHub) |
 | **Build** | Nine outputs from one menu — native, WASM, LLVM IR, scriptc IR (JSON), assembly, WASM text (WAT), object file, static library, WASM reactor — with an output viewer (highlighted text, or a hexdump for binaries), build options (release/dev, strip, dynamic engine, sanitizers, Windows window), pipeline timings, scriptc coverage and a run profile |
+| **Live values** | Turn on **Live** above the editor and the entry file (TypeScript, JavaScript or Python) runs after each pause in typing: every line shows what it did, right after the code — the values it set (`sum = 3, 7, 12 ×3` for a loop), what it returned, what it printed and the error it threw — and lines that never ran fade. Hover a line for every value. Local only, like Run; see [Live values](#live-values) |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
 | **Pipelines** | CI/CD from the project: GitHub Actions or GitLab CI with lint, test and build, deploys (Pages, containers, Vercel, Netlify, Fly.io, release binaries), run locally before you push, GitHub run status in the Git tab, failures fixed by the agent; see [DevOps](#devops-pipelines-in-the-studio) |
@@ -94,6 +95,44 @@ Native executables are linked for the machine the server runs on. Use the WASM t
 portable artifact.
 
 ---
+
+## Live values
+
+The fastest way to understand code is to watch it run. With **Live** on (the toggle above the editor, or
+"Turn on live values" in ⌘K), the studio runs your entry file after every pause in typing and writes what
+happened onto the code itself:
+
+```ts
+const prices = [3, 4, 5];          prices = [3, 4, 5]
+let sum = 0;                       sum = 0
+for (const p of prices) {          p = 3, 4, 5
+  sum += p;                        sum = 3, 7, 12   ×3
+}
+if (sum > 100) {
+  console.log('big');              (faded: never ran)
+} else {
+  console.log('small', sum);       → small 12
+}
+```
+
+- **Values** a line declared or assigned (including destructuring, `x++`, `obj.field = …`), the loop
+  variable of each iteration, what a function or arrow returned (`↩ 24`), what the line printed (`→ …`),
+  and the error it threw (`✕ Error: boom`, on the line that threw it).
+- **How often** each line ran (`×3`), and which lines **never ran** (faded) — dead branches show up while
+  you write them.
+- **Every file** of the project is followed, not just the entry: a helper in another file shows its values too.
+- **Hover** a line for the full list of values.
+
+TypeScript and JavaScript are instrumented with the TypeScript compiler (calls added around your statements,
+nothing else changed) and run under Node as CommonJS, top-level `await` included. Python runs under a
+`sys.settrace` tracer (with uv when the project has a `pyproject.toml`), comparing each line's variables before
+and after. While you type a run gets 4 s; a program that runs longer, or loops forever, stops and shows the
+start of the run. Results are only drawn on the code they came from: while you type, the last ones move with
+your edits until the next run lands.
+
+Live values run your program on the server, so they work where Run does: on your own machine (or with
+`NANOCLI_RUN=1`). Your program runs on every pause, so keep it off for code that sends email or writes to a
+real database.
 
 ## Assistant
 
@@ -668,6 +707,12 @@ trusted-host and run-enabled checks apply.
 `GET` → `{ enabled, languages: [{ id, name, available, version?, install }] }`. `POST { projectId, entry, files, args?, stdin?, env?, language? }`
 streams newline-delimited JSON like `/api/python`: `{ t: "out", s, d }` lines, then `{ t: "done", code, ms, changed, removed, skipped, timedOut?, truncated?, error? }`.
 Paths and environment variable names are validated; `PATH`, `HOME`, loader and toolchain variables (`GOPATH`, `CARGO_*`, `JAVA_*`…) can't be set.
+
+### `/api/live` (local only)
+
+`GET` → `{ enabled }`. `POST { projectId, entry, files, args?, quick? }` runs the entry with live values and returns
+`{ ok, files: { [path]: { statementLines, lines: { [line]: { hits, values: { [name]: { n, first, last } } } } } }, output, code, ms, truncated?, error? }`.
+`return`, `out` and `threw` are the reserved value names. `quick` (while typing) limits the run to 4 s, otherwise 15 s.
 
 ### `/api/doctor` and `/api/update` (local only)
 

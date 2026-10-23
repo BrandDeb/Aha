@@ -35,6 +35,8 @@ import { useProposals } from './proposals';
 import { useWorker } from './worker';
 import { useWorkspace } from './store';
 import { useToast } from './toasts';
+import { useLiveValues } from './live-client';
+import { liveSummary } from '@/lib/live/display';
 
 // Everything beyond the editor, terminal and Build panel loads the first time it is opened, so the studio starts with
 // only what it needs. The chunks are small and local, so opening one feels instant.
@@ -605,6 +607,15 @@ export function Workspace() {
     setTimeout(() => terminalRun.current?.(args ? `run -- ${args}` : 'run'), 0);
   }, []);
 
+  // Live values: the entry runs after each pause in typing and every line shows what it did
+  const live = useLiveValues({ projectName: project.name, files: project.files, entry: project.entry, args: runArgs });
+  const { available: liveAvailable, on: liveOn, setOn: setLiveOn } = live;
+  const liveFor = (path: string) => {
+    if (!live.on || !live.available) return null;
+    const file = live.forFile(path, project.files[path]);
+    return { file, stale: !file && !!live.result };
+  };
+
   const { start: startDevServer, state: devState } = devServer;
   const runPreview = useCallback(() => {
     setShowPreview(true);
@@ -687,6 +698,7 @@ export function Workspace() {
     { id: 'build.download', category: 'Build', title: 'Download last artifact', run: () => void downloadArtifact(), enabled: !!lastBuild?.success },
     { id: 'file.save', category: 'File', title: 'Save version', keys: DEFAULT_KEYS['file.save'], run: () => void save() },
     { id: 'file.format', category: 'Editor', title: 'Format document', keys: DEFAULT_KEYS['file.format'], run: () => void format() },
+    ...(liveAvailable ? [{ id: 'view.live', category: 'Editor', title: liveOn ? 'Turn off live values' : 'Turn on live values (show what each line did)', run: () => setLiveOn(!liveOn) }] : []),
     { id: 'file.new-project', category: 'File', title: 'New project from template…', keys: DEFAULT_KEYS['file.new-project'], run: () => setDialog('templates') },
     { id: 'file.import-export', category: 'File', title: 'Import & export…', keys: DEFAULT_KEYS['file.import-export'], run: () => setDialog('project') },
     { id: 'view.palette', category: 'View', title: 'Command palette', keys: DEFAULT_KEYS['view.palette'], run: () => setDialog('palette') },
@@ -709,7 +721,7 @@ export function Workspace() {
     { id: 'collab.toggle', category: 'Collaboration', title: collab ? 'Leave live session' : 'Start live session', run: () => setCollab((v) => !v) },
     { id: 'prefs.settings', category: 'Preferences', title: 'Settings', keys: DEFAULT_KEYS['prefs.settings'], run: () => { setSettingsTab('general'); setDialog('settings'); } },
     { id: 'prefs.maintenance', category: 'Preferences', title: 'Updates and health checks', run: () => { setSettingsTab('maintenance'); setDialog('settings'); } },
-  ], [compileOrRun, runApp, web, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, collab]);
+  ], [compileOrRun, runApp, web, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, collab, liveAvailable, liveOn, setLiveOn]);
 
   const bindings = useMemo(() => {
     const map: Record<string, string> = { ...DEFAULT_KEYS, ...settings.keybindings };
@@ -798,6 +810,7 @@ export function Workspace() {
             fontSize={settings.fontSize}
             theme={settings.theme}
             extensions={extensions}
+            live={liveFor(path)}
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
@@ -965,6 +978,27 @@ export function Workspace() {
                   })}
                 </div>
                 <div className="flex shrink-0 items-center gap-1 px-2">
+                  {live.available && (
+                    <span className="flex items-center">
+                      <button
+                        onClick={() => live.setOn(!live.on)}
+                        className="btn btn-ghost btn-sm gap-1.5"
+                        aria-pressed={live.on}
+                        title={live.on ? liveSummary(live.result) : 'Run as you type and show, on every line, what it did: values, how often it ran, what it printed. Lines that never ran fade.'}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`h-1.5 w-1.5 rounded-full ${!live.on ? 'bg-gray-600' : live.running ? 'animate-pulse bg-accent' : live.result && !live.result.ok ? 'bg-danger' : 'bg-accent'}`}
+                        />
+                        Live
+                      </button>
+                      {live.on && live.result && (
+                        <span className={`hidden max-w-[16rem] truncate text-[11px] lg:inline ${live.result.ok ? 'text-gray-500' : 'text-danger'}`} role="status" aria-live="polite">
+                          {liveSummary(live.result)}
+                        </span>
+                      )}
+                    </span>
+                  )}
                   <button onClick={() => void format()} disabled={!active || !canFormat(active)} className="btn btn-ghost btn-sm" title={formatCombo(bindings['file.format'] ?? '', isMac)}>Format</button>
                   <button
                     onClick={() => dispatch({ type: 'split', path: split ? null : tabs.find((t) => t !== active) ?? active })}

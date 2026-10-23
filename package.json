@@ -38,6 +38,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "scriptc": "^0.2.2",
+    "typescript": "^5",
     "wabt": "^1.0.39",
     "websocket": "^1.0.34"
   },
@@ -53,8 +54,7 @@
     "@types/websocket": "^1.0.5",
     "eslint": "^9",
     "eslint-config-next": "^16.4.2",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "tailwindcss": "^4"
   },
   "engines": {
     "node": ">=24.0.0"

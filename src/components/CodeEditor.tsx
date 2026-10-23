@@ -7,6 +7,8 @@ import type { BeforeMount, DiffOnMount, Monaco, OnMount } from '@monaco-editor/r
 import type { Diagnostic } from '@/lib/compiler-browser';
 import { NODE_TYPES } from '@/lib/monaco-node-types';
 import { DEFAULT_APPEARANCE, accentTokens, syntaxColors } from '@/workspace/appearance';
+import { liveView } from '@/lib/live/display';
+import type { LiveResult } from '@/lib/live/shared';
 
 // Serve the editor from this server instead of a public CDN: it works offline, loads from the same
 // origin as the app, and never sends a request to a third party. (See src/app/monaco/.)
@@ -294,6 +296,11 @@ interface CodeEditorProps {
   fontSize?: number;
   theme?: 'dark' | 'light';
   extensions?: EditorExtensions;
+  /**
+   * Live values for this file. stale: the file changed since that run, so what is shown stays
+   * (it moves with the edits) until the next result. null: live mode is off.
+   */
+  live?: { file: LiveResult['files'][string] | undefined; stale: boolean } | null;
 }
 
 export function CodeEditor({
@@ -309,6 +316,7 @@ export function CodeEditor({
   fontSize = 14,
   theme = 'dark',
   extensions = { wordWrap: true },
+  live = null,
 }: CodeEditorProps) {
   const editorRef = useRef<EditorInstance | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -361,6 +369,37 @@ export function CodeEditor({
     applyTodoHighlights();
   });
 
+  const liveRef = useRef<{ clear: () => void } | null>(null);
+  const livePathRef = useRef<string | null>(null);
+  const applyLive = () => {
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (live?.stale && livePathRef.current === path) return;
+    liveRef.current?.clear();
+    liveRef.current = null;
+    livePathRef.current = null;
+    if (!editor || !model || !live || live.stale || !live.file) return;
+    const { lines, unrun } = liveView(live.file);
+    const count = model.getLineCount();
+    const whole = (line: number) => ({ startLineNumber: line, startColumn: 1, endLineNumber: line, endColumn: model.getLineMaxColumn(line) });
+    liveRef.current = editor.createDecorationsCollection([
+      ...lines.filter((l) => l.line <= count).map((l) => ({
+        range: whole(l.line),
+        options: { after: { content: l.text, inlineClassName: l.kind === 'threw' ? 'live-value live-threw' : 'live-value' }, hoverMessage: { value: l.hover } },
+      })),
+      ...unrun.filter((line) => line <= count).map((line) => ({ range: whole(line), options: { inlineClassName: 'live-unrun', hoverMessage: { value: 'This line did not run' } } })),
+    ]);
+    livePathRef.current = path;
+  };
+  // Re-applied when the result, its freshness or the file changes (not on every render)
+  const liveFile = live?.file;
+  const liveStale = live?.stale;
+  const liveOff = live === null;
+  useEffect(() => {
+    applyLive();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyLive reads the current props
+  }, [liveFile, liveStale, liveOff, path]);
+
   // Keep the other project files registered as models for cross-file IntelliSense
   const syncModels = () => {
     const monaco = monacoRef.current;
@@ -393,7 +432,12 @@ export function CodeEditor({
     syncModels();
   });
 
-  useEffect(() => () => onEditor?.(null), [onEditor]);
+  // Callers pass a new callback each render: tell the latest one, and only on unmount that the editor is gone
+  const onEditorRef = useRef(onEditor);
+  useEffect(() => {
+    onEditorRef.current = onEditor;
+  }, [onEditor]);
+  useEffect(() => () => onEditorRef.current?.(null), []);
 
   const handleMount: OnMount = (editor, monaco) => {
     editorRef.current = editor;
@@ -401,6 +445,7 @@ export function CodeEditor({
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => onRunRef.current?.());
     editor.onDidFocusEditorText(() => onFocus?.());
     onEditor?.(editor);
+    applyLive();
     // The sync effect ran before Monaco mounted, so register the other files now
     syncModels();
     applyMarkers();
