@@ -194,6 +194,8 @@ export interface AiConfig {
   keys: Record<string, string>;
   /** Base URL overrides for local/custom providers */
   baseUrls: Record<string, string>;
+  /** A different provider and model for a job (the second reviewer, Ask, the worker); unset jobs use the main one */
+  jobs?: Partial<Record<'reviewer' | 'ask' | 'worker', { provider: string; model: string }>>;
 }
 
 export const EMPTY_AI_CONFIG: AiConfig = { provider: '', models: {}, keys: {}, baseUrls: {} };
@@ -222,6 +224,16 @@ export function resolveProvider(config: AiConfig): ResolvedProvider | { error: s
   if (provider.needsKey && !apiKey) return { error: `Add your ${provider.name} API key.` };
   if (!model) return { error: `Choose a ${provider.name} model.` };
   return { provider, baseUrl, apiKey, model };
+}
+
+/** The provider and model for one job: its own choice when it has one that is ready, else the main one */
+export function resolveFor(config: AiConfig, job: 'agent' | 'reviewer' | 'ask' | 'worker'): ResolvedProvider | { error: string } {
+  const own = job === 'agent' ? undefined : config.jobs?.[job];
+  if (own?.provider) {
+    const resolved = resolveProvider({ ...config, provider: own.provider, models: { ...config.models, [own.provider]: own.model || config.models[own.provider] || '' } });
+    if (!('error' in resolved)) return resolved;
+  }
+  return resolveProvider(config);
 }
 
 /** Like resolveProvider, for reading the model list: no model needed, and some providers need no key */

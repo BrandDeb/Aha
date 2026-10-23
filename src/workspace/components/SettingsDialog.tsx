@@ -6,6 +6,7 @@ import { comboFromEvent, formatCombo } from '../project';
 import { DEFAULT_SETTINGS, useWorkspace, type Settings } from '../store';
 import { useToast } from '../toasts';
 import { AiModelSettings } from './AiModelSettings';
+import { ModelAdvisor } from './ModelAdvisor';
 import { ConnectorSettings } from './ConnectorSettings';
 import { SkillSettings } from './SkillSettings';
 import { MaintenanceSettings } from './MaintenanceSettings';
@@ -204,7 +205,15 @@ export function SettingsDialog({ commands, isMac, onClose, initialTab = 'general
           </div>
         )}
 
-        {tab === 'ai' && <AiModelSettings />}
+        {tab === 'ai' && (
+          <div className="space-y-8">
+            <ModelAdvisor />
+            <div className="border-t border-border pt-6">
+              <h3 className="eyebrow mb-3">Choose by hand</h3>
+              <AiModelSettings />
+            </div>
+          </div>
+        )}
 
         {tab === 'skills' && <SkillSettings />}
         {tab === 'connectors' && <ConnectorSettings />}

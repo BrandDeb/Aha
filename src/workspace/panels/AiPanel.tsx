@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { SYSTEM_PROMPT, buildMessages, parseAiRequest } from '@/lib/ai';
-import { getProvider, resolveProvider, streamChat } from '@/lib/ai-providers';
+import { getProvider, resolveFor, streamChat } from '@/lib/ai-providers';
 import type { Diagnostic } from '@/lib/compiler-browser';
 import { useAiConfig } from '../ai-config';
 import { AiModelSettings, useServerAi } from '../components/AiModelSettings';
@@ -113,7 +113,7 @@ export function AiPanel({ diagnostics, getSelection }: AiPanelProps) {
       diagnostics: diagnostics.map((d) => ({ ...d, file: d.file ?? project.entry })),
     };
     try {
-      const target = resolveProvider(config);
+      const target = resolveFor(config, 'ask');
       if ('error' in target) {
         fail(target.error);
         setConfiguring(true);

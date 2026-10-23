@@ -69,7 +69,12 @@ export function WelcomeDialog({ onClose, onStart }: { onClose: () => void; onSta
             {hasModel ? (
               <p className="rounded-lg border border-[var(--accent-line)] bg-[var(--accent-soft)] px-3 py-2 text-sm text-gray-100">✓ Using {provider?.name}{config.models[config.provider] ? ` · ${config.models[config.provider]}` : ''}</p>
             ) : (
-              <button onClick={() => actions.openSettings('ai')} className="btn btn-primary w-full">Choose a model</button>
+              <button onClick={() => actions.openSettings('ai')} className="btn btn-primary w-full">See which model to use, and why</button>
+            )}
+            {hasModel && (
+              <button onClick={() => actions.openSettings('ai')} className="text-xs text-gray-400 underline-offset-2 hover:text-gray-100 hover:underline">
+                Compare: which model for which job (agent, reviewer, questions, worker)
+              </button>
             )}
             <div className="flex justify-between">
               <button onClick={() => setStep(0)} className="btn btn-ghost btn-sm">Back</button>

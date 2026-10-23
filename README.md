@@ -226,6 +226,16 @@ studio is hosted elsewhere, start it with `OLLAMA_ORIGINS=https://your-studio.ex
 
 ---
 
+### Which model for which job
+
+Settings → AI models opens on **Which model for which job**. The studio does four jobs with different needs:
+the **Agent** (many tool calls in a row: reliability and coding strength), the **second reviewer** (a careful
+cold read, best from a different model family than the agent), **Ask** (fast and cheap) and the **worker**
+(many background tasks: cost per task). Pick what matters (best results, free, or private on your machine) and
+each job gets a recommended provider and model with the reason, the cost, whether you already have the key,
+and a link to the page where you get it. Paste a key and it is checked on the spot; **Use this setup** assigns
+each job its model (the agent's becomes the main one), and a job without a ready key keeps the main model.
+
 ## Agent
 
 Type a goal into the bar at the top of the workspace (**Ctrl/⌘ + L**): "fix the build", "add tests", "add a `--help`

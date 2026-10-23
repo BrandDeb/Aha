@@ -26,7 +26,7 @@ import { workspaceTools } from '@/lib/agent/tools';
 import { skillTools } from '@/lib/skills/format';
 import { fetchSkillIndex, skillLibrary } from './skills-client';
 import { DEFAULT_BUDGET, type AgentEvent, type Budget, type Message, type Risk, type StopReason, type ToolCall, type ToolResult } from '@/lib/agent/types';
-import { resolveProvider } from '@/lib/ai-providers';
+import { resolveFor, resolveProvider } from '@/lib/ai-providers';
 import { createAgentHost } from './agent-host';
 import { useAiConfig } from './ai-config';
 import { buildConnectorTools } from './connectors-client';
@@ -161,6 +161,10 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
   const { project, dispatch, saveSnapshot, hydrated } = useWorkspace();
   const { notify } = useToast();
   const config = useAiConfig();
+  const configRef = useRef(config);
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [prefs, setPrefsState] = useState<AgentPrefs>(DEFAULT_PREFS);
@@ -176,6 +180,7 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
     projectRef.current = project;
   }, [project]);
   const prefsRef = useRef<AgentPrefs>(DEFAULT_PREFS);
+
   const proposalsRef = useRef<Proposal[]>([]);
   useEffect(() => {
     proposalsRef.current = proposals;
@@ -288,7 +293,10 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
           evidence: evidence ? chipsFor(evidence).map((c) => c.label) : [],
           contracts: contractsOf(stage.files()).contracts.map((c) => c.rule),
         });
-        const turn = await callModelFor(target)({ system: REVIEWER_PROMPT, messages: [{ role: 'user', content: input }], tools: [], signal: controller.signal });
+        // The reviewer's own model when one is set (a different model catches different mistakes)
+        const own = resolveFor(configRef.current, 'reviewer');
+        const reviewer = 'error' in own || own.provider.kind === 'server' ? target : own;
+        const turn = await callModelFor(reviewer)({ system: REVIEWER_PROMPT, messages: [{ role: 'user', content: input }], tools: [], signal: controller.signal });
         setReview({ status: 'done', ...parseReview(turn.text) });
       } catch (error) {
         setReview({ status: 'error', error: (error as Error).name === 'AbortError' ? 'The review took too long' : (error as Error).message });
@@ -427,8 +435,8 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
     [finish, log, update, reviewLane]
   );
 
-  const targetOrExplain = useCallback((quiet = false) => {
-    const target = resolveProvider(config);
+  const targetOrExplain = useCallback((quiet = false, job: 'agent' | 'worker' = 'agent') => {
+    const target = resolveFor(config, job);
     if ('error' in target) {
       if (!quiet) notify({ kind: 'error', title: 'Choose a model first', detail: `${target.error} Open the Agent tab to pick one; free and local options are listed.` });
       return null;
@@ -444,7 +452,8 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
     (goal, options = {}) => {
       const text = goal.trim();
       if (!text) return null;
-      const target = targetOrExplain(options.quiet);
+      // The worker can run on its own (cheaper) model; everything else uses the agent's
+      const target = targetOrExplain(options.quiet, options.origin === 'worker' ? 'worker' : 'agent');
       if (!target) return null;
       const k = options.approaches ?? prefs.approaches;
       const id = `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;

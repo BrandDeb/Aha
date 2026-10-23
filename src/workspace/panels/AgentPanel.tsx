@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { maxModelCalls } from '@/lib/agent/harness';
 import { getProvider } from '@/lib/ai-providers';
+import { useActions } from '../actions';
 import { useAiConfig } from '../ai-config';
 import { AiModelSettings } from '../components/AiModelSettings';
 import { ago, BUDGETS, laneOf, stateOf, useProposals, type AgentPrefs } from '../proposals';
@@ -10,6 +11,7 @@ import { useSkillIndex } from '../skills-client';
 
 /** The Agent tab: which model, how it works, and every proposal so far */
 export function AgentPanel() {
+  const actions = useActions();
   const config = useAiConfig();
   const provider = getProvider(config.provider);
   const { proposals, activeId, ask, open, remove, prefs, setPrefs } = useProposals();
@@ -44,7 +46,8 @@ export function AgentPanel() {
 
       {(configuring || !ready) && (
         <div className="max-h-[70%] shrink-0 overflow-y-auto border-b border-border p-4">
-          <p className="mb-3 text-sm text-gray-300">The agent calls tools, so it needs a model with tool support: your own key (Anthropic, OpenAI, Gemini, Groq, OpenRouter) or a local model in Ollama.</p>
+          <p className="mb-2 text-sm text-gray-300">The agent calls tools, so it needs a model with tool support: your own key (Anthropic, OpenAI, Gemini, Groq, OpenRouter) or a local model in Ollama.</p>
+          <button onClick={() => actions.openSettings('ai')} className="mb-3 text-xs text-accent underline-offset-2 hover:underline">Not sure? See which model to use for which job, and why</button>
           <AiModelSettings compact onSelect={() => setConfiguring(true)} />
           {ready && <button onClick={() => setConfiguring(false)} className="btn btn-secondary btn-sm mt-3 w-full">Done</button>}
         </div>
