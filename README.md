@@ -74,6 +74,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **AI autocomplete** | Grey-text suggestions as you type, from any model (the one chosen for Autocomplete in Settings → AI models, or the main one): it sees the code around the cursor and the files it imports, and only what is missing is shown (echoes of the current line, code fences and anything already after the cursor are stripped). Tab accepts, Ctrl/⌘ + → accepts a word, Alt + \\ asks on demand. Answers are cached and cancelled as you type on; switch it off in Settings → Extensions |
 | **Live values** | Turn on **Live** above the editor and the entry file (TypeScript, JavaScript or Python) runs after each pause in typing: every line shows what it did, right after the code — the values it set (`sum = 3, 7, 12 ×3` for a loop), what it returned, what it printed and the error it threw — and lines that never ran fade. Hover a line for every value. Local only, like Run; see [Live values](#live-values) |
 | **Rewind** | Every live run is recorded: scrub back and forth through it, play it back, and see each variable as it was at that moment, with the line that ran highlighted. Click a variable to jump to where it changes; a crash opens on the line that threw; ask the agent about any moment. See [Rewind](#rewind) |
+| **Click to edit** | In the in-browser preview, press ⌖ Edit and click any element: its code opens (exact for React and Preact), its text and classes can be edited right there (written into the source), or describe a change and the agent makes it. ⇩ saves the app as one HTML page to share. See [Web apps and live preview](#web-apps-and-live-preview) |
 | **Contracts** | Rules that stay true, written in words and checked by a pattern or a command ("no console.log in src", "every route checks the session", "the tests pass"). The agent is told every one and checks them before it finishes, a proposal that breaks one is never marked verified, the worker fixes broken ones, and the status bar shows how they stand; see [Contracts](#contracts) |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
@@ -585,6 +586,19 @@ are compiled there too, and npm packages load from [esm.sh](https://esm.sh) at t
 after an edit takes milliseconds; the page reloads, and the app's `console` output and errors appear under **Console**.
 It all happens in a frame sandboxed to an opaque origin, so the project's code can't reach the studio, its storage or your
 keys. Next.js, Nuxt, SvelteKit, Astro, React Router, Angular and Solid need their dev server.
+
+**Click to edit.** In the in-browser preview, press **⌖ Edit** and click anything in the running app. The studio opens
+the code that drew it (React and Preact are exact: the preview's JSX runtime stamps every element with its file, line and
+column; Vue, Svelte and plain HTML are found by their text and classes) and a card lets you:
+
+- change its **text** or **classes** right there: the edit is written into the source, so the code stays the truth and
+  the preview rebuilds in milliseconds (handy with Tailwind: retype `text-2xl` as `text-4xl` and watch it grow);
+- **describe a change** ("make it a pill", "only show when logged in"): the agent gets the element, the code around it
+  and the components it sits in, and its work arrives as a proposal like any other.
+
+Text that is an expression (`{count}`) is left to the agent; only literal text and plain class strings are edited in
+place. **⇩** saves the built app as a single HTML page you can send to anyone: it opens in any browser, no studio needed
+(packages load from esm.sh).
 
 Like **Other languages** below, this runs your project's code (and its packages' install scripts) on the machine hosting
 the studio, so it is on only when the studio listens on that machine alone. `NANOCLI_DEV=0` turns it off and `=1` forces

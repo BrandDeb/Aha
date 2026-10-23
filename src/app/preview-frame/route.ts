@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { jsxStampModule, PICKER_PRELUDE } from '@/lib/visual-edit';
 import { browserPreviewSupport, cssModule, cssRuntimes, cssUrl, htmlWithBundle, npmUrl, previewBuilderMain, previewEntry, resolveProjectPath, rewriteCssImports, tailwindSource } from '@/lib/browser-preview';
 
 export const dynamic = 'force-dynamic';
@@ -16,8 +17,8 @@ export function GET(request: NextRequest) {
   const proto = request.headers.get('x-forwarded-proto') ?? request.nextUrl.protocol.replace(':', '');
   const self = host && /^[\w.:[\]-]+$/.test(host) && /^https?$/.test(proto) ? `${proto}://${host}` : request.nextUrl.origin;
   const version = process.env.NEXT_PUBLIC_ESBUILD_VERSION;
-  const cfg = { esbuildUrl: `${self}/esbuild/${version}/browser.js`, wasmUrl: `${self}/esbuild/${version}/esbuild.wasm` };
-  const helpers = { browserPreviewSupport, previewEntry, resolveProjectPath, npmUrl, htmlWithBundle, cssUrl, cssRuntimes, tailwindSource, rewriteCssImports, cssModule };
+  const cfg = { esbuildUrl: `${self}/esbuild/${version}/browser.js`, wasmUrl: `${self}/esbuild/${version}/esbuild.wasm`, picker: PICKER_PRELUDE };
+  const helpers = { browserPreviewSupport, previewEntry, resolveProjectPath, npmUrl, htmlWithBundle, cssUrl, cssRuntimes, tailwindSource, rewriteCssImports, cssModule, jsxStampModule };
   // The program goes inside a <script> element: a literal "</script" in its strings would end the element
   // early, so it is written as "<\/script", which means the same in JavaScript strings, templates and regexes
   const inScript = (code: string) => code.replace(/<\/(script)/gi, '<\\/$1').replace(/<!--/g, '<\\!--');

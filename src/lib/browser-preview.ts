@@ -174,6 +174,7 @@ export interface PreviewHelpers {
   tailwindSource: typeof tailwindSource;
   rewriteCssImports: typeof rewriteCssImports;
   cssModule: typeof cssModule;
+  jsxStampModule: (runtimeUrl: string) => string;
 }
 
 interface EsbuildApi {
@@ -185,7 +186,7 @@ interface EsbuildApi {
  * The frame's program: load esbuild, wait for the studio's files, bundle, show the result in an inner
  * frame and report back (build time, errors, the app's console). Runs only inside the preview frame.
  */
-export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: string; wasmUrl: string }): Promise<void> {
+export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: string; wasmUrl: string; picker?: string }): Promise<void> {
   const post = (message: Record<string, unknown>) => parent.postMessage({ source: 'nanocli-preview', ...message }, '*');
   const app = document.getElementById('app') as HTMLIFrameElement;
   let esbuild: EsbuildApi;
@@ -314,12 +315,15 @@ export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: s
 
     // Tailwind, daisyUI, UnoCSS: they run in the page
     const runtimes = h.cssRuntimes(versions, files);
+    // React and Preact: a JSX runtime that stamps each element with the code that drew it, for click-to-edit
+    const stamp = (support.flavour === 'react' || support.flavour === 'preact') && (jsxImportSource === 'react' || jsxImportSource === 'preact');
 
     const plugin = {
       name: 'nanocli-project',
       setup(b: { onResolve: (o: unknown, f: (a: { path: string; importer: string; kind: string }) => unknown) => void; onLoad: (o: unknown, f: (a: { path: string }) => unknown) => void }) {
         b.onResolve({ filter: /.*/ }, (args) => {
           if (args.kind === 'entry-point') return { path: args.path, namespace: 'project' };
+          if (stamp && args.path === `${jsxImportSource}/jsx-dev-runtime`) return { path: args.path, namespace: 'jsx-stamp' };
           if (/^(https?:|data:)/.test(args.path)) return { path: args.path, external: true };
           if (args.path.startsWith('.') || args.path.startsWith('/')) {
             const resolved = h.resolveProjectPath(args.importer, args.path, files);
@@ -332,6 +336,7 @@ export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: s
           return { path: h.npmUrl(args.path, versions), external: true };
         });
         b.onLoad({ filter: /.*/, namespace: 'virtual' }, () => ({ contents: '', loader: 'js' }));
+        b.onLoad({ filter: /.*/, namespace: 'jsx-stamp' }, (args) => ({ contents: h.jsxStampModule(h.npmUrl(args.path, versions)), loader: 'js' }));
         b.onLoad({ filter: /.*/, namespace: 'npm-css' }, (args) => ({ contents: linkModule(args.path), loader: 'js' }));
         b.onLoad({ filter: /.*/, namespace: 'project' }, async (args) => {
           const source = files[args.path] ?? '';
@@ -396,6 +401,7 @@ export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: s
         platform: 'browser',
         target: 'es2022',
         jsx: 'automatic',
+        jsxDev: stamp,
         jsxImportSource,
         sourcemap: 'inline',
         logLevel: 'silent',
@@ -409,7 +415,7 @@ export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: s
       const bundle = result.outputFiles?.[0]?.text ?? '';
       const imports: Record<string, string> = {};
       for (const name of Object.keys(versions)) imports[name] = h.npmUrl(name, versions);
-      app.srcdoc = h.htmlWithBundle(files['index.html'], found.src, { imports }, bundle, consolePrelude, runtimes.head);
+      app.srcdoc = h.htmlWithBundle(files['index.html'], found.src, { imports }, bundle, consolePrelude + (cfg.picker ?? ''), runtimes.head);
       post({ type: 'built', ms: Math.round(performance.now() - started), flavour: support.flavour, warnings: result.warnings.length, bytes: bundle.length });
     } catch (error) {
       if (ticket !== running) return;
@@ -422,17 +428,38 @@ export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: s
     }
   };
 
+  // Click-to-edit: whether the app's page is picking an element; a rebuild mid-pick keeps picking
+  let picking = false;
+  const sendPick = () => app.contentWindow?.postMessage({ source: 'nanocli-preview', type: 'pick', on: picking }, '*');
+  app.addEventListener('load', () => {
+    if (picking) sendPick();
+  });
+
   window.addEventListener('message', (event) => {
-    // The app's console, relayed to the studio
+    // The app's console and picks, relayed to the studio
     if (event.source === app.contentWindow) {
-      const data = event.data as { source?: string; type?: string; level?: unknown; text?: unknown } | null;
-      if (data?.source === 'nanocli-app' && data.type === 'console') post({ type: 'console', level: String(data.level), text: String(data.text).slice(0, 4000) });
+      const data = event.data as { source?: string; type?: string; level?: unknown; text?: unknown; element?: Record<string, unknown> } | null;
+      if (data?.source !== 'nanocli-app') return;
+      if (data.type === 'console') post({ type: 'console', level: String(data.level), text: String(data.text).slice(0, 4000) });
+      else if (data.type === 'picked' && data.element && typeof data.element === 'object') {
+        picking = false;
+        const e = data.element;
+        const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');
+        post({ type: 'picked', element: { src: str(e.src, 400) || null, tag: str(e.tag, 40), text: str(e.text, 300), classes: str(e.classes, 600), html: str(e.html, 800), chain: Array.isArray(e.chain) ? e.chain.slice(0, 6).map((c) => str(c, 400)) : [] } });
+      } else if (data.type === 'pick-cancelled') {
+        picking = false;
+        post({ type: 'pick-cancelled' });
+      }
       return;
     }
     // Only the studio that embeds this frame can drive it
     if (event.source !== parent) return;
-    const data = event.data as { type?: string; files?: Record<string, string> } | null;
+    const data = event.data as { type?: string; files?: Record<string, string>; on?: unknown } | null;
     if (data?.type === 'build' && data.files && typeof data.files === 'object') void build(data.files);
+    else if (data?.type === 'pick') {
+      picking = !!data.on;
+      sendPick();
+    } else if (data?.type === 'snapshot') post({ type: 'snapshot', html: app.srcdoc });
   });
   post({ type: 'ready' });
 }

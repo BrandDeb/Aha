@@ -13,6 +13,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WebApp } from '@/lib/app-servers';
 import type { DevServerHandle } from '../devserver-client';
+import { locateElement, visualEditPrompt, type ElementLocation, type PickedElement } from '@/lib/visual-edit';
+import { ElementEditor } from './ElementEditor';
 
 const DEVICES = [
   { id: 'full', label: 'Full', width: null },
@@ -37,8 +39,22 @@ interface ConsoleLine {
 
 type BrowserState = { status: 'loading' | 'building' | 'ready' | 'failed'; ms?: number; error?: string };
 
+interface BrowserPreviewProps {
+  files: Record<string, string>;
+  reloads: number;
+  width: number | null | undefined;
+  /** Click-to-edit: the page is picking an element */
+  picking: boolean;
+  /** Bumped to ask the frame for the built page, to save it */
+  snapshots: number;
+  onState: (s: BrowserState) => void;
+  onConsole: (l: Omit<ConsoleLine, 'id'>) => void;
+  onPicked: (element: PickedElement | null) => void;
+  onSnapshot: (html: string) => void;
+}
+
 /** The in-browser preview: sends the files to the sandboxed frame, which bundles and runs them */
-function BrowserPreview({ files, reloads, width, onState, onConsole }: { files: Record<string, string>; reloads: number; width: number | null | undefined; onState: (s: BrowserState) => void; onConsole: (l: Omit<ConsoleLine, 'id'>) => void }) {
+function BrowserPreview({ files, reloads, width, picking, snapshots, onState, onConsole, onPicked, onSnapshot }: BrowserPreviewProps) {
   const frame = useRef<HTMLIFrameElement>(null);
   const ready = useRef(false);
   const latest = useRef(files);
@@ -57,7 +73,7 @@ function BrowserPreview({ files, reloads, width, onState, onConsole }: { files: 
     const onMessage = (event: MessageEvent) => {
       // Only our frame; it has an opaque origin, so the window is what identifies it
       if (event.source !== frame.current?.contentWindow) return;
-      const data = event.data as { source?: string; type?: string; ms?: number; message?: string; level?: string; text?: string } | null;
+      const data = event.data as { source?: string; type?: string; ms?: number; message?: string; level?: string; text?: string; element?: PickedElement; html?: string } | null;
       if (data?.source !== 'nanocli-preview') return;
       if (data.type === 'ready') {
         ready.current = true;
@@ -65,6 +81,9 @@ function BrowserPreview({ files, reloads, width, onState, onConsole }: { files: 
       } else if (data.type === 'built') onState({ status: 'ready', ms: data.ms });
       else if (data.type === 'error') onState({ status: 'failed', error: data.message });
       else if (data.type === 'console') onConsole({ level: String(data.level), text: String(data.text).slice(0, 4000) });
+      else if (data.type === 'picked' && data.element) onPicked(data.element);
+      else if (data.type === 'pick-cancelled') onPicked(null);
+      else if (data.type === 'snapshot' && typeof data.html === 'string') onSnapshot(data.html);
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -78,6 +97,13 @@ function BrowserPreview({ files, reloads, width, onState, onConsole }: { files: 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files]);
+
+  useEffect(() => {
+    if (ready.current) frame.current?.contentWindow?.postMessage({ type: 'pick', on: picking }, '*');
+  }, [picking]);
+  useEffect(() => {
+    if (snapshots && ready.current) frame.current?.contentWindow?.postMessage({ type: 'snapshot' }, '*');
+  }, [snapshots]);
 
   return (
     <div className={`flex min-h-0 flex-1 justify-center overflow-auto ${width ? 'bg-black/30 p-3' : ''}`}>
@@ -106,10 +132,16 @@ interface Props {
   onFailure?: (source: 'preview' | 'devserver', text: string) => void;
   /** The app built and runs */
   onWorking?: () => void;
+  /** Click-to-edit: open the code of a picked element, write an in-place edit, hand a change to the agent */
+  onOpenLocation?: (location: ElementLocation) => void;
+  onWrite?: (path: string, content: string) => void;
+  onAsk?: (request: string, label: string) => void;
+  /** Used to name the saved page */
+  projectName?: string;
   onClose: () => void;
 }
 
-export function PreviewPane({ detected, server, files, mode, browserSupport, onMode, onFailure, onWorking, onClose }: Props) {
+export function PreviewPane({ detected, server, files, mode, browserSupport, onMode, onFailure, onWorking, onOpenLocation, onWrite, onAsk, projectName, onClose }: Props) {
   const { state, log, enabled, start, stop } = server;
   const [browser, setBrowser] = useState<BrowserState>({ status: 'loading' });
   const [consoleLines, setConsoleLines] = useState<ConsoleLine[]>([]);
@@ -149,6 +181,25 @@ export function PreviewPane({ detected, server, files, mode, browserSupport, onM
   const [device, setDevice] = useState<(typeof DEVICES)[number]['id']>('full');
   const [reloads, setReloads] = useState(0);
   const [showLog, setShowLog] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState<{ n: number; element: PickedElement; location: ElementLocation | null } | null>(null);
+  const [snapshots, setSnapshots] = useState(0);
+  const canEdit = inBrowser && !!onWrite;
+  const onPicked = (element: PickedElement | null) => {
+    setPicking(false);
+    if (!element) return;
+    const location = locateElement(files, element);
+    setPicked((prev) => ({ n: (prev?.n ?? 0) + 1, element, location }));
+    if (location) onOpenLocation?.(location);
+  };
+  // Save the built page as one HTML file: it runs on its own (packages load from esm.sh), so it can be sent to anyone
+  const onSnapshot = (html: string) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    a.download = `${(projectName || 'app').replace(/[^\w.-]+/g, '-')}-preview.html`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
   const logEnd = useRef<HTMLDivElement>(null);
   const status = inBrowser
     ? browser.status === 'ready'
@@ -188,14 +239,14 @@ export function PreviewPane({ detected, server, files, mode, browserSupport, onM
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-border bg-[var(--color-background)]" aria-label="Preview">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-[var(--bar)] px-2.5">
+      <div className="flex h-10 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-b border-border bg-[var(--bar)] px-2.5">
         <span className={`h-2 w-2 shrink-0 rounded-full ${status.dot}`} aria-hidden="true" />
         <span className="shrink-0 text-xs text-gray-300" title={status.label}>{detected.label}</span>
         <div role="radiogroup" aria-label="Where the preview runs" className="flex shrink-0 rounded-md border border-border p-0.5">
           <button role="radio" aria-checked={!inBrowser} onClick={() => onMode('server')} disabled={enabled === false} title={enabled === false ? 'Dev servers are off on this server' : 'The framework’s own dev server on this machine'} className={`rounded px-1.5 text-[11px] disabled:opacity-40 ${!inBrowser ? 'bg-white/[0.1] text-gray-100' : 'text-gray-500 hover:text-gray-100'}`}>Dev server</button>
           <button role="radio" aria-checked={inBrowser} onClick={() => onMode('browser')} disabled={!browserSupport?.ok} title={browserSupport && !browserSupport.ok ? browserSupport.reason : 'Bundled in your browser: no install, no server'} className={`rounded px-1.5 text-[11px] disabled:opacity-40 ${inBrowser ? 'bg-white/[0.1] text-gray-100' : 'text-gray-500 hover:text-gray-100'}`}>In browser</button>
         </div>
-        {inBrowser && <span className="hidden shrink-0 font-mono text-[11px] text-gray-500 sm:inline">{status.label}</span>}
+        {inBrowser && <span className="hidden shrink-0 font-mono text-[11px] text-gray-500 2xl:inline">{status.label}</span>}
         <form
           className="min-w-0 flex-1"
           onSubmit={(e) => {
@@ -221,6 +272,24 @@ export function PreviewPane({ detected, server, files, mode, browserSupport, onM
             </button>
           ))}
         </div>
+        {canEdit && (
+          <button
+            onClick={() => {
+              setPicked(null);
+              setPicking((v) => !v);
+            }}
+            aria-pressed={picking}
+            className={`btn btn-ghost btn-sm px-2 text-[11px] ${picking ? 'text-accent' : ''}`}
+            title="Click-to-edit: pick an element in the app to edit its text and classes, or ask for a change (Esc stops)"
+          >
+            ⌖ Edit
+          </button>
+        )}
+        {inBrowser && (
+          <button onClick={() => setSnapshots((n) => n + 1)} disabled={browser.status !== 'ready'} className="btn btn-ghost btn-icon btn-sm" aria-label="Save as a page to share" title="Save as one HTML page you can send to anyone">
+            ⇩
+          </button>
+        )}
         {src && !inBrowser && <a href={src} target="_blank" rel="noreferrer" className="btn btn-ghost btn-icon btn-sm" aria-label="Open in a new tab" title="Open in a new tab">↗</a>}
         <button onClick={() => setShowLog((v) => !v)} aria-pressed={showLog} className="btn btn-ghost btn-sm px-2 text-[11px]" title={inBrowser ? 'The app’s console' : 'Dev server output'}>{inBrowser ? 'Console' : 'Log'}</button>
         {!inBrowser && (ready || busy) ? (
@@ -230,14 +299,38 @@ export function PreviewPane({ detected, server, files, mode, browserSupport, onM
       </div>
 
       {inBrowser ? (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {picking && <p className="absolute left-1/2 top-2 z-10 -translate-x-1/2 rounded-full bg-accent px-2.5 py-0.5 text-[11px] text-black shadow-lg" role="status">Click an element to edit it · Esc stops</p>}
           <BrowserPreview
             files={files}
             reloads={reloads}
             width={width}
+            picking={picking}
+            snapshots={snapshots}
             onState={setBrowser}
             onConsole={(line) => setConsoleLines((prev) => [...prev.slice(-300), { id: ++consoleId.current, ...line }])}
+            onPicked={onPicked}
+            onSnapshot={onSnapshot}
           />
+          {picked && onWrite && (
+            <ElementEditor
+              key={picked.n}
+              element={picked.element}
+              location={picked.location}
+              source={picked.location ? files[picked.location.file] : undefined}
+              onOpen={(location) => onOpenLocation?.(location)}
+              onWrite={onWrite}
+              onAsk={(request) => {
+                onAsk?.(visualEditPrompt(picked.element, picked.location, request, picked.location ? files[picked.location.file] : undefined), `<${picked.element.tag}>: ${request.trim().slice(0, 60)}`);
+                setPicked(null);
+              }}
+              onPickAgain={() => {
+                setPicked(null);
+                setPicking(true);
+              }}
+              onClose={() => setPicked(null)}
+            />
+          )}
           {(showLog || browser.status === 'failed') && <div className="flex h-44 shrink-0 flex-col border-t border-border">{consoleView}</div>}
         </div>
       ) : enabled === false ? (

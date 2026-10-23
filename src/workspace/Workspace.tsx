@@ -1212,6 +1212,12 @@ export function Workspace() {
                     onMode={setPreviewChoice}
                     onFailure={(source, text) => reportFailure(source, text, web.framework.name)}
                     onWorking={() => markGood('preview')}
+                    onOpenLocation={openLocation}
+                    onWrite={(path, content) => dispatch({ type: 'write', path, content })}
+                    onAsk={(question, label) => {
+                      if (proposals.ask(question, { label }) === null) openPanel('agent');
+                    }}
+                    projectName={project.name}
                     onClose={() => setShowPreview(false)}
                   />
                 )}
