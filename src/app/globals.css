@@ -501,3 +501,9 @@ html.zen [data-zen-hide] {
   background: color-mix(in srgb, var(--color-accent) 45%, transparent);
   border-radius: 1px;
 }
+
+/* Side panels slide in from their edge */
+@keyframes slide-in-right {
+  from { opacity: 0.4; transform: translateX(16px); }
+  to { opacity: 1; transform: none; }
+}

@@ -37,6 +37,8 @@ import { useWorkspace } from './store';
 import { useToast } from './toasts';
 import { useLiveValues } from './live-client';
 import { useContracts } from './contracts-client';
+import { usePersistedFlag } from './layout';
+import { Box, Branch, Files, FilePlus, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Search, Sparkle } from './components/Icons';
 import { useCiOnSave } from './ci-on-save';
 import { describeContracts } from '@/lib/contracts';
 import { describeWhy, parseWhy, whyByLine, WHY_FILE } from '@/lib/why';
@@ -75,6 +77,20 @@ const ProposalView = dynamic(() => import('./components/ProposalView').then((m) 
  * The agent is one place with three ways to use it: Ask (answers, nothing changes), Do (a task done on a
  * copy, back as a proposal with proof) and Keep going (it picks up the next useful task by itself).
  */
+/** A button on a collapsed side rail: an icon, its name as a tooltip and for screen readers */
+function RailButton({ label, onClick, active, children }: { label: string; onClick: () => void; active?: boolean; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${active ? 'bg-white/[0.08] text-gray-100' : 'text-gray-500 hover:bg-white/[0.05] hover:text-gray-100'}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 const GROUPS: { id: string; label: string; panels: { id: PanelId; label: string; hint: string }[] }[] = [
   {
     id: 'run',
@@ -213,8 +229,9 @@ export function Workspace() {
     setPanelState(id);
     setLastInGroup((prev) => ({ ...prev, [groupOf(id).id]: id }));
   }, []);
-  const [showExplorer, setShowExplorer] = useState(true);
-  const [showPanel, setShowPanel] = useState(true);
+  // The explorer collapses to a rail on the left, the tools to a rail on the right
+  const [showExplorer, setShowExplorer] = usePersistedFlag('nanocli:explorer-open', true);
+  const [showPanel, setShowPanel] = usePersistedFlag('nanocli:tools-open', true);
   const [showTerminal, setShowTerminal] = useState(true);
   const [terminalHeight, setTerminalHeight] = useState(220);
   const [zen, setZen] = useState(false);
@@ -458,7 +475,7 @@ export function Workspace() {
     } finally {
       setBuilding(false);
     }
-  }, [target, settings.build, notify, saveSnapshot, markGood, reportFailure, setPanel]);
+  }, [target, settings.build, notify, saveSnapshot, markGood, reportFailure, setPanel, setShowPanel]);
 
   /** The toolbar's Compile: Python has no compile step, so it runs the program in the terminal instead */
   const compileOrRun = useCallback(() => {
@@ -574,7 +591,7 @@ export function Workspace() {
   const openPanel = useCallback((id: PanelId) => {
     setPanel(id);
     setShowPanel(true);
-  }, [setPanel]);
+  }, [setPanel, setShowPanel]);
 
   // Sign in: the redirect flow where this server is set up for it (a client secret and a callback on this host), else a one-time code
   const signIn = useCallback(() => {
@@ -810,7 +827,7 @@ export function Workspace() {
     { id: 'collab.toggle', category: 'Collaboration', title: collab ? 'Leave live session' : 'Start live session', run: () => setCollab((v) => !v) },
     { id: 'prefs.settings', category: 'Preferences', title: 'Settings', keys: DEFAULT_KEYS['prefs.settings'], run: () => { setSettingsTab('general'); setDialog('settings'); } },
     { id: 'prefs.maintenance', category: 'Preferences', title: 'Updates and health checks', run: () => { setSettingsTab('maintenance'); setDialog('settings'); } },
-  ], [compileOrRun, runApp, web, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, openMorning, collab, liveAvailable, liveOn, setLiveOn, ciAvailable, ciOn, setCiOn]);
+  ], [compileOrRun, runApp, web, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, openMorning, setShowExplorer, setShowPanel, collab, liveAvailable, liveOn, setLiveOn, ciAvailable, ciOn, setCiOn]);
 
   const bindings = useMemo(() => {
     const map: Record<string, string> = { ...DEFAULT_KEYS, ...settings.keybindings };
@@ -1007,15 +1024,29 @@ export function Workspace() {
 
         <div className="flex min-h-0 flex-1">
           {/* Explorer */}
-          {showExplorer && (
-            <aside className="pane hidden w-60 shrink-0 flex-col border-r border-border md:flex" aria-label="Explorer" data-zen-hide>
-              <FileTree errorCounts={errorCounts} />
-              <div className="flex items-center gap-1 border-t border-border p-2">
-                <button onClick={() => setDialog('templates')} className="btn btn-ghost btn-sm flex-1">New project</button>
-                <button onClick={() => setDialog('project')} className="btn btn-ghost btn-sm flex-1">Import / export</button>
-              </div>
-            </aside>
-          )}
+          <aside
+            className={`pane hidden shrink-0 flex-col overflow-hidden border-r border-border transition-[width] duration-200 ease-out motion-reduce:transition-none md:flex ${showExplorer ? 'w-60' : 'w-12'}`}
+            aria-label="Explorer"
+            data-zen-hide
+          >
+            {showExplorer ? (
+              <>
+                <FileTree errorCounts={errorCounts} onCollapse={() => setShowExplorer(false)} collapseTitle={`Collapse the explorer (${formatCombo(bindings['view.explorer'] ?? '', isMac)})`} />
+                <div className="flex items-center gap-1 border-t border-border p-2">
+                  <button onClick={() => setDialog('templates')} className="btn btn-ghost btn-sm flex-1">New project</button>
+                  <button onClick={() => setDialog('project')} className="btn btn-ghost btn-sm flex-1">Import / export</button>
+                </div>
+              </>
+            ) : (
+              <nav className="flex flex-1 flex-col items-center gap-1 py-2" aria-label="Explorer (collapsed)">
+                <RailButton label={`Expand the explorer (${formatCombo(bindings['view.explorer'] ?? '', isMac)})`} onClick={() => setShowExplorer(true)}><PanelLeftOpen /></RailButton>
+                <RailButton label="Files" onClick={() => setShowExplorer(true)}><Files /></RailButton>
+                <RailButton label="Search and commands" onClick={() => setDialog('palette')}><Search /></RailButton>
+                <span className="flex-1" />
+                <RailButton label="New project" onClick={() => setDialog('templates')}><FilePlus /></RailButton>
+              </nav>
+            )}
+          </aside>
 
           {/* Editor + terminal */}
           <main id="main" className="flex min-w-0 flex-1 flex-col">
@@ -1162,9 +1193,26 @@ export function Workspace() {
           </main>
 
           {/* Side panel */}
+          {!showPanel && (
+            <nav className="pane hidden w-12 shrink-0 flex-col items-center gap-1 border-l border-border py-2 lg:flex" aria-label="Tools (collapsed)" data-zen-hide>
+              <RailButton label={`Expand the tools (${formatCombo(bindings['view.panel'] ?? '', isMac)})`} onClick={() => setShowPanel(true)}><PanelRightOpen /></RailButton>
+              {GROUPS.filter((g) => g.panels.some((p) => panelVisible(p.id))).map((g) => {
+                const target = g.panels.find((p) => p.id === lastInGroup[g.id] && panelVisible(p.id)) ?? g.panels.find((p) => panelVisible(p.id))!;
+                const Icon = g.id === 'run' ? Play : g.id === 'agent' ? Sparkle : g.id === 'source' ? Branch : Box;
+                return (
+                  <RailButton key={g.id} label={g.label} active={g.id === shownGroup.id} onClick={() => { setPanel(target.id); setShowPanel(true); }}>
+                    <Icon />
+                  </RailButton>
+                );
+              })}
+            </nav>
+          )}
           {showPanel && (
-            <aside className="pane hidden w-[24rem] shrink-0 flex-col overflow-hidden border-l border-border lg:flex" aria-label="Tools" data-zen-hide>
+            <aside className="pane hidden w-[24rem] shrink-0 flex-col overflow-hidden border-l border-border animate-[slide-in-right_180ms_ease-out] motion-reduce:animate-none lg:flex" aria-label="Tools" data-zen-hide>
               <div role="tablist" aria-label="Tool groups" className="flex shrink-0 border-b border-border bg-[var(--bar)] px-1">
+                <button onClick={() => setShowPanel(false)} className="flex h-10 w-9 shrink-0 items-center justify-center text-gray-500 hover:text-gray-100" aria-label="Collapse the tools" title={`Collapse the tools (${formatCombo(bindings['view.panel'] ?? '', isMac)})`}>
+                  <PanelRightClose />
+                </button>
                 {GROUPS.filter((g) => g.panels.some((p) => panelVisible(p.id))).map((g) => {
                   const selected = g.id === shownGroup.id;
                   const target = g.panels.find((p) => p.id === lastInGroup[g.id] && panelVisible(p.id)) ?? g.panels.find((p) => panelVisible(p.id))!;

@@ -5,6 +5,7 @@ import { buildTree, diffStatus, dirname, isRunnable, isValidPath, type TreeNode 
 import { useWorkspace } from '../store';
 import { useToast } from '../toasts';
 import { useProposals } from '../proposals';
+import { PanelLeftClose } from './Icons';
 
 type Editing =
   | { mode: 'new-file' | 'new-folder'; parent: string }
@@ -12,7 +13,7 @@ type Editing =
 
 const CHANGE_GLYPH = { added: 'A', modified: 'M', deleted: 'D' } as const;
 
-export function FileTree({ errorCounts }: { errorCounts: Record<string, number> }) {
+export function FileTree({ errorCounts, onCollapse, collapseTitle }: { errorCounts: Record<string, number>; onCollapse?: () => void; collapseTitle?: string }) {
   const { project, active, git, dispatch } = useWorkspace();
   const { open: openProposal } = useProposals();
   // A file you click is the file you see, even when it is already the open one behind a proposal
@@ -158,6 +159,11 @@ export function FileTree({ errorCounts }: { errorCounts: Record<string, number> 
         <div className="flex gap-0.5">
           <button className="btn btn-ghost btn-icon h-7 w-7 text-xs" title="New file" aria-label="New file" onClick={() => startCreate('new-file')}>＋</button>
           <button className="btn btn-ghost btn-icon h-7 w-7 text-xs" title="New folder" aria-label="New folder" onClick={() => startCreate('new-folder')}>⊞</button>
+          {onCollapse && (
+            <button className="btn btn-ghost btn-icon h-7 w-7 text-gray-500" title={collapseTitle ?? 'Collapse the explorer'} aria-label="Collapse the explorer" onClick={onCollapse}>
+              <PanelLeftClose size={15} />
+            </button>
+          )}
         </div>
       </div>
       <ul
