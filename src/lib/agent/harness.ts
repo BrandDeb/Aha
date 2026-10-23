@@ -184,7 +184,7 @@ export function signalsFrom(run: AgentRun, events: AgentEvent[], stage: Stage, h
     if (e.type === 'tool') names.set(e.call.id, e.call.name);
     if (e.type !== 'result') continue;
     const name = names.get(e.call.id);
-    const checks = name === 'build' || name === 'run_program' || name === 'run_code' || name === 'python';
+    const checks = name === 'build' || name === 'run_program' || name === 'run_code' || name === 'python' || name === 'run_pipeline';
     if (!checks) continue;
     if (!e.result.ok) failedChecks++;
     if (name === 'build') buildOk = e.result.ok;

@@ -25,7 +25,7 @@ export interface Evidence {
   tokens: number;
 }
 
-const CHECK_TOOLS = new Set(['build', 'run_program', 'run_code', 'python']);
+const CHECK_TOOLS = new Set(['build', 'run_program', 'run_code', 'python', 'run_pipeline']);
 
 export function evidenceFrom(run: Pick<AgentRun, 'reason' | 'steps' | 'toolCalls' | 'usage' | 'ms'>, events: AgentEvent[], stage: Stage, isHarnessFile: (p: string) => boolean = () => false): Evidence {
   let build: boolean | null = null;

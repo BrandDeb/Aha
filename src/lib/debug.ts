@@ -15,7 +15,7 @@ export interface SourceLocation {
   column?: number;
 }
 
-export type FailureSource = 'build' | 'run' | 'python' | 'preview' | 'devserver';
+export type FailureSource = 'build' | 'run' | 'python' | 'preview' | 'devserver' | 'pipeline';
 
 export interface Failure {
   source: FailureSource;
@@ -173,6 +173,7 @@ const SOURCE_LABEL: Record<FailureSource, string> = {
   python: 'The Python program failed',
   preview: 'The app failed in the preview',
   devserver: 'The dev server failed',
+  pipeline: 'A CI pipeline step failed',
 };
 
 /** Lines around a location, numbered, for context */
@@ -200,7 +201,7 @@ export function debugBrief(failure: Failure, files: Record<string, string>, last
   parts.push(
     [
       'Method:',
-      '1. Reproduce: run the same thing (build, run_program, run_code or python) and confirm you see this error. If it cannot run here (a browser-only error), reason from the output and the code.',
+      '1. Reproduce: run the same thing (build, run_program, run_code, python, or run_pipeline for a CI failure) and confirm you see this error. If it cannot run here (a browser-only error, or a CI step that only runs on the CI service), reason from the output and the code.',
       '2. Locate: read the files and lines above, and the changes since it last worked.',
       '3. Find the root cause, not the symptom. If unsure, add temporary logging and run again.',
       '4. Fix it with the smallest change; make no unrelated edits, and remove temporary logging.',

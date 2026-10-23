@@ -71,6 +71,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Build** | Nine outputs from one menu — native, WASM, LLVM IR, scriptc IR (JSON), assembly, WASM text (WAT), object file, static library, WASM reactor — with an output viewer (highlighted text, or a hexdump for binaries), build options (release/dev, strip, dynamic engine, sanitizers, Windows window), pipeline timings, scriptc coverage and a run profile |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
+| **Pipelines** | CI/CD from the project: GitHub Actions or GitLab CI with lint, test and build, deploys (Pages, containers, Vercel, Netlify, Fly.io, release binaries), run locally before you push, GitHub run status in the Git tab, failures fixed by the agent; see [DevOps](#devops-pipelines-in-the-studio) |
 | **Assistant** | Any model you choose — free tiers (Gemini, Groq, OpenRouter, Cerebras, Mistral), local (Ollama, LM Studio) or your own Anthropic/OpenAI key: explain, fix build errors, generate tests, chat — with one-click Apply that versions the previous file first |
 | **Agent** | Give it a goal; it reads your project, edits a private copy, builds and runs it to check its work, and retries within a budget. You review diffs and accept or discard; see [Agent](#agent) |
 | **Field kits** | A project plus its playbook, setup, checks and agent house rules, shared as one file; three built in for FDE and ISV work; see [Field kits](#field-kits) |
@@ -264,6 +265,38 @@ Safety model, since the agent reads untrusted text (web pages, issues, query res
   environment (never the server's secrets) and a private `HOME`; idle MCP sessions are closed after five minutes.
 
 ---
+
+## DevOps: pipelines in the studio
+
+The **Pipelines** tab sets up CI/CD for the project you have open and runs it before you push.
+
+- **Set up from the project.** The studio reads how the project is built (package.json scripts and lockfile, pyproject.toml
+  and uv, go.mod, Cargo.toml, Maven or Gradle, .NET, Ruby, PHP, Elixir, Dart, Deno, Foundry, Zig, CMake or Make, and bare
+  scriptc projects) and writes a **GitHub Actions** workflow or a **.gitlab-ci.yml** that installs dependencies and runs
+  the checks the project actually has: lint, format, typecheck, test and build. Action versions are pinned to current
+  majors, caching is only turned on when there is a lockfile to key it on, and permissions are read-only unless a deploy
+  needs more. You see the file before it is added, and after that it is an ordinary file you can edit.
+- **Deploy targets.** GitHub or GitLab Pages for static sites, a container image pushed to ghcr.io or the GitLab registry,
+  Vercel, Netlify, Fly.io, or release binaries for Linux, macOS and Windows attached to a GitHub release on a `v*` tag (Go,
+  Rust, scriptc). Targets that don't fit say why (no Dockerfile yet: one click asks the agent to write one). Deploys only
+  run on pushes to the main branch, and the tab lists the secrets each one needs and where to add them.
+- **Run it here.** **Run all** (or one job) runs the pipeline on this machine with the project's current files, the way
+  the CI service would: `bash -eo pipefail` steps (PowerShell on Windows), the job and step environment, `CI=true`,
+  `GITHUB_ENV`, `GITHUB_OUTPUT` and `GITHUB_PATH` between steps, `if:` conditions and `${{ … }}` expressions, `needs`
+  ordering, and GitLab stages, `extends` and `rules`. Setup actions use the toolchain on this machine (installing it when
+  the studio can); steps that only make sense on the service (caches, artifacts, deploys, releases) are skipped with a
+  note, and so are jobs whose conditions don't match a manual run. Dependencies are kept between runs.
+- **Failures go to the agent.** A failing step lands in the debug bar with its command and output. **Debug this** hands it
+  to the agent, which has a `run_pipeline` tool: it reproduces the failure, fixes the code (or the CI file, when that is
+  what's wrong) and proves the fix by running the pipeline again, as a proposal you review. Auto-debug and the worker
+  pick pipeline failures up like any other.
+- **Status in the Git tab.** For a linked GitHub repository, the Git tab shows the latest run of each workflow on the
+  branch (polling while one runs). A failed run offers **Fix with agent**, which reads the failing job's log and starts
+  the same reproduce, fix, prove loop, and **Re-run failed**.
+
+Running pipelines locally follows the same rule as running code: only when the studio listens on your own machine (or
+`NANOCLI_RUN=1`). Signing in with GitHub now asks for the `workflow` permission, which GitHub requires for commits that
+change `.github/workflows/`; sign in again if you signed in before.
 
 ## Field kits
 
@@ -597,6 +630,13 @@ log lines after `N`. Same checks as `/api/run`: same origin, a trusted host, a r
 `POST { action: 'install', language }`, `{ action: 'update' }` and `{ action: 'upgrade', tool }` stream progress as
 newline-delimited JSON; `{ action: 'settings', autoUpdate?, autoInstall? }`. Same checks as `/api/run`.
 
+### `/api/pipelines` (local only)
+
+`GET` → `{ enabled }`. `POST { projectId, files, file, job? }` runs a CI file (`.github/workflows/*.yml` or
+`.gitlab-ci.yml`) on this machine and streams newline-delimited JSON: `{ t: "job", id, status }`, `{ t: "step", job, index,
+name, status, note? }` and `{ t: "out", s, d }` as it runs, then `{ t: "done", ok, jobs, ms, error? }`. Same-origin,
+trusted-host and run-enabled checks apply.
+
 ### `/api/run` (other languages)
 
 `GET` → `{ enabled, languages: [{ id, name, available, version?, install }] }`. `POST { projectId, entry, files, args?, stdin?, env?, language? }`
@@ -641,6 +681,10 @@ POST   /api/github/repos/:owner/:repo/branches           Create { name, from }
 GET    /api/github/repos/:owner/:repo/tree?branch=       Pull every text file → { sha, files, skipped }
 POST   /api/github/repos/:owner/:repo/commit             Multi-file commit { branch, message, changes, expectedHead }
 POST   /api/github/gists                                 Secret gist { description, files }
+GET    /api/github/repos/:owner/:repo/actions?branch=    Latest workflow runs → { runs }
+GET    /api/github/repos/:owner/:repo/actions?run=       A run's jobs and steps → { jobs }
+GET    /api/github/repos/:owner/:repo/actions?job=       The end of a job's log → { log }
+POST   /api/github/repos/:owner/:repo/actions            Re-run failed jobs { action: "rerun", run }
 ```
 
 ### Downloads
@@ -701,6 +745,8 @@ NANOCLI_TOOLCHAIN_AUTO_UPDATE=1    # 0 = don't apply toolchain updates on their 
 TRUST_PROXY_HOPS=1           # reverse proxies in front of the studio (rate limits use the address the last one saw)
 COMPILE_REQUESTS_PER_10_MIN=300
 NANOCLI_RUN_REQUESTS_PER_10_MIN=150
+NANOCLI_PIPELINE_JOBS=2       # local pipeline runs at once
+NANOCLI_PIPELINE_RUNS_PER_10_MIN=60
 NANOCLI_CONNECTORS=          # 0 = off, 1 = force on; unset = on only when HOST is loopback
 NANOCLI_CONNECTOR_CALLS_PER_10_MIN=400  # per client
 

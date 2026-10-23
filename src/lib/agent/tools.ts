@@ -34,6 +34,10 @@ export interface AgentHost {
   runCode?: (files: Record<string, string>, entry: string, args: string[], signal?: AbortSignal) => Promise<HostOutcome & { changed?: Record<string, string>; removed?: string[] }>;
   /** Name of that language, for the tool's description */
   languageName?: string;
+  /** Run the project's CI file (or one job of it) on this machine against the staged files */
+  runPipeline?: (files: Record<string, string>, file: string, job: string | undefined, signal?: AbortSignal) => Promise<HostOutcome>;
+  /** The CI files in the project, for the tool's description */
+  pipelineFiles?: string[];
   onPlan?: (plan: string) => void;
 }
 
@@ -289,6 +293,29 @@ export function workspaceTools(host: AgentHost): Tool[] {
         const outcome = await host.runCode!(stage.files(), entry, Array.isArray(args.args) ? args.args.map(String) : [], signal);
         for (const [path, content] of Object.entries(outcome.changed ?? {})) stage.write(path, content);
         for (const path of outcome.removed ?? []) stage.delete(path);
+        return { ok: outcome.ok, content: outcome.text };
+      },
+    });
+  }
+
+  if (host.runPipeline && host.pipelineFiles?.length) {
+    const files = host.pipelineFiles;
+    tools.push({
+      name: 'run_pipeline',
+      description: `Run the project's CI pipeline on this machine, with your pending edits: the same lint, test and build steps CI runs (${files.join(', ')}). Steps that only work on the CI service (deploys, caches) are skipped. Returns each job's steps with pass/fail and the output of failures. Use it to reproduce a CI failure and to prove the fix. This executes commands on the host, so the user is asked first.`,
+      risk: 'exec',
+      verify: true,
+      parameters: {
+        type: 'object',
+        properties: {
+          file: { type: 'string', description: `The CI file (default ${files[0]})` },
+          job: { type: 'string', description: 'Run only this job (and the jobs it needs); default all' },
+        },
+      },
+      run: async (args, { signal }) => {
+        const file = str(args.file) || files[0];
+        if (!stage.has(file)) return fail(`“${file}” does not exist. CI files: ${files.join(', ')}`);
+        const outcome = await host.runPipeline!(stage.files(), file, str(args.job) || undefined, signal);
         return { ok: outcome.ok, content: outcome.text };
       },
     });

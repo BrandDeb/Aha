@@ -12,6 +12,8 @@ import type { Stage } from '@/lib/agent/stage';
 import { detectLanguage } from '@/lib/languages';
 import { isPython } from './project';
 import { getPythonEnv, pythonProjectId, streamPython } from './python-client';
+import { pipelineFiles } from '@/lib/pipelines/parse';
+import { describeResult, runPipelineFile } from './pipelines-client';
 import { runProject } from './run-client';
 import { base64ToArrayBuffer, runWasm } from './runner';
 
@@ -103,6 +105,17 @@ export function createAgentHost(options: { stage: Stage; projectName: string; en
       const text = lines.join('').trim();
       const status = done.error ? `Failed: ${done.error}` : done.timedOut ? 'Timed out.' : `Exit code ${done.code} in ${done.ms} ms`;
       return { ok: done.code === 0 && !done.error, text: `${status}\n${text}${size > MAX_OUTPUT ? '\n… output truncated' : ''}`.trim(), changed: done.changed, removed: done.removed };
+    };
+  }
+  const ci = pipelineFiles(files);
+  if (ci.length) {
+    host.pipelineFiles = ci;
+    host.runPipeline = async (staged, file, job, signal) => {
+      let output = '';
+      const result = await runPipelineFile(projectName, staged, file, job, (event) => {
+        if (event.t === 'out' && output.length < 200_000) output += event.d;
+      }, signal);
+      return { ok: result.ok, text: describeResult(result, output) };
     };
   }
   return host;

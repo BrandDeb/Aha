@@ -35,7 +35,7 @@ export function KitPanel({ onFocus }: { onFocus: (focus: string) => void }) {
             </p>
             <button
               onClick={() => {
-                dispatch({ type: 'write', path: KIT_FILE, content: JSON.stringify(draftKit(project.name, project.entry || undefined), null, 2) + '\n' });
+                dispatch({ type: 'put', files: { [KIT_FILE]: JSON.stringify(draftKit(project.name, project.entry || undefined), null, 2) + '\n' } });
                 dispatch({ type: 'open', path: KIT_FILE });
               }}
               className="btn btn-primary btn-sm w-full"

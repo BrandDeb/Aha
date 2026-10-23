@@ -15,6 +15,7 @@ const SOURCE: Record<Failure['source'], string> = {
   python: 'Python failed',
   preview: 'Error in the app',
   devserver: 'Dev server failed',
+  pipeline: 'Pipeline failed',
 };
 
 interface Props {

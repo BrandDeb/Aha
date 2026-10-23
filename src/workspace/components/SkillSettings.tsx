@@ -97,7 +97,8 @@ export function SkillSettings() {
     if (!draft) return;
     const name = toSkillName(draft.name);
     if (draft.where === 'project') {
-      dispatch({ type: 'write', path: `${PROJECT_SKILLS_DIR}/${name}/SKILL.md`, content: formatSkillMd({ name, description: draft.description, body: draft.body }) });
+      // put: creates the file (write only changes files that already exist)
+      dispatch({ type: 'put', files: { [`${PROJECT_SKILLS_DIR}/${name}/SKILL.md`]: formatSkillMd({ name, description: draft.description, body: draft.body }) } });
       notify({ kind: 'success', title: `Added ${name} to this project`, detail: `${PROJECT_SKILLS_DIR}/${name}/SKILL.md travels with the project.` });
       setDraft(null);
       return;

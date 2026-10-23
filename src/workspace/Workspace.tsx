@@ -48,6 +48,7 @@ const PackagePanel = dynamic(() => import('./panels/PackagePanel').then((m) => m
 const LanguagePanel = dynamic(() => import('./panels/LanguagePanel').then((m) => m.LanguagePanel), { ssr: false, loading: PanelLoading });
 const PythonPanel = dynamic(() => import('./panels/PythonPanel').then((m) => m.PythonPanel), { ssr: false, loading: PanelLoading });
 const KitPanel = dynamic(() => import('./panels/KitPanel').then((m) => m.KitPanel), { ssr: false, loading: PanelLoading });
+const PipelinesPanel = dynamic(() => import('./panels/PipelinesPanel').then((m) => m.PipelinesPanel), { ssr: false, loading: PanelLoading });
 const WorkerPanel = dynamic(() => import('./panels/WorkerPanel').then((m) => m.WorkerPanel), { ssr: false, loading: PanelLoading });
 const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then((m) => m.SettingsDialog), { ssr: false });
 const TemplatesDialog = dynamic(() => import('./components/TemplatesDialog').then((m) => m.TemplatesDialog), { ssr: false });
@@ -59,6 +60,7 @@ const ProposalView = dynamic(() => import('./components/ProposalView').then((m) 
 const PANELS: { id: PanelId; label: string; glyph: string }[] = [
   { id: 'build', label: 'Build', glyph: '▶' },
   { id: 'git', label: 'Git', glyph: '⑂' },
+  { id: 'ci', label: 'Pipelines', glyph: '⇶' },
   { id: 'ai', label: 'Assistant', glyph: '✦' },
   { id: 'agent', label: 'Agent', glyph: '⚙' },
   { id: 'worker', label: 'Worker', glyph: '◎' },
@@ -942,7 +944,8 @@ export function Workspace() {
                 {shownPanel === 'build' && (
                   <BuildPanel result={lastBuild} building={building} coverage={coverage} analyzing={analyzing} onCoverage={() => void analyze()} lastRun={lastRun} />
                 )}
-                {shownPanel === 'git' && <GitPanel user={user} />}
+                {shownPanel === 'git' && <GitPanel user={user} onOpenPipelines={() => setPanel('ci')} />}
+                {shownPanel === 'ci' && <PipelinesPanel onFailure={(report) => reportFailure('pipeline', report)} onPassed={() => markGood('pipeline')} />}
                 {shownPanel === 'ai' && <AiPanel diagnostics={diagnostics} getSelection={() => {
                   const editor = editorRef.current;
                   const selection = editor?.getSelection();
