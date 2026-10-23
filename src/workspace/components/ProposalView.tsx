@@ -12,6 +12,7 @@ import { DiffView } from '@/components/CodeEditor';
 import { chipsFor, type Tone } from '@/lib/agent/evidence';
 import { riskOf, type RiskScore } from '@/lib/agent/risk';
 import { ChangeProof } from './ChangeProof';
+import { ForkCompare } from './ForkCompare';
 import { REVIEW_LABEL, reviewFollowUp, type Review } from '@/lib/agent/review';
 import { problemOf } from '@/lib/agent/problems';
 import type { ToolCall } from '@/lib/agent/types';
@@ -192,12 +193,15 @@ function SecondOpinion({ review, settled, onPick, onSend }: { review: Review; se
 
 export function ProposalView({ proposal }: { proposal: Proposal }) {
   const { stop, answer, accept, discard, selectLane, followUp, close } = useProposals();
-  const { settings } = useWorkspace();
+  const workspace = useWorkspace();
+  const { settings } = workspace;
   const actions = useActions();
   const lane = laneOf(proposal);
   const files = lane?.files ?? [];
   const [picked, setPicked] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  // Forked proposals open on the side-by-side comparison
+  const [comparing, setComparing] = useState(!!proposal.fork);
   const selected = files.find((f) => f.path === picked) ?? files[0];
   const working = proposal.status === 'working';
   const settled = proposal.status === 'accepted' || proposal.status === 'discarded';
@@ -301,12 +305,20 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
       {/* Approaches */}
       {proposal.lanes.length > 1 && (
         <div role="tablist" aria-label="Approaches" className="flex shrink-0 gap-2 overflow-x-auto border-b border-border px-5 py-2.5">
+          {proposal.fork && (
+            <button onClick={() => setComparing((v) => !v)} aria-pressed={comparing} className={`shrink-0 self-center rounded-lg border px-3 py-2 text-sm ${comparing ? 'border-[var(--accent-line)] bg-[var(--accent-soft)] text-accent' : 'border-border text-gray-300 hover:border-border-strong'}`} title="See every version side by side">
+              ⑂ Side by side
+            </button>
+          )}
           {proposal.lanes.map((l) => (
             <button
               key={l.id}
               role="tab"
               aria-selected={l.id === lane?.id}
-              onClick={() => selectLane(proposal.id, l.id)}
+              onClick={() => {
+                selectLane(proposal.id, l.id);
+                setComparing(false);
+              }}
               className={`min-w-[10rem] shrink-0 rounded-lg border px-3 py-2 text-left transition-colors ${l.id === lane?.id ? 'border-[var(--accent-line)] bg-[var(--accent-soft)]' : 'border-border hover:border-border-strong'}`}
             >
               <div className="flex items-center gap-2">
@@ -323,7 +335,16 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* Changes */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {files.length > 0 ? (
+          {comparing && proposal.fork ? (
+            <ForkCompare
+              proposal={proposal}
+              files={workspace.project.files}
+              onPick={(laneId) => {
+                selectLane(proposal.id, laneId);
+                setComparing(false);
+              }}
+            />
+          ) : files.length > 0 ? (
             <>
               <ul className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-3 py-1.5" aria-label="Changed files">
                 {files.map((f) => (
@@ -365,7 +386,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
         </div>
 
         {/* Story */}
-        <aside className="flex min-h-0 w-full shrink-0 flex-col border-t border-border lg:w-[22rem] lg:border-l lg:border-t-0" aria-label="Plan and activity">
+        <aside className={`min-h-0 w-full shrink-0 flex-col border-t border-border lg:w-[22rem] lg:border-l lg:border-t-0 ${comparing && proposal.fork ? 'hidden' : 'flex'}`} aria-label="Plan and activity">
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4" aria-live="polite">
             {proposal.pending && (
               <div role="alertdialog" aria-label="Allow this action?" className="space-y-2 rounded-xl border border-[var(--accent-line)] bg-[var(--accent-soft)] p-3">

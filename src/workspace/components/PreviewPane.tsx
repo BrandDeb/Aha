@@ -37,7 +37,7 @@ interface ConsoleLine {
   text: string;
 }
 
-type BrowserState = { status: 'loading' | 'building' | 'ready' | 'failed'; ms?: number; error?: string };
+export type BrowserState = { status: 'loading' | 'building' | 'ready' | 'failed'; ms?: number; error?: string };
 
 interface BrowserPreviewProps {
   files: Record<string, string>;
@@ -54,7 +54,7 @@ interface BrowserPreviewProps {
 }
 
 /** The in-browser preview: sends the files to the sandboxed frame, which bundles and runs them */
-function BrowserPreview({ files, reloads, width, picking, snapshots, onState, onConsole, onPicked, onSnapshot }: BrowserPreviewProps) {
+export function BrowserPreview({ files, reloads, width, picking, snapshots, onState, onConsole, onPicked, onSnapshot }: BrowserPreviewProps) {
   const frame = useRef<HTMLIFrameElement>(null);
   const ready = useRef(false);
   const latest = useRef(files);

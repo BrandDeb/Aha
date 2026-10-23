@@ -19,6 +19,7 @@ import { runAgent } from '@/lib/agent/loop';
 import { callModelFor } from '@/lib/agent/model';
 import { parseReview, REVIEW_LABEL, REVIEWER_PROMPT, reviewInput, type Review } from '@/lib/agent/review';
 import { autoAcceptable, riskOf } from '@/lib/agent/risk';
+import { forkGoal, forkLaneId, type ForkDirection } from '@/lib/forks';
 import { linesWritten, recordWhy, WHY_FILE } from '@/lib/why';
 import { contractsOf } from '@/lib/contracts';
 import { systemPromptFor } from '@/lib/agent/prompt';
@@ -93,6 +94,8 @@ export interface Proposal {
   origin?: 'you' | 'debug' | 'worker';
   /** The worker's task kind (todo, tests, improve…), for its track record */
   task?: string;
+  /** Forked: one lane per direction, built at the same time, for you to compare and pick */
+  fork?: boolean;
   /** What auto-accept decided once the proposal was ready: accepted, or why it waits for you */
   auto?: { accepted: boolean; why: string; score: number };
 }
@@ -139,7 +142,7 @@ interface ProposalsValue {
   setPrefs: (patch: Partial<AgentPrefs>) => void;
   /** Start a new proposal; returns its id, or null when no model is set up */
   /** `label` is what the tab shows when the task itself is long (a debugging brief); `quiet` skips the "choose a model" toast */
-  ask: (goal: string, options?: { approaches?: number; label?: string; quiet?: boolean; background?: boolean; origin?: Proposal['origin']; task?: string }) => string | null;
+  ask: (goal: string, options?: { approaches?: number; label?: string; quiet?: boolean; background?: boolean; origin?: Proposal['origin']; task?: string; forks?: ForkDirection[] }) => string | null;
   followUp: (id: string, text: string) => void;
   stop: (id: string) => void;
   answer: (id: string, allowed: boolean, always?: boolean) => void;
@@ -365,6 +368,62 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
     [approver, finish, log, prefs.budget, prefs.trustCommands, syncLane, update, reviewLane]
   );
 
+  /**
+   * Fork the future: one agent per direction, at the same time, each on its own copy of the project. They can build
+   * and run their work in the sandbox but never run commands on this machine; you compare the results and pick one.
+   */
+  const runForks = useCallback(
+    async (id: string, goal: string, forks: ForkDirection[], target: Exclude<ReturnType<typeof resolveProvider>, { error: string }>) => {
+      const p = projectRef.current;
+      const lanes = new Map<string, Stage>();
+      stages.current.set(id, lanes);
+      const controller = new AbortController();
+      controllers.current.set(id, controller);
+      const skills = (await fetchSkillIndex())?.skills ?? [];
+      const outcomes = await Promise.all(
+        forks.map(async (fork, i) => {
+          const laneId = forkLaneId(i);
+          const stage = new Stage(p.files);
+          lanes.set(laneId, stage);
+          const host = createAgentHost({ stage, projectName: p.name, entry: p.entry, files: stage.files(), onPlan: () => {} });
+          const events: AgentEvent[] = [];
+          try {
+            const run = await runAgent({
+              goal: forkGoal(goal, fork, forks),
+              system: systemPromptFor(stage.files(), skills),
+              tools: [...workspaceTools(host), ...skillTools(skillLibrary(skills, () => stage.files()))],
+              callModel: callModelFor(target),
+              budget: { maxSteps: 14, maxToolCalls: 50, maxMillis: 6 * 60_000, maxFixAttempts: 3 },
+              autoApprove: ['read', 'stage', 'build'],
+              history: [],
+              signal: controller.signal,
+              approve: async () => false,
+              onEvent: (event) => {
+                events.push(event);
+                if (event.type === 'step') update(id, (x) => ({ ...x, lanes: x.lanes.map((l) => (l.id === laneId ? { ...l, steps: event.step } : l)) }));
+                else if (event.type === 'tool') log(id, { kind: 'tool', call: event.call, risk: event.risk, lane: laneId });
+                else if (event.type === 'result') {
+                  update(id, (x) => ({ ...x, log: x.log.map((e) => (e.call?.id === event.call.id ? { ...e, result: event.result } : e)) }));
+                  syncLane(id, laneId);
+                }
+              },
+            });
+            const evidence = evidenceFrom(run, events, stage, isHarnessFile);
+            syncLane(id, laneId, { evidence, status: 'done', scoreNotes: [run.summary.split('\n').filter(Boolean).slice(-1)[0]?.slice(0, 160) ?? ''] });
+            return run.reason === 'finished';
+          } catch {
+            update(id, (x) => ({ ...x, lanes: x.lanes.map((l) => (l.id === laneId ? { ...l, status: 'done', scoreNotes: ['stopped'] } : l)) }));
+            return false;
+          }
+        })
+      );
+      const done = outcomes.filter(Boolean).length;
+      if (controller.signal.aborted) finish(id, { reason: 'aborted', summary: 'Stopped.' }, false);
+      else finish(id, { reason: done ? 'finished' : 'error', summary: done ? `${done} of ${forks.length} versions are ready. Compare them side by side, pick the one you like, then ship it or keep going from it.` : 'None of the versions finished.' }, done > 0);
+    },
+    [finish, log, syncLane, update]
+  );
+
   /** Try the task with the current setup and with variants of the agent's harness, then recommend the best (Harness²-style) */
   const runApproaches = useCallback(
     async (id: string, goal: string, k: number, target: Exclude<ReturnType<typeof resolveProvider>, { error: string }>) => {
@@ -460,7 +519,8 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
       // The worker can run on its own (cheaper) model; everything else uses the agent's
       const target = targetOrExplain(options.quiet, options.origin === 'worker' ? 'worker' : 'agent');
       if (!target) return null;
-      const k = options.approaches ?? prefs.approaches;
+      const forks = options.forks?.length ? options.forks : null;
+      const k = forks ? 0 : (options.approaches ?? prefs.approaches);
       const id = `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
       const proposal: Proposal = {
         id,
@@ -471,8 +531,13 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
         step: 0,
         plan: '',
         log: [{ id: ++idCounter.current, kind: 'you', text }],
-        lanes: k ? [] : [{ id: 'main', label: 'Changes', status: 'running', steps: 0, files: [], saved: { edits: [], before: {} } }],
-        laneId: k ? '' : 'main',
+        lanes: forks
+          ? forks.map((f, i) => ({ id: forkLaneId(i), label: f.label, status: 'running' as const, steps: 0, files: [], saved: { edits: [], before: {} } }))
+          : k
+            ? []
+            : [{ id: 'main', label: 'Changes', status: 'running', steps: 0, files: [], saved: { edits: [], before: {} } }],
+        laneId: forks ? forkLaneId(0) : k ? '' : 'main',
+        ...(forks ? { fork: true } : {}),
         lessons: [],
         origin: options.origin ?? 'you',
         ...(options.task ? { task: options.task } : {}),
@@ -480,11 +545,12 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
       setProposals((prev) => [proposal, ...prev]);
       // Background work (the worker) opens as a tab but doesn't take the editor from you
       if (!options.background) setActiveId(id);
-      if (k) void runApproaches(id, text, k, target);
+      if (forks) void runForks(id, text, forks, target);
+      else if (k) void runApproaches(id, text, k, target);
       else void runSingle(id, 'main', text, target);
       return id;
     },
-    [prefs.approaches, runApproaches, runSingle, targetOrExplain]
+    [prefs.approaches, runApproaches, runForks, runSingle, targetOrExplain]
   );
 
   const followUp = useCallback<ProposalsValue['followUp']>(

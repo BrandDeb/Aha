@@ -77,6 +77,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Click to edit** | In the in-browser preview, press ⌖ Edit and click any element: its code opens (exact for React and Preact), its text and classes can be edited right there (written into the source), or describe a change and the agent makes it. ⇩ saves the app as one HTML page to share. See [Web apps and live preview](#web-apps-and-live-preview) |
 | **Risk score and auto-accept** | Every proposal is scored 0–100 with its reasons (dependencies, CI, auth, schema, secrets, eval and shell, removed tests, size, evidence, the reviewer). Optionally accept the low-risk, verified ones by themselves; anything sensitive always waits for you. See [Risk score and auto-accept](#risk-score-and-auto-accept) |
 | **Specs → property tests** | Write what must always be true about a function ("sortPrices returns the items in ascending order"): it becomes a fast-check or Hypothesis test that tries hundreds of random inputs and shrinks a failure to the smallest counterexample, plus a contract that runs it on every change. Common properties need no model. See [Specs](#specs-plain-english-to-property-tests) |
+| **Fork the future** | ⑂ Fork 3 ways builds one request in three deliberately different directions at once (Minimal / Bold / Playful for looks; Simplest / Robust / Fast for code), then shows them side by side, running live for web apps, so you pick from real results. See [Fork the future](#fork-the-future) |
 | **Contracts** | Rules that stay true, written in words and checked by a pattern or a command ("no console.log in src", "every route checks the session", "the tests pass"). The agent is told every one and checks them before it finishes, a proposal that breaks one is never marked verified, the worker fixes broken ones, and the status bar shows how they stand; see [Contracts](#contracts) |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
@@ -255,6 +256,19 @@ argument order doesn't matter, and round trips (it pairs `encode`/`decode`, `ser
 
 A sentence that isn't one of these goes to the agent with the same instructions: find the function, write the
 property test, add the contract, run it, and report the smallest counterexample rather than quietly "fixing" it.
+
+### Fork the future
+
+Not sure what you want until you see it? In the bar, pick **⑂ Fork 3 ways**: the request is built three times at
+once, each on its own copy of the project and each told to commit to a different direction (and that the others
+take other ones, so they don't converge). A request about how something looks gets design directions (Minimal, Bold,
+Playful, Editorial); one about how it works gets code directions (Simplest, Robust, Fast, Extensible). The bar shows
+them as you type; switch between look and code, or drop one.
+
+The proposal opens **side by side**: for a web app that runs in the browser, every version runs live in its own
+column next to what you have now, rebuilding as each fork works; for anything else each column shows what that
+version changed and how it went. **Pick** one to review its diff and evidence, ship it, or keep going from it with a
+follow-up. Forks can build and run in the sandbox but never run commands on your machine.
 
 ### A second reviewer
 

@@ -6,6 +6,7 @@
  */
 
 import { useState, type RefObject } from 'react';
+import { CODE_DIRECTIONS, DESIGN_DIRECTIONS, forkDirections, isDesignRequest, type ForkDirection } from '@/lib/forks';
 import { useProposals } from '../proposals';
 
 const IDEAS = ['Fix the build errors', 'Add tests for the entry file', 'Explain this project and suggest improvements', 'Add --help and argument validation'];
@@ -26,12 +27,18 @@ export function CommandBar({ inputRef, shortcut, onNeedModel }: Props) {
   const { ask, proposals, open, prefs, setPrefs } = useProposals();
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
+  // Fork the future: build several versions in different directions at once
+  const [forking, setForking] = useState(false);
+  const [kind, setKind] = useState<'auto' | 'design' | 'code'>('auto');
+  const [dropped, setDropped] = useState<string[]>([]);
+  const design = kind === 'design' || (kind === 'auto' && isDesignRequest(text));
+  const forks: ForkDirection[] = (kind === 'auto' ? forkDirections(text, 4) : design ? DESIGN_DIRECTIONS : CODE_DIRECTIONS).filter((d) => !dropped.includes(d.label)).slice(0, 3);
   const recent = proposals.slice(0, 3);
   const working = proposals.filter((p) => p.status === 'working').length;
 
   const submit = (goal: string) => {
     if (!goal.trim()) return;
-    if (ask(goal) === null) onNeedModel();
+    if (ask(goal, forking ? { forks } : undefined) === null) onNeedModel();
     else {
       setText('');
       inputRef.current?.blur();
@@ -80,18 +87,56 @@ export function CommandBar({ inputRef, shortcut, onNeedModel }: Props) {
                   key={m.k}
                   type="button"
                   role="radio"
-                  aria-checked={prefs.approaches === m.k}
+                  aria-checked={!forking && prefs.approaches === m.k}
                   title={m.hint}
-                  onClick={() => setPrefs({ approaches: m.k })}
-                  className={`rounded px-2 py-0.5 text-xs ${prefs.approaches === m.k ? 'bg-white/[0.1] text-gray-100' : 'text-gray-400 hover:text-gray-100'}`}
+                  onClick={() => {
+                    setForking(false);
+                    setPrefs({ approaches: m.k });
+                  }}
+                  className={`rounded px-2 py-0.5 text-xs ${!forking && prefs.approaches === m.k ? 'bg-white/[0.1] text-gray-100' : 'text-gray-400 hover:text-gray-100'}`}
                 >
                   {m.label}
                 </button>
               ))}
+              <button
+                type="button"
+                role="radio"
+                aria-checked={forking}
+                title="Fork the future: build three deliberately different versions at once, then compare them side by side (running, for web apps) and pick one"
+                onClick={() => setForking(true)}
+                className={`rounded px-2 py-0.5 text-xs ${forking ? 'bg-white/[0.1] text-gray-100' : 'text-gray-400 hover:text-gray-100'}`}
+              >
+                ⑂ Fork 3 ways
+              </button>
             </div>
             <span className="ml-auto text-[11px] text-gray-500">Nothing changes until you accept</span>
           </div>
-          {!text.trim() && (
+          {forking && (
+            <div className="space-y-1.5" aria-label="Directions">
+              <div className="flex items-center gap-2">
+                <span className="eyebrow">Directions</span>
+                <div role="radiogroup" aria-label="Kind of directions" className="ml-auto flex rounded-md border border-border p-0.5 text-[11px]">
+                  {(['auto', 'design', 'code'] as const).map((k) => (
+                    <button key={k} type="button" role="radio" aria-checked={kind === k} onClick={() => { setKind(k); setDropped([]); }} className={`rounded px-1.5 ${kind === k ? 'bg-white/[0.1] text-gray-100' : 'text-gray-500 hover:text-gray-100'}`}>
+                      {k === 'auto' ? `Auto (${design ? 'look' : 'code'})` : k === 'design' ? 'Look' : 'Code'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <ul className="flex flex-wrap gap-1.5">
+                {forks.map((f) => (
+                  <li key={f.label} title={f.direction} className="flex items-center gap-1 rounded-md border border-[var(--accent-line)] bg-[var(--accent-soft)] px-2 py-0.5 text-xs text-gray-100">
+                    {f.label}
+                    {forks.length > 2 && (
+                      <button type="button" onClick={() => setDropped((d) => [...d, f.label])} aria-label={`Drop ${f.label}`} className="text-gray-500 hover:text-gray-100">×</button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[11px] text-gray-500">Each one is built at the same time on its own copy; you compare them{design ? ' running side by side' : ''} and pick one.</p>
+            </div>
+          )}
+          {!text.trim() && !forking && (
             <div>
               <div className="eyebrow mb-1.5">Try</div>
               <div className="flex flex-wrap gap-1.5">
