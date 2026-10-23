@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { browserPreviewSupport, htmlWithBundle, npmUrl, previewBuilderMain, previewEntry, resolveProjectPath } from '@/lib/browser-preview';
+import { browserPreviewSupport, cssModule, cssRuntimes, cssUrl, htmlWithBundle, npmUrl, previewBuilderMain, previewEntry, resolveProjectPath, rewriteCssImports, tailwindSource } from '@/lib/browser-preview';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +17,7 @@ export function GET(request: NextRequest) {
   const self = host && /^[\w.:[\]-]+$/.test(host) && /^https?$/.test(proto) ? `${proto}://${host}` : request.nextUrl.origin;
   const version = process.env.NEXT_PUBLIC_ESBUILD_VERSION;
   const cfg = { esbuildUrl: `${self}/esbuild/${version}/browser.js`, wasmUrl: `${self}/esbuild/${version}/esbuild.wasm` };
-  const helpers = { browserPreviewSupport, previewEntry, resolveProjectPath, npmUrl, htmlWithBundle };
+  const helpers = { browserPreviewSupport, previewEntry, resolveProjectPath, npmUrl, htmlWithBundle, cssUrl, cssRuntimes, tailwindSource, rewriteCssImports, cssModule };
   // The program goes inside a <script> element: a literal "</script" in its strings would end the element
   // early, so it is written as "<\/script", which means the same in JavaScript strings, templates and regexes
   const inScript = (code: string) => code.replace(/<\/(script)/gi, '<\\/$1').replace(/<!--/g, '<\\!--');
@@ -44,7 +44,10 @@ ${helperSource}
 </html>`;
   const csp = [
     "default-src 'none'",
-    `script-src 'unsafe-inline' 'wasm-unsafe-eval' ${self} https://esm.sh blob:`,
+    // esm.sh: packages and compilers; jsDelivr and cdn.tailwindcss.com: the CSS frameworks that run in the page (Tailwind, UnoCSS).
+    // 'unsafe-eval': compilers built from other languages (dart-sass) and runtime template compilers evaluate code. The frame
+    // already runs the project's own code on an opaque origin, so eval reaches nothing the code couldn't already.
+    `script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' ${self} https://esm.sh https://cdn.jsdelivr.net https://cdn.tailwindcss.com blob:`,
     `connect-src ${self} https: wss:`,
     'worker-src blob:',
     "style-src 'unsafe-inline' https:",

@@ -13,6 +13,7 @@ import { detectStacks } from './pipelines/stack.ts';
 import { PROJECT_TEMPLATES } from './project-templates.ts';
 import { PYTHON_TEMPLATES } from './python-templates.ts';
 import { WEB_STARTERS } from './web-templates.ts';
+import { CSS_STARTERS } from './css-templates.ts';
 
 export interface Template {
   id: string;
@@ -428,7 +429,7 @@ countdown(Number(process.argv[2] ?? '3'));
     return { id, name, description, filename, code, files: { ...rest, ...ciFor(files) }, language };
   }),
   ...LANGUAGE_STARTERS.map(({ id, name, description, filename, code, files, language }): Template => ({ id, name, description, filename, code, files, language })),
-  ...WEB_STARTERS.map(({ id, name, description, filename, code, files }): Template => ({ id, name, description, filename, code, files, language: 'web' })),
+  ...[...WEB_STARTERS, ...CSS_STARTERS].map(({ id, name, description, filename, code, files }): Template => ({ id, name, description, filename, code, files, language: 'web' })),
 ];
 
 /** The CI workflow the Pipelines tab would generate for these files (a project template ships with it) */

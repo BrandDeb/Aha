@@ -529,6 +529,25 @@ it on. At most three dev servers run at once (the least recently viewed stops fi
 20 minutes stops, and they all stop with the studio. Every starter is tested for real: installed, served and edited
 (`NANOCLI_TEST_NETWORK=1 npm test`).
 
+
+### CSS frameworks
+
+Every popular way to style a web app works out of the box, in the in-browser preview (no install) and with the
+real dev server and production build:
+
+| Framework | In the browser preview | Starter |
+|---|---|---|
+| **Tailwind CSS** v4 (and v3) | Tailwind's browser build (v3: the Play CDN); `@theme`, `@apply` and friends go to it | Tailwind CSS (React) |
+| **daisyUI** | its stylesheet, on Tailwind | daisyUI |
+| **UnoCSS** | the UnoCSS runtime (`virtual:uno.css` is handled) | UnoCSS |
+| **Bootstrap**, **Bulma**, **Pico**, any npm stylesheet | `import 'pkg/…/x.css'` and CSS `@import "pkg/…"` load from the package at your version | Bootstrap, Bulma, Pico CSS |
+| **Sass / SCSS** | dart-sass in the page: `@use` partials, npm packages (`bootstrap/scss/…`), Vue `<style lang="scss">` | Sass (SCSS) |
+| **Less** | less.js in the page | Less |
+| **CSS Modules** | `*.module.css` (and `.module.scss`/`.less`): classes scoped per file, imported as an object | CSS Modules (React) |
+
+Each starter is a real Vite project (with `@tailwindcss/vite`, `unocss/vite`, `sass` or `less` set up) that
+`npm run build`s for production. Styled-components, Emotion and other CSS-in-JS libraries work through npm as usual.
+
 ## Other languages
 
 TypeScript compiles with scriptc and Python runs with uv; everything else runs with **its own toolchain**, which the studio

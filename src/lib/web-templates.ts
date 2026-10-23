@@ -37,15 +37,15 @@ button:hover { border-color: #4f8cff; }
 code { background: #151a23; padding: 0.15rem 0.4rem; border-radius: 0.35rem; font-size: 0.9em; }
 `;
 
-const VITE = '^8.3.4';
-const TS = '~6.0.3';
+export const VITE = '^8.3.4';
+export const TS = '~6.0.3';
 
-const pkg = (name: string, scripts: Record<string, string>, dependencies: Record<string, string>, devDependencies: Record<string, string>, extra: Record<string, unknown> = {}) =>
+export const pkg = (name: string, scripts: Record<string, string>, dependencies: Record<string, string>, devDependencies: Record<string, string>, extra: Record<string, unknown> = {}) =>
   `${JSON.stringify({ name, private: true, version: '0.0.0', type: 'module', scripts, ...(Object.keys(dependencies).length ? { dependencies } : {}), devDependencies, ...extra }, null, 2)}\n`;
 
-const viteScripts = { dev: 'vite', build: 'vite build', preview: 'vite preview' };
+export const viteScripts = { dev: 'vite', build: 'vite build', preview: 'vite preview' };
 
-const html = (title: string, script: string, root = '<div id="app"></div>') => `<!doctype html>
+export const html = (title: string, script: string, root = '<div id="app"></div>') => `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -59,7 +59,7 @@ const html = (title: string, script: string, root = '<div id="app"></div>') => `
 </html>
 `;
 
-const tsconfig = (jsx?: Record<string, string>) =>
+export const tsconfig = (jsx?: Record<string, string>) =>
   `${JSON.stringify(
     {
       compilerOptions: {
