@@ -533,3 +533,21 @@ test('problems: what went wrong, in terms of what you can do', async () => {
   assert.equal(problemOf('Added greet() and the build passes.'), null);
   assert.equal(problemOf(undefined), null);
 });
+
+test('Gemini 3: the thought signature on a tool call goes back with it', () => {
+  const turn = parseOpenAiTurn({ choices: [{ message: { content: null, tool_calls: [{ id: 'a', function: { name: 'update_plan', arguments: '{"steps":"x"}' }, extra_content: { google: { thought_signature: 'SIG' } } }] }, finish_reason: 'tool_calls' }] });
+  assert.deepEqual(turn.toolCalls[0].extra, { google: { thought_signature: 'SIG' } });
+  const wire = toOpenAiMessages('sys', [{ role: 'assistant', content: '', toolCalls: turn.toolCalls }]) as { tool_calls?: { extra_content?: unknown }[] }[];
+  assert.deepEqual(wire[1].tool_calls![0].extra_content, { google: { thought_signature: 'SIG' } });
+  const plain = parseOpenAiTurn({ choices: [{ message: { tool_calls: [{ id: 'b', function: { name: 'x', arguments: '{}' } }] } }] });
+  assert.equal('extra' in plain.toolCalls[0], false);
+});
+
+test('arguments: a list where text is asked for, and a number sent as text, are taken as meant', () => {
+  const spec = { name: 'update_plan', description: 'plan', risk: 'read' as const, parameters: { type: 'object' as const, properties: { steps: { type: 'string' as const }, n: { type: 'integer' as const } }, required: ['steps'] } };
+  const args: Record<string, unknown> = { steps: ['read files', 'fix bug'], n: '3' };
+  assert.equal(validateArgs(spec, args), null);
+  assert.equal(args.steps, '- [ ] read files\n- [ ] fix bug');
+  assert.equal(args.n, 3);
+  assert.match(validateArgs(spec, { steps: [{ a: 1 }] }) ?? '', /must be string, got array/);
+});

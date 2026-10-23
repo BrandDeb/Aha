@@ -33,6 +33,8 @@ export interface ToolCall {
   id: string;
   name: string;
   args: Record<string, unknown>;
+  /** Provider data that must be sent back with the call (Gemini's thought signature) */
+  extra?: Record<string, unknown>;
 }
 
 export interface ToolResult {

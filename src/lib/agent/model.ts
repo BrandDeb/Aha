@@ -22,7 +22,7 @@ export function toOpenAiMessages(system: string, messages: Message[]): unknown[]
         role: 'assistant',
         content: m.content || null,
         ...(m.toolCalls?.length
-          ? { tool_calls: m.toolCalls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args) } })) }
+          ? { tool_calls: m.toolCalls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args) }, ...(c.extra ? { extra_content: c.extra } : {}) })) }
           : {}),
       });
     }
@@ -46,14 +46,15 @@ function parseArgs(raw: unknown): Record<string, unknown> {
 
 export function parseOpenAiTurn(data: unknown): ModelTurn {
   const body = data as {
-    choices?: { message?: { content?: string | null; tool_calls?: { id?: string; function?: { name?: string; arguments?: unknown } }[] }; finish_reason?: string }[];
+    choices?: { message?: { content?: string | null; tool_calls?: { id?: string; function?: { name?: string; arguments?: unknown }; extra_content?: Record<string, unknown> }[] }; finish_reason?: string }[];
     usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
   const choice = body.choices?.[0];
   if (!choice?.message) throw new Error('The model returned an empty response.');
   const toolCalls: ToolCall[] = (choice.message.tool_calls ?? [])
     .filter((c) => c.function?.name)
-    .map((c, i) => ({ id: c.id || `call_${i}`, name: c.function!.name!, args: parseArgs(c.function!.arguments) }));
+    // Gemini 3 signs its tool calls (extra_content.google.thought_signature) and rejects a follow-up that drops the signature
+    .map((c, i) => ({ id: c.id || `call_${i}`, name: c.function!.name!, args: parseArgs(c.function!.arguments), ...(c.extra_content && typeof c.extra_content === 'object' ? { extra: c.extra_content } : {}) }));
   const reason = choice.finish_reason ?? '';
   return {
     text: choice.message.content ?? '',

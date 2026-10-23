@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { editorProblems } from '@/components/CodeEditor';
 import { verdict } from '@/lib/agent/evidence';
+import { problemOf } from '@/lib/agent/problems';
 import { discoverTasks, nextTask, recentCount, type WorkerTask } from '@/lib/worker';
 import { improvementBrief, kindWeight, needsImprovement, summarize } from '@/lib/agent/outcomes';
 import { useOutcomes } from './outcomes-client';
@@ -164,10 +165,17 @@ export function useWorker({ projectName, files, entry, failure, brokenContracts,
   const waitingOnYou = workerProposals.find((p) => p.status === 'working' && p.pending);
   useEffect(() => {
     if (settings.mode !== 'auto' || pausedReason || anyWorking) return;
+    // The model provider itself refused (key, quota, model, network): another task would fail the same way
+    const last = workerProposals.find((p) => p.status !== 'working');
+    const problem = last && last.outcome?.reason !== 'finished' ? problemOf(last.outcome?.summary) : null;
+    if (problem && last && Date.now() - last.createdAt < 60 * 60_000) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- a decision the loop makes once
+      setPausedReason(`${problem.title}. ${problem.detail} Then resume.`);
+      return;
+    }
     // Its last three tasks came out unverified: stop and let you look
     const finished = workerProposals.filter((p) => p.status !== 'working').slice(0, 3);
     if (finished.length === 3 && finished.every((p) => { const e = laneOf(p)?.evidence; return !e || !verdict(e).verified; })) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- a decision the loop makes once
       setPausedReason('Its last three tasks were not verified. Review them, then resume.');
       return;
     }

@@ -49,10 +49,19 @@ export function validateArgs(spec: ToolSpec, args: Record<string, unknown>): str
   for (const [name, value] of Object.entries(args)) {
     const def = spec.parameters.properties[name];
     if (!def) continue; // extra arguments are ignored
-    const actual = Array.isArray(value) ? 'array' : value === null ? 'null' : typeof value;
-    const ok = def.type === 'integer' ? Number.isInteger(value) : def.type === 'number' ? typeof value === 'number' : actual === def.type;
+    // Models often send a list where text is asked for (plan steps), or a number as text: take what they meant
+    if (def.type === 'string' && Array.isArray(value) && value.every((v) => v === null || typeof v !== 'object')) {
+      args[name] = value.map((v) => (def.description?.toLowerCase().includes('plan') || name === 'steps' ? `- [ ] ${v}` : String(v))).join('\n');
+      continue;
+    }
+    if ((def.type === 'number' || def.type === 'integer') && typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) {
+      args[name] = Number(value);
+    }
+    const coerced = args[name];
+    const actual = Array.isArray(coerced) ? 'array' : coerced === null ? 'null' : typeof coerced;
+    const ok = def.type === 'integer' ? Number.isInteger(coerced) : def.type === 'number' ? typeof coerced === 'number' : actual === def.type;
     if (!ok) return `Argument “${name}” must be ${def.type}, got ${actual}.`;
-    if (def.enum && !def.enum.includes(String(value))) return `Argument “${name}” must be one of: ${def.enum.join(', ')}.`;
+    if (def.enum && !def.enum.includes(String(coerced))) return `Argument “${name}” must be one of: ${def.enum.join(', ')}.`;
   }
   return null;
 }
