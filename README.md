@@ -421,6 +421,33 @@ of them.
 
 ---
 
+## Desktop app (Windows and macOS)
+
+NanoCLI Studio also ships as a native app built with [Tauri](https://tauri.app). The shell is deliberately thin (a 4.5 MB
+Rust binary): it starts the studio's server with a bundled Node.js on a free loopback port, shows a loading screen, then
+points a native window at it, using the system's own web view (WebView2 on Windows, WebKit on macOS) rather than shipping a
+browser. The page gets no native APIs and runs exactly as it does in a browser, with the same security model.
+
+- Links that leave the studio open in your browser; downloads go to your Downloads folder.
+- A second launch focuses the running app. Quitting stops the server, and the server also stops on its own if the app
+  disappears without saying so.
+- On macOS the server gets your login shell's `PATH`, so compilers you installed with Homebrew, rustup and the like are used.
+- Builds write to the app's cache folder (the install folder is read-only).
+- zig (needed for WebAssembly builds, ~400 MB) isn't shipped: the first WASM build fetches the exact version scriptc expects
+  from the npm registry, checked against its sha512, into `~/.nanocli/zig` (about 90 MB to download, once).
+
+Build it yourself on the platform you're packaging for (Rust, and on Linux the WebKitGTK dev packages):
+
+```bash
+npm ci
+node scripts/desktop-prepare.mjs     # the studio build + production dependencies + a verified Node.js 24
+npx tauri build                      # installers in src-tauri/target/release/bundle/
+```
+
+CI (`.github/workflows/desktop.yml`) builds the macOS (Apple silicon) `.dmg` and the Windows installer on pull requests that
+touch the app, on version tags, and on demand. Builds are unsigned unless the `APPLE_*` signing secrets are set; macOS then
+asks you to confirm the first launch (right-click → Open).
+
 ## Maintenance
 
 The studio looks after itself, and asks before it changes anything.

@@ -1,0 +1,103 @@
+name: Desktop apps
+
+# Builds NanoCLI Studio for macOS (Apple silicon) and Windows with Tauri: on pull requests that touch
+# the desktop app, on version tags, and on demand. Installers are uploaded as workflow artifacts.
+on:
+  pull_request:
+    paths:
+      - 'src-tauri/**'
+      - 'scripts/desktop-prepare.mjs'
+      - 'scripts/supervise.js'
+      - '.github/workflows/desktop.yml'
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (Apple silicon)
+            os: macos-latest
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+            artifact: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          - name: Windows (x64)
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+            artifact: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust builds
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.target }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rust tests
+        working-directory: src-tauri
+        shell: bash
+        # The build script wants the bundled Node.js to exist; tests don't run it
+        run: |
+          mkdir -p binaries
+          touch "binaries/node-${{ matrix.target }}$([ '${{ runner.os }}' = 'Windows' ] && echo .exe)"
+          cargo test --target ${{ matrix.target }}
+          rm -f binaries/node-*
+
+      - name: Assemble the app (studio build, production dependencies, verified Node.js)
+        run: node scripts/desktop-prepare.mjs --target ${{ matrix.target }}
+
+      - name: Signing (only when the secrets are set)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Tauri signs and notarizes when these are present; without them the app is unsigned
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -n "${!name}" ]; then
+              echo "::add-mask::${!name}"
+              { echo "$name<<EOF"; echo "${!name}"; echo "EOF"; } >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: Build with Tauri
+        run: npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanocli-studio-${{ matrix.target }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 14

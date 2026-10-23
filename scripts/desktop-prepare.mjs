@@ -142,8 +142,10 @@ const work = mkdtempSync(path.join(tmpdir(), 'nanocli-node-'));
 try {
   const file = path.join(work, archive);
   writeFileSync(file, data);
-  // bsdtar (macOS, Windows 10+) reads zip as well as tar; GNU tar handles the Linux .tar.xz
-  run('tar', ['-xf', file, '-C', work]);
+  // bsdtar (macOS, and Windows' own tar.exe) reads zip as well as tar; GNU tar handles the Linux .tar.xz.
+  // On Windows, name System32's tar: a GNU tar earlier on PATH (Git's) can't read zip
+  const systemTar = process.platform === 'win32' ? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe') : 'tar';
+  execFileSync(existsSync(systemTar) || process.platform !== 'win32' ? systemTar : 'tar', ['-xf', file, '-C', work], { stdio: 'inherit' });
   const binary = path.join(work, `node-v${nodeVersion}-${spec.dist}`, spec.bin);
   mkdirSync(BINARIES, { recursive: true });
   const out = path.join(BINARIES, `node-${target}${target.includes('windows') ? '.exe' : ''}`);

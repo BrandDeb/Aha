@@ -9,6 +9,7 @@
 //! server stops when the app quits.
 
 use std::fs::{self, File};
+#[cfg(unix)]
 use std::io::Read;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
