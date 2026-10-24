@@ -67,7 +67,7 @@ with the studio; more install from any GitHub repository.
 | Pack | Status |
 |---|---|
 | Core engineering (debugging, TDD, tests, review, refactoring, security, performance, API and CLI design, components, database changes, smart-contract security, docs, upgrades, creating skills) | Done |
-| **Popular open-source ecosystems**: React/Next.js, Vue/Nuxt, Svelte/SvelteKit, Tailwind, shadcn/ui, Node/Express/Hono, TypeScript strictness, Vite, Prisma/Drizzle, Python/FastAPI, Django, pandas, pytest, Go, Rust/cargo, Docker, GitHub Actions, Kubernetes basics, Playwright, Vitest/Jest, OpenAPI, GraphQL, PostgreSQL, Redis, accessibility, SEO, i18n, Conventional Commits and releases, Solidity/Foundry/Hardhat, viem/wagmi dapps | Now |
+| **Popular open-source ecosystems** (Done, 31 skills): React/Next.js, Vue/Nuxt, Svelte/SvelteKit, Tailwind, shadcn/ui, Node/Express/Hono, TypeScript strictness, Vite, Prisma/Drizzle, Python/FastAPI, Django, pandas, pytest, Go, Rust/cargo, Docker, GitHub Actions, Kubernetes basics, Playwright, Vitest/Jest, OpenAPI, GraphQL, PostgreSQL, Redis, accessibility, SEO, i18n, Conventional Commits and releases, Solidity/Foundry/Hardhat, viem/wagmi dapps | Done |
 | Skill marketplace view (curated GitHub sources, one-click install) | Next |
 
 ## 4. Extensions (VS Code-style)
@@ -89,9 +89,9 @@ and would undo the "lightweight" goal. The plan instead:
 | Piece | Status |
 |---|---|
 | Solidity, Vyper, Move, Cairo starters; smart-contract-security skill | Done |
-| **Solidity compiler in the browser** (solc-js, version picked from the pragma) with errors in the editor | Now |
-| **Deploy & run**: an in-browser EVM (no node, no faucet), accounts with test ETH, deploy, and a form per ABI function (call/transact, payable value, events, gas used) | Now |
-| Static analysis (common pitfalls: reentrancy, tx.origin, unchecked calls, floating pragma…) | Now |
+| **Solidity compiler in the browser** (solc-js, version picked from the pragma) with errors in the editor | Done |
+| **Deploy & run**: an in-browser EVM (no node, no faucet), accounts with test ETH, deploy, and a form per ABI function (call/transact, payable value, events, gas used) | Done |
+| Static analysis (common pitfalls: reentrancy, tx.origin, unchecked calls, floating pragma…) | Done |
 | Injected wallet (MetaMask etc.) to deploy to a real testnet; Etherscan/Sourcify verification | Next |
 | Foundry and Hardhat projects: `forge test` / `npx hardhat test` as contracts in the studio; gas report | Next (runs where commands run) |
 | Debugger for transactions (opcode/source stepping) | Later |

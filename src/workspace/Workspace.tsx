@@ -64,6 +64,7 @@ const LanguagePanel = dynamic(() => import('./panels/LanguagePanel').then((m) =>
 const PythonPanel = dynamic(() => import('./panels/PythonPanel').then((m) => m.PythonPanel), { ssr: false, loading: PanelLoading });
 const RewindBar = dynamic(() => import('./components/RewindBar').then((m) => m.RewindBar), { ssr: false });
 const OptimizePanel = dynamic(() => import('./panels/OptimizePanel').then((m) => m.OptimizePanel), { ssr: false, loading: PanelLoading });
+const Web3Panel = dynamic(() => import('./panels/Web3Panel').then((m) => m.Web3Panel), { ssr: false, loading: PanelLoading });
 const ContractsPanel = dynamic(() => import('./panels/ContractsPanel').then((m) => m.ContractsPanel), { ssr: false, loading: PanelLoading });
 const KitPanel = dynamic(() => import('./panels/KitPanel').then((m) => m.KitPanel), { ssr: false, loading: PanelLoading });
 const PipelinesPanel = dynamic(() => import('./panels/PipelinesPanel').then((m) => m.PipelinesPanel), { ssr: false, loading: PanelLoading });
@@ -105,6 +106,7 @@ const GROUPS: { id: string; label: string; panels: { id: PanelId; label: string;
       { id: 'languages', label: 'Language', hint: 'The toolchain that runs this project, and its options' },
       { id: 'python', label: 'Python', hint: 'uv: run, packages, environment variables' },
       { id: 'package', label: 'Packages', hint: 'Dependencies and scripts' },
+      { id: 'web3', label: 'Deploy & run', hint: 'Solidity: compile in the browser, deploy to a chain in the page, call every function, analyse for pitfalls' },
     ],
   },
   {
@@ -230,6 +232,7 @@ export function Workspace() {
   }, [jsxSource]);
   const previewMode: 'server' | 'browser' = previewChoice ?? (devServer.enabled === false && inBrowser?.ok ? 'browser' : 'server');
   const hasPython = useMemo(() => Object.keys(project.files).some((f) => isPython(f) || f === 'pyproject.toml'), [project.files]);
+  const hasSolidity = useMemo(() => Object.keys(project.files).some((f) => f.endsWith('.sol')), [project.files]);
   const [building, setBuilding] = useState(false);
   const [lastBuild, setLastBuild] = useState<CompileResult | null>(null);
   const [coverage, setCoverage] = useState<CoverageResult | null>(null);
@@ -860,6 +863,7 @@ export function Workspace() {
     { id: 'panel.history', category: 'History', title: 'Open version history', keys: DEFAULT_KEYS['panel.history'], run: () => openPanel('history') },
     { id: 'panel.optimize', category: 'Project', title: 'Optimize: SEO, AEO, GEO, social, accessibility, speed', run: () => openPanel('optimize') },
     { id: 'panel.contracts', category: 'Project', title: 'Open contracts', run: () => openPanel('contracts') },
+    { id: 'panel.web3', category: 'Run', title: 'Solidity: compile, deploy and run (in-page chain)', run: () => openPanel('web3') },
     { id: 'panel.graph', category: 'Graph', title: 'Open dependency graph', run: () => openPanel('graph') },
     { id: 'agent.ask', category: 'Assistant', title: 'Ask the agent…', keys: DEFAULT_KEYS['agent.ask'], run: () => askRef.current?.focus() },
     { id: 'panel.agent', category: 'Assistant', title: 'Open agent (proposals, model, preferences)', run: () => openPanel('agent') },
@@ -976,7 +980,7 @@ export function Workspace() {
   const shownPanel: PanelId = web && panel === 'build' ? 'agent' : panel;
   const shownGroup = groupOf(shownPanel);
   const panelVisible = (id: PanelId) =>
-    id === 'build' ? !web : id === 'python' ? hasPython || panel === 'python' : id === 'languages' ? !!entryLanguage || panel === 'languages' : id === 'package' ? !hasPython || 'package.json' in project.files || panel === 'package' : id === 'kit' ? KIT_FILE in project.files || panel === 'kit' : true;
+    id === 'build' ? !web : id === 'python' ? hasPython || panel === 'python' : id === 'languages' ? !!entryLanguage || panel === 'languages' : id === 'package' ? !hasPython || 'package.json' in project.files || panel === 'package' : id === 'kit' ? KIT_FILE in project.files || panel === 'kit' : id === 'web3' ? hasSolidity || panel === 'web3' : true;
 
   return (
     <ActionsContext.Provider value={actions}>
@@ -1344,6 +1348,7 @@ export function Workspace() {
                 {shownPanel === 'agent' && <AgentPanel />}
                 {shownPanel === 'worker' && <WorkerPanel worker={worker} />}
                 {shownPanel === 'optimize' && <OptimizePanel onOpen={(file) => openLocation({ file, line: 1 })} />}
+                {shownPanel === 'web3' && <Web3Panel onOpen={(file, line) => openLocation({ file, line: line ?? 1 })} />}
                 {shownPanel === 'contracts' && <ContractsPanel onOpen={(file, line) => openLocation({ file, line: line ?? 1 })} />}
                 {shownPanel === 'kit' && <KitPanel onFocus={(focus) => worker.setSettings({ focus })} />}
                 {shownPanel === 'history' && <HistoryPanel />}

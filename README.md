@@ -80,6 +80,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Fork the future** | ⑂ Fork 3 ways builds one request in three deliberately different directions at once (Minimal / Bold / Playful for looks; Simplest / Robust / Fast for code), then shows them side by side, running live for web apps, so you pick from real results. See [Fork the future](#fork-the-future) |
 | **Build from a picture** | Paste a screenshot, a mock-up or a photo of a paper sketch in Create: the agent matches the screenshot (or interprets the sketch's layout) and builds a working app from it. See [Create](#create) |
 | **Remix** | Start from a public GitHub repo (copied in, licence shown) or any website (read for its structure and rebuilt as your own original app), and tell the agent what to change. See [Create](#create) |
+| **Smart contracts: deploy & run** | Remix-style Solidity tools: the official compiler in the browser at your pragma's version, imports from npm resolved, deploy to a chain in the page with ten funded accounts, a form for every function, events and decoded revert reasons, and a pitfalls analysis. See [Smart contracts](#smart-contracts-deploy--run) |
 | **Contracts** | Rules that stay true, written in words and checked by a pattern or a command ("no console.log in src", "every route checks the session", "the tests pass"). The agent is told every one and checks them before it finishes, a proposal that breaks one is never marked verified, the worker fixes broken ones, and the status bar shows how they stand; see [Contracts](#contracts) |
 | **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
 | **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
@@ -523,6 +524,33 @@ Safety model, since the agent reads untrusted text (web pages, issues, query res
   environment (never the server's secrets) and a private `HOME`; idle MCP sessions are closed after five minutes.
 
 ---
+
+## Smart contracts: deploy & run
+
+Solidity gets the tools Remix IDE is loved for, inside the studio (**Run → Deploy & run**, shown whenever the project
+has `.sol` files):
+
+- **Compiler in the browser.** The official compiler (the same soljson builds Remix uses) runs in a web worker at the
+  newest release every file's `pragma solidity` accepts, or the one you pick; optimizer and runs, EVM version and
+  via-IR are settings. It recompiles as you type. The studio downloads each version once and keeps it in
+  `~/.nanocli/solc`, so it works offline after that. Errors and warnings link to their line; **Fix with the agent**
+  hands them over.
+- **Imports just work.** Relative paths, `remappings.txt` and foundry.toml remappings, `lib/` and `node_modules/`,
+  and npm packages (`@openzeppelin/contracts`, `forge-std`, `solmate`, `solady`, Chainlink, Uniswap) fetched from
+  jsDelivr at the version package.json pins.
+- **A chain in the page.** Deploy to an Ethereum Virtual Machine (ethereumjs) running in your browser, with ten
+  funded test accounts: no node, no wallet, no faucet, nothing leaves the page. Every function gets a form from
+  the ABI (numbers accept `1.5 ether` or `2 gwei`; arrays and structs as JSON). Reads (blue) are free and change
+  nothing; transactions (orange, red when payable) show their cost the way Remix does (base + calldata +
+  execution, each starting cold), the events they emitted, and revert reasons decoded: `require` messages, custom
+  errors with their arguments (`TooBig(106, 100)`) and panics (`division by zero`). A failed call has **Why?**,
+  which asks the agent to explain or fix it.
+- **Analysis.** A first pass for the classic pitfalls, each with why it matters and the fix: reentrancy (value sent
+  before state changes, no `nonReentrant`), `tx.origin` auth, unchecked low-level calls, `delegatecall`,
+  `selfdestruct`, block-data randomness, unprotected mint/withdraw/ownership functions, raw `ecrecover`, floating
+  pragmas, `transfer`/`send`, unbounded loops, inline assembly. Contracts over the 24,576-byte limit are flagged.
+  It is not an audit; the built-in smart-contract-security and solidity-foundry skills go further, and Foundry and
+  Hardhat projects run their own tests where commands run.
 
 ## DevOps: pipelines in the studio
 
