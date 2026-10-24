@@ -126,6 +126,7 @@ export function App() {
   return (
     <main>
       <h1>Counter dapp</h1>
+      <p className="hint">Edit src/App.tsx and contracts/Counter.sol; the preview updates as you type.</p>
       {!isConnected ? (
         <section>
           {connectors.map((c) => (

@@ -19,6 +19,7 @@ const EXPECTED: Record<string, string> = {
   'web-astro': 'Astro',
   'web-react-router': 'React Router',
   'web-angular': 'Angular',
+  'web-dapp': 'Vite · React',
 };
 
 const filesOf = (s: (typeof WEB_STARTERS)[number]) => ({ ...s.files, [s.filename]: s.code });
