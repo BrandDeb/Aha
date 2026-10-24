@@ -327,6 +327,16 @@ export const GALLERY: GalleryApp[] = [
     brief: 'Turn this into an ERC-20 token with a capped supply, an owner who can mint up to the cap, and burn. Write tests for transfers, allowances, the cap and access control, plus a fuzz test that the total supply never exceeds the cap.',
     art: { from: '#6366f1', to: '#0ea5e9', glyph: '◆' },
   },
+  {
+    id: 'dapp',
+    name: 'Dapp',
+    pitch: 'A smart contract and the web app that uses it through the wallet.',
+    category: 'Tools',
+    why: 'wagmi and viem are what most production dapps use: typed contract calls, wallet connection and transaction states with React hooks; the contract compiles and deploys in the studio’s Deploy & run panel.',
+    source: { template: 'web-dapp' },
+    brief: 'Turn this into a guestbook dapp: the contract stores messages (author, text, timestamp) with an event per message and a cap on length; the front end lists messages newest first, lets a connected wallet sign the guestbook, shows pending → mined states and readable errors, and works on Sepolia and a local Anvil node. Add Foundry-style tests for the contract.',
+    art: { from: '#8b5cf6', to: '#06b6d4', glyph: '⬡' },
+  },
 ];
 
 export const GALLERY_CATEGORIES: GalleryCategory[] = ['Productivity', 'Business', 'Content', 'Data and AI', 'APIs and services', 'Tools', 'Fun'];

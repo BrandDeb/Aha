@@ -35,6 +35,8 @@ export interface TxRecord {
   error?: string;
   events: { name: string; args: Record<string, unknown> }[];
   block: number;
+  /** On a real network: the transaction hash */
+  hash?: string;
 }
 
 const ONE_ETHER = 10n ** 18n;
@@ -242,4 +244,146 @@ export function formatEther(wei: bigint): string {
   const whole = abs / ONE_ETHER;
   const frac = (abs % ONE_ETHER).toString().padStart(18, '0').replace(/0+$/, '').slice(0, 6);
   return `${neg ? '-' : ''}${whole}${frac ? `.${frac}` : ''}`;
+}
+
+// ─── A browser wallet (MetaMask, Rabby, Coinbase Wallet…): the same interface, on a real network ─────────────
+
+interface Eip1193 {
+  request(args: { method: string; params?: unknown[] }): Promise<unknown>;
+  on?(event: string, handler: (...args: unknown[]) => void): void;
+}
+
+/** Well-known chains by id, for the label and the block explorer link */
+export const CHAINS: Record<number, { name: string; explorer?: string; testnet?: boolean }> = {
+  1: { name: 'Ethereum', explorer: 'https://etherscan.io' },
+  11155111: { name: 'Sepolia', explorer: 'https://sepolia.etherscan.io', testnet: true },
+  17000: { name: 'Holesky', explorer: 'https://holesky.etherscan.io', testnet: true },
+  8453: { name: 'Base', explorer: 'https://basescan.org' },
+  84532: { name: 'Base Sepolia', explorer: 'https://sepolia.basescan.org', testnet: true },
+  10: { name: 'OP Mainnet', explorer: 'https://optimistic.etherscan.io' },
+  11155420: { name: 'OP Sepolia', explorer: 'https://sepolia-optimism.etherscan.io', testnet: true },
+  42161: { name: 'Arbitrum One', explorer: 'https://arbiscan.io' },
+  421614: { name: 'Arbitrum Sepolia', explorer: 'https://sepolia.arbiscan.io', testnet: true },
+  137: { name: 'Polygon', explorer: 'https://polygonscan.com' },
+  80002: { name: 'Polygon Amoy', explorer: 'https://amoy.polygonscan.com', testnet: true },
+  31337: { name: 'Local (Anvil / Hardhat)', testnet: true },
+};
+
+export class WalletChain {
+  instances: Instance[] = [];
+  txs: TxRecord[] = [];
+  block = 0;
+  private nextTx = 0;
+  private provider: Eip1193;
+  accounts: string[];
+  chainId: number;
+  constructor(provider: Eip1193, accounts: string[], chainId: number) {
+    this.provider = provider;
+    this.accounts = accounts;
+    this.chainId = chainId;
+  }
+
+  /** Connect to the wallet the browser injected (window.ethereum) */
+  static async connect(provider: Eip1193 | undefined): Promise<WalletChain> {
+    if (!provider) throw new Error('No browser wallet found. Install MetaMask (or another wallet extension) and reload.');
+    const accounts = (await provider.request({ method: 'eth_requestAccounts' })) as string[];
+    const chainId = Number(await provider.request({ method: 'eth_chainId' }));
+    return new WalletChain(provider, accounts, chainId);
+  }
+
+  get network() {
+    return CHAINS[this.chainId]?.name ?? `Chain ${this.chainId}`;
+  }
+
+  explorerTx(hash: string): string | null {
+    const base = CHAINS[this.chainId]?.explorer;
+    return base ? `${base}/tx/${hash}` : null;
+  }
+
+  async balance(address: string): Promise<bigint> {
+    return BigInt((await this.provider.request({ method: 'eth_getBalance', params: [address, 'latest'] })) as string);
+  }
+
+  private async receipt(hash: string): Promise<{ status: string; gasUsed: string; contractAddress?: string; logs: { address: string; topics: string[]; data: string }[]; blockNumber: string }> {
+    for (let i = 0; i < 300; i++) {
+      const r = (await this.provider.request({ method: 'eth_getTransactionReceipt', params: [hash] })) as Awaited<ReturnType<WalletChain['receipt']>> | null;
+      if (r) return r;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    throw new Error('The transaction was not mined within 10 minutes.');
+  }
+
+  private events(logs: { address: string; topics: string[]; data: string }[]): TxRecord['events'] {
+    return logs.map((log) => {
+      for (const inst of this.instances) {
+        try {
+          const ev = decodeEventLog({ abi: abiOf(inst.abi), topics: log.topics as [`0x${string}`, ...`0x${string}`[]], data: log.data as `0x${string}` });
+          return { name: ev.eventName ?? 'event', args: (ev.args ?? {}) as Record<string, unknown> };
+        } catch {
+          // another contract's event
+        }
+      }
+      return { name: `log ${log.topics[0]?.slice(0, 10) ?? ''}`, args: { data: log.data } };
+    });
+  }
+
+  private record(r: Omit<TxRecord, 'id'>): TxRecord {
+    const tx = { ...r, id: ++this.nextTx };
+    this.txs = [tx, ...this.txs].slice(0, 200);
+    return tx;
+  }
+
+  private async send(from: string, tx: { to?: string; data?: string; value?: bigint }): Promise<string> {
+    return (await this.provider.request({ method: 'eth_sendTransaction', params: [{ from, ...(tx.to ? { to: tx.to } : {}), ...(tx.data ? { data: tx.data } : {}), ...(tx.value ? { value: toHex(tx.value) } : {}) }] })) as string;
+  }
+
+  async deploy(contract: { name: string; abi: AbiItem[]; bytecode: string }, args: unknown[], options: { from: string; value?: bigint }): Promise<{ tx: TxRecord; instance?: Instance; hash?: string }> {
+    const data = encodeDeployData({ abi: abiOf(contract.abi), bytecode: `0x${contract.bytecode.replace(/^0x/, '')}`, args });
+    try {
+      const hash = await this.send(options.from, { data, value: options.value });
+      const r = await this.receipt(hash);
+      const ok = r.status === '0x1' && !!r.contractAddress;
+      const instance = ok ? { id: `${contract.name}@${r.contractAddress}`, name: contract.name, address: r.contractAddress!, abi: contract.abi } : undefined;
+      if (instance) this.instances = [...this.instances, instance];
+      this.block = Number(r.blockNumber);
+      return { hash, instance, tx: this.record({ kind: 'deploy', from: options.from, to: r.contractAddress, contract: contract.name, fn: 'constructor', args, value: options.value ?? 0n, ok, gasUsed: BigInt(r.gasUsed), ...(ok ? {} : { error: 'Reverted' }), events: ok ? this.events(r.logs) : [], block: this.block, hash }) };
+    } catch (error) {
+      return { tx: this.record({ kind: 'deploy', from: options.from, contract: contract.name, fn: 'constructor', args, value: options.value ?? 0n, ok: false, gasUsed: 0n, error: walletError(error), events: [], block: this.block }) };
+    }
+  }
+
+  async call(instance: Instance, fn: AbiItem, args: unknown[], options: { from: string; value?: bigint }): Promise<TxRecord> {
+    const read = fn.stateMutability === 'view' || fn.stateMutability === 'pure';
+    const data = encodeFunctionData({ abi: abiOf([fn]), functionName: fn.name!, args });
+    const base = { from: options.from, to: instance.address, contract: instance.name, fn: fn.name!, args, value: options.value ?? 0n };
+    try {
+      if (read) {
+        const ret = (await this.provider.request({ method: 'eth_call', params: [{ from: options.from, to: instance.address, data }, 'latest'] })) as `0x${string}`;
+        const result = fn.outputs?.length ? decodeFunctionResult({ abi: abiOf([fn]), functionName: fn.name!, data: ret }) : undefined;
+        return this.record({ ...base, kind: 'call', ok: true, gasUsed: 0n, result, events: [], block: this.block });
+      }
+      const hash = await this.send(options.from, { to: instance.address, data, value: options.value });
+      const r = await this.receipt(hash);
+      this.block = Number(r.blockNumber);
+      const ok = r.status === '0x1';
+      return this.record({ ...base, kind: 'transact', ok, gasUsed: BigInt(r.gasUsed), ...(ok ? {} : { error: 'Reverted' }), events: ok ? this.events(r.logs) : [], block: this.block, hash });
+    } catch (error) {
+      return this.record({ ...base, kind: read ? 'call' : 'transact', ok: false, gasUsed: 0n, error: walletError(error, instance.abi), events: [], block: this.block });
+    }
+  }
+
+  forget(id: string) {
+    this.instances = this.instances.filter((i) => i.id !== id);
+  }
+}
+
+/** A wallet or node error as a sentence: rejected by the user, out of funds, or the decoded revert */
+export function walletError(error: unknown, abi: AbiItem[] = []): string {
+  const e = error as { code?: number; message?: string; data?: unknown };
+  if (e?.code === 4001) return 'You rejected it in the wallet.';
+  const data = typeof e?.data === 'string' ? e.data : (e?.data as { data?: string } | undefined)?.data;
+  if (data && /^0x[0-9a-f]{8,}/i.test(data)) return revertReason(abi, data as `0x${string}`, 'Reverted');
+  const msg = e?.message ?? String(error);
+  if (/insufficient funds/i.test(msg)) return 'Not enough ETH in this account for the value plus gas.';
+  return msg.replace(/^.*?execution reverted:?\s*/i, 'Reverted: ').slice(0, 300);
 }

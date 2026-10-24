@@ -96,7 +96,177 @@ export function App() {
 }
 `;
 
+
+const DAPP_APP = `import { useEffect, useState } from 'react';
+import { useConnect, useConnection, useConnectors, useDisconnect, useReadContract, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from 'wagmi';
+import { counterAbi } from './abi';
+import { config } from './wagmi';
+
+const SAVED = 'counter-address';
+
+export function App() {
+  const { address, isConnected, chainId } = useConnection();
+  const connectors = useConnectors();
+  const { connect, error: connectError } = useConnect();
+  const { disconnect } = useDisconnect();
+  const { switchChain } = useSwitchChain();
+  const [contract, setContract] = useState(() => localStorage.getItem(SAVED) ?? '');
+  const valid = /^0x[0-9a-fA-F]{40}$/.test(contract);
+  const supported = config.chains.some((c) => c.id === chainId);
+
+  const number = useReadContract({ address: valid ? (contract as \`0x\${string}\`) : undefined, abi: counterAbi, functionName: 'number', query: { enabled: valid && supported } });
+  const write = useWriteContract();
+  const receipt = useWaitForTransactionReceipt({ hash: write.data });
+  const { refetch } = number;
+  // Read the new value once the transaction is mined (a single eth_call)
+  useEffect(() => {
+    if (receipt.isSuccess) void refetch();
+  }, [receipt.isSuccess, refetch]);
+
+  return (
+    <main>
+      <h1>Counter dapp</h1>
+      {!isConnected ? (
+        <section>
+          {connectors.map((c) => (
+            <button key={c.uid} onClick={() => connect({ connector: c })}>Connect {c.name}</button>
+          ))}
+          {connectError && <p className="error">{connectError.message}</p>}
+          <p className="hint">No wallet? Use the studio's Deploy &amp; run panel: it has a chain in the page.</p>
+        </section>
+      ) : (
+        <section>
+          <p>
+            {address?.slice(0, 6)}…{address?.slice(-4)} on {config.chains.find((c) => c.id === chainId)?.name ?? \`chain \${chainId}\`}{' '}
+            <button onClick={() => disconnect()}>Disconnect</button>
+          </p>
+          {!supported && (
+            <p className="error">
+              Wrong network. <button onClick={() => switchChain({ chainId: config.chains[0].id })}>Switch to {config.chains[0].name}</button>
+            </p>
+          )}
+          <label>
+            Contract address
+            <input
+              value={contract}
+              onChange={(e) => {
+                setContract(e.target.value.trim());
+                localStorage.setItem(SAVED, e.target.value.trim());
+              }}
+              placeholder="0x… (deploy contracts/Counter.sol with Deploy & run → Browser wallet)"
+            />
+          </label>
+          {valid && (
+            <>
+              <p className="big">{number.isLoading ? '…' : number.error ? 'Not a Counter on this network' : String(number.data ?? '')}</p>
+              <button disabled={write.isPending || receipt.isLoading} onClick={() => write.writeContract({ address: contract as \`0x\${string}\`, abi: counterAbi, functionName: 'increment' })}>
+                {write.isPending ? 'Confirm in your wallet…' : receipt.isLoading ? 'Waiting for the block…' : 'Increment'}
+              </button>
+              {write.error && <p className="error">{write.error.message.split('\\n')[0]}</p>}
+              {receipt.isSuccess && <p className="hint">Mined in block {String(receipt.data.blockNumber)}.</p>}
+            </>
+          )}
+        </section>
+      )}
+    </main>
+  );
+}
+`;
+
+const DAPP_CONTRACT = `// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+/// @notice The contract the front end talks to. Compile and deploy it in the studio's Deploy & run panel.
+contract Counter {
+    uint256 public number;
+
+    event Incremented(address indexed by, uint256 number);
+
+    function increment() external {
+        number += 1;
+        emit Incremented(msg.sender, number);
+    }
+
+    function setNumber(uint256 newNumber) external {
+        number = newNumber;
+    }
+}
+`;
+
 export const WEB_STARTERS: WebStarter[] = [
+  {
+    id: 'web-dapp',
+    name: 'Dapp (Solidity + React + wagmi)',
+    description: 'A smart contract and the React front end that talks to it through the browser wallet: wagmi and viem, connect, read, write, wait for the block',
+    filename: 'src/App.tsx',
+    code: DAPP_APP,
+    files: {
+      'contracts/Counter.sol': DAPP_CONTRACT,
+      'index.html': html('Counter dapp', '/src/main.tsx', '<div id="root"></div>'),
+      'src/main.tsx': `import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { WagmiProvider } from 'wagmi';
+import { App } from './App';
+import { config } from './wagmi';
+import './style.css';
+
+const queryClient = new QueryClient();
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </WagmiProvider>
+  </StrictMode>
+);
+`,
+      'src/wagmi.ts': `import { createConfig, http, injected } from 'wagmi';
+import { foundry, sepolia } from 'wagmi/chains';
+
+/** Sepolia for testing in public, Foundry's Anvil (chain 31337, http://127.0.0.1:8545) for local work */
+export const config = createConfig({
+  chains: [sepolia, foundry],
+  connectors: [injected()],
+  transports: { [sepolia.id]: http(), [foundry.id]: http() },
+});
+
+declare module 'wagmi' {
+  interface Register {
+    config: typeof config;
+  }
+}
+`,
+      'src/abi.ts': `/** The Counter contract's ABI (as const, so reads and writes are fully typed) */
+export const counterAbi = [
+  { type: 'function', name: 'number', inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
+  { type: 'function', name: 'increment', inputs: [], outputs: [], stateMutability: 'nonpayable' },
+  { type: 'function', name: 'setNumber', inputs: [{ name: 'newNumber', type: 'uint256' }], outputs: [], stateMutability: 'nonpayable' },
+  { type: 'event', name: 'Incremented', inputs: [{ name: 'by', type: 'address', indexed: true }, { name: 'number', type: 'uint256', indexed: false }], anonymous: false },
+] as const;
+`,
+      'src/style.css': `${CSS}
+section { display: grid; gap: 0.75rem; justify-items: center; }
+label { display: grid; gap: 0.25rem; font-size: 0.85rem; width: min(30rem, 100%); }
+input { padding: 0.5rem; border-radius: 0.5rem; border: 1px solid #8884; font: inherit; }
+.big { font-size: 3rem; font-weight: 700; margin: 0.5rem 0; }
+.error { color: #e5484d; }
+.hint { opacity: 0.6; font-size: 0.85rem; }
+`,
+      'vite.config.ts': `import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  plugins: [react()],
+});
+`,
+      'tsconfig.json': tsconfig({ jsx: 'react-jsx' }),
+      'package.json': pkg('counter-dapp', viteScripts, { react: '^19.3.1', 'react-dom': '^19.3.1', wagmi: '^3.7.9', viem: '^2.57.10', '@tanstack/react-query': '^5.104.5' }, { '@types/react': '^19.3.0', '@types/react-dom': '^19.3.0', '@vitejs/plugin-react': '^6.1.2', typescript: TS, vite: VITE }),
+    },
+  },
+
   {
     id: 'web-react',
     name: 'React (Vite)',

@@ -92,10 +92,11 @@ and would undo the "lightweight" goal. The plan instead:
 | **Solidity compiler in the browser** (solc-js, version picked from the pragma) with errors in the editor | Done |
 | **Deploy & run**: an in-browser EVM (no node, no faucet), accounts with test ETH, deploy, and a form per ABI function (call/transact, payable value, events, gas used) | Done |
 | Static analysis (common pitfalls: reentrancy, tx.origin, unchecked calls, floating pragma…) | Done |
-| Injected wallet (MetaMask etc.) to deploy to a real testnet; Etherscan/Sourcify verification | Next |
+| Injected wallet (MetaMask etc.) to deploy to a real testnet | Done |
+| Etherscan / Sourcify verification from the panel | Next |
 | Foundry and Hardhat projects: `forge test` / `npx hardhat test` as contracts in the studio; gas report | Next (runs where commands run) |
 | Debugger for transactions (opcode/source stepping) | Later |
-| Dapp starters: Next.js + wagmi + viem + RainbowKit, ready to talk to the deployed contract | Next |
+| Dapp starter: Vite + React + wagmi + viem, talking to the deployed contract | Done |
 
 ## 6. Performance and lightweight
 

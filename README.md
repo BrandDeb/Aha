@@ -70,7 +70,7 @@ The workspace at `/` is a dark editor built around scriptc.
 | **Terminal** | Built-in commands over the project (`ls cd cat mv rm tree echo > file …`, `run`) plus a real shell: anything else (`npm test`, `go test ./...`, `cargo build`, `make`, pipes and `&&`) runs in the project's folder on your machine, and files it changes come back into the editor. `sh …` or `!…` forces the real shell |
 | **Layout** | The side panel has four groups: Run (Build, Language, Python, Packages), Agent (Do, Ask, Keep going), Source (Git, Pipelines, History) and Project (Graph, Kit). Run takes program arguments in the field beside it; a program that answers with its usage gets a hint instead of a failure. The status bar shows the branch, the last build and run, the current failure, the agent and the worker, each one click from its panel. A first visit gets a one-minute welcome (what you're building, a model, GitHub) |
 | **Build** | Nine outputs from one menu — native, WASM, LLVM IR, scriptc IR (JSON), assembly, WASM text (WAT), object file, static library, WASM reactor — with an output viewer (highlighted text, or a hexdump for binaries), build options (release/dev, strip, dynamic engine, sanitizers, Windows window), pipeline timings, scriptc coverage and a run profile |
-| **Create** | One place to start: **describe** an app in plain words and get a plan (language, stack and why) that the agent builds while you review; a **gallery** of 23 apps (dashboards, trackers, landing pages, APIs, games, AI chat) each on the stack that suits it and many in several languages; a **stack builder** (framework, styling, UI kit, data, routing, state, forms, testing, lint, API and database) that writes every dependency into package.json or pyproject.toml and wires each one into working code; and every template and field kit. See [Create](#create) |
+| **Create** | One place to start: **describe** an app in plain words and get a plan (language, stack and why) that the agent builds while you review; a **gallery** of 24 apps (dashboards, trackers, landing pages, APIs, games, AI chat) each on the stack that suits it and many in several languages; a **stack builder** (framework, styling, UI kit, data, routing, state, forms, testing, lint, API and database) that writes every dependency into package.json or pyproject.toml and wires each one into working code; and every template and field kit. See [Create](#create) |
 | **AI autocomplete** | Grey-text suggestions as you type, from any model (the one chosen for Autocomplete in Settings → AI models, or the main one): it sees the code around the cursor and the files it imports, and only what is missing is shown (echoes of the current line, code fences and anything already after the cursor are stripped). Tab accepts, Ctrl/⌘ + → accepts a word, Alt + \\ asks on demand. Answers are cached and cancelled as you type on; switch it off in Settings → Extensions |
 | **Live values** | Turn on **Live** above the editor and the entry file (TypeScript, JavaScript or Python) runs after each pause in typing: every line shows what it did, right after the code — the values it set (`sum = 3, 7, 12 ×3` for a loop), what it returned, what it printed and the error it threw — and lines that never ran fade. Hover a line for every value. Local only, like Run; see [Live values](#live-values) |
 | **Rewind** | Every live run is recorded: scrub back and forth through it, play it back, and see each variable as it was at that moment, with the line that ran highlighted. Click a variable to jump to where it changes; a crash opens on the line that threw; ask the agent about any moment. See [Rewind](#rewind) |
@@ -131,9 +131,9 @@ project is kept in History, so trying something costs nothing.
   agent does it, or just import it. Paste any other web address and the page is read for its title, navigation,
   sections and copy (through the same public-only fetcher the connectors use, which never reaches private networks),
   then rebuilt by the agent as an original app with the same structure, in your own design and words.
-- **Gallery.** 23 apps people actually build (Kanban, notes, habits, admin dashboard, expenses, invoices, landing
+- **Gallery.** 24 apps people actually build (Kanban, notes, habits, admin dashboard, expenses, invoices, landing
   page, blog, portfolio, AI chat, agent, data report, REST API, URL shortener, live chat, CLI, scraper, weather,
-  Pomodoro, quiz, Snake, recipes, an ERC-20 token), each with why its stack fits. Many come in several languages: the
+  Pomodoro, quiz, Snake, recipes, an ERC-20 token, a dapp), each with why its stack fits. Many come in several languages: the
   todo app in 12, the REST API in Python, TypeScript, Go, Rust, C# and Java. The brief the agent gets is shown, and
   you can edit it.
 - **Stack builder.** For the web: React, Vue, Svelte, Solid, Preact or none; Tailwind, plain CSS, CSS Modules, Sass,
@@ -551,6 +551,14 @@ has `.sol` files):
   pragmas, `transfer`/`send`, unbounded loops, inline assembly. Contracts over the 24,576-byte limit are flagged.
   It is not an audit; the built-in smart-contract-security and solidity-foundry skills go further, and Foundry and
   Hardhat projects run their own tests where commands run.
+- **Real networks through your wallet.** Switch the environment to **Browser wallet** and the same panel deploys and
+  calls through MetaMask (or any injected wallet) on whatever network it is on: Sepolia and the other testnets, a
+  local Anvil or Hardhat node (chain 31337), or mainnet with a clear warning that it costs real money. Each
+  transaction links to its block explorer; rejections and out-of-funds errors are explained. Keys never leave the
+  wallet.
+- **A dapp to start from.** Create → Gallery → **Dapp** (or the *Dapp (Solidity + React + wagmi)* template): a
+  contract in `contracts/` and a Vite + React front end on wagmi and viem that connects the wallet, switches to a
+  supported network, reads the contract and sends transactions with pending → mined states.
 
 ## DevOps: pipelines in the studio
 

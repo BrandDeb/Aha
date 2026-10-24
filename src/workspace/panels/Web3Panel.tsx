@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { analyzeProject, type Finding } from '@/lib/web3/analyze';
 import type { AbiItem, AbiParam, CompiledContract, CompilerSettings } from '@/lib/web3/solc';
 import { deployable, solidityEntries } from '@/lib/web3/solc';
-import type { Instance, LocalChain, TxRecord } from '@/lib/web3/chain';
+import type { Instance, LocalChain, TxRecord, WalletChain } from '@/lib/web3/chain';
 import { useActions } from '../actions';
 import { useProposals } from '../proposals';
 import { useWorkspace } from '../store';
@@ -94,7 +94,12 @@ export function Web3Panel({ onOpen }: { onOpen: (file: string, line?: number) =>
   const [compileError, setCompileError] = useState<string | null>(null);
   const [autoCompile, setAutoCompile] = useState(true);
 
-  const chain = useRef<LocalChain | null>(null);
+  // Where contracts go: the chain in the page, or a real network through the browser wallet
+  const [env, setEnv] = useState<'local' | 'wallet'>('local');
+  const local = useRef<LocalChain | null>(null);
+  const wallet = useRef<WalletChain | null>(null);
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const chain = env === 'wallet' ? wallet : local;
   const [, setTick] = useState(0);
   const refresh = () => setTick((n) => n + 1);
   const [account, setAccount] = useState('');
@@ -137,19 +142,49 @@ export function Web3Panel({ onOpen }: { onOpen: (file: string, line?: number) =>
     return () => clearTimeout(timer);
   }, [solKey, autoCompile, settings]);
 
-  const ensureChain = async () => {
-    if (chain.current) return chain.current;
+  const ensureChain = async (): Promise<LocalChain | WalletChain> => {
     chainModule ??= await import('@/lib/web3/chain');
-    chain.current = await chainModule.LocalChain.create();
-    setAccount(chainModule.ACCOUNTS[0]);
-    await updateBalances();
-    return chain.current;
+    if (env === 'wallet') {
+      if (!wallet.current) throw new Error('Connect a wallet first.');
+      return wallet.current;
+    }
+    if (!local.current) {
+      local.current = await chainModule.LocalChain.create();
+      setAccount(chainModule.ACCOUNTS[0]);
+      await updateBalances(local.current, chainModule.ACCOUNTS);
+    }
+    return local.current;
   };
-  const updateBalances = async () => {
-    if (!chain.current || !chainModule) return;
+  const updateBalances = async (c: LocalChain | WalletChain | null = chain.current, accounts: string[] = env === 'wallet' ? (wallet.current?.accounts ?? []) : (chainModule?.ACCOUNTS ?? [])) => {
+    if (!c) return;
     const out: Record<string, bigint> = {};
-    for (const a of chainModule.ACCOUNTS) out[a] = await chain.current.balance(a);
+    for (const a of accounts) out[a] = await c.balance(a).catch(() => 0n);
     setBalances(out);
+  };
+  const connectWallet = async () => {
+    setWalletError(null);
+    try {
+      chainModule ??= await import('@/lib/web3/chain');
+      const w = await chainModule.WalletChain.connect((window as unknown as { ethereum?: Parameters<typeof chainModule.WalletChain.connect>[0] }).ethereum);
+      wallet.current = w;
+      setAccount(w.accounts[0] ?? '');
+      await updateBalances(w, w.accounts);
+      refresh();
+    } catch (error) {
+      setWalletError((error as Error).message);
+    }
+  };
+  const switchEnv = (next: 'local' | 'wallet') => {
+    setEnv(next);
+    setLastByFn({});
+    if (next === 'local' && chainModule) {
+      setAccount(chainModule.ACCOUNTS[0]);
+      void updateBalances(local.current, chainModule.ACCOUNTS);
+    } else if (next === 'wallet') {
+      setAccount(wallet.current?.accounts[0] ?? '');
+      if (wallet.current) void updateBalances(wallet.current, wallet.current.accounts);
+      else setBalances({});
+    }
   };
   useEffect(() => {
     void ensureChain();
@@ -270,7 +305,21 @@ export function Web3Panel({ onOpen }: { onOpen: (file: string, line?: number) =>
         {deployables.some((c) => c.size > 24576) && <p className="text-xs text-warn">A contract is over 24,576 bytes and can&apos;t go on mainnet (EIP-170): turn on the optimizer or split it.</p>}
       </Section>
 
-      <Section title="Deploy & run · in-page chain">
+      <Section title={`Deploy & run · ${env === 'wallet' ? (wallet.current ? wallet.current.network : 'browser wallet') : 'in-page chain'}`}>
+        <div role="radiogroup" aria-label="Environment" className="flex rounded-md border border-border p-0.5 text-[11px]">
+          <button role="radio" aria-checked={env === 'local'} onClick={() => switchEnv('local')} className={`flex-1 rounded px-2 py-0.5 ${env === 'local' ? 'bg-white/[0.1] text-gray-100' : 'text-gray-500 hover:text-gray-100'}`} title="An EVM in this page: instant, free, nothing leaves your browser">In-page chain</button>
+          <button role="radio" aria-checked={env === 'wallet'} onClick={() => switchEnv('wallet')} className={`flex-1 rounded px-2 py-0.5 ${env === 'wallet' ? 'bg-white/[0.1] text-gray-100' : 'text-gray-500 hover:text-gray-100'}`} title="MetaMask or another browser wallet: a testnet, a local Anvil node, or mainnet">Browser wallet</button>
+        </div>
+        {env === 'wallet' && !wallet.current && (
+          <div className="space-y-1.5">
+            <button onClick={() => void connectWallet()} className="btn btn-secondary btn-sm w-full">Connect wallet</button>
+            <p className="text-[11px] text-gray-500">Deploys go through your wallet to whatever network it is on (Sepolia and other testnets, or a local Anvil node at chain 31337). The studio never sees your keys.</p>
+            {walletError && <p className="text-[11px] text-danger" role="alert">{walletError}</p>}
+          </div>
+        )}
+        {env === 'wallet' && wallet.current && chainModule && !chainModule.CHAINS[wallet.current.chainId]?.testnet && (
+          <p className="rounded-md border border-danger/40 bg-danger/10 px-2 py-1 text-[11px] text-danger" role="alert">{wallet.current.network} is a real network: deploys and transactions cost real money. Switch your wallet to a testnet to experiment.</p>
+        )}
         <label className="flex items-center justify-between gap-2 text-xs text-gray-400">
           Account
           <select value={account} onChange={(e) => setAccount(e.target.value)} className="input h-7 w-auto font-mono text-[11px]" aria-label="Account">
@@ -334,6 +383,9 @@ export function Web3Panel({ onOpen }: { onOpen: (file: string, line?: number) =>
                   <span className="text-gray-500">{t.kind === 'call' ? 'read' : `#${t.block} · gas ${t.gasUsed}`}</span>
                 </div>
                 {t.events.map((e, i) => <div key={i} className="ml-4 break-all font-mono text-gray-400">{e.name} {display(e.args)}</div>)}
+                {t.hash && chain.current && 'explorerTx' in chain.current && chain.current.explorerTx(t.hash) && (
+                  <a href={chain.current.explorerTx(t.hash)!} target="_blank" rel="noreferrer" className="ml-4 font-mono text-accent hover:underline">{t.hash.slice(0, 18)}… ↗</a>
+                )}
                 {!t.ok && (
                   <div className="ml-4 flex flex-wrap items-center gap-2">
                     <span className="break-all text-danger">{t.error}</span>

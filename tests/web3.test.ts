@@ -121,3 +121,44 @@ test('the in-page chain deploys, reads, writes, decodes events and revert reason
   assert.ok(paid.ok);
   assert.equal(await chain.balance(instance!.address), 10n ** 18n + 5n);
 });
+
+test('a browser wallet: connect, deploy and transact through EIP-1193, reads by eth_call, rejections explained', async () => {
+  const { WalletChain, walletError } = await import('../src/lib/web3/chain.ts');
+  const { encodeFunctionResult } = await import('viem');
+  const me = '0x1111111111111111111111111111111111111111';
+  const sent: unknown[] = [];
+  let reject = false;
+  const provider = {
+    async request({ method, params }: { method: string; params?: unknown[] }) {
+      switch (method) {
+        case 'eth_requestAccounts': return [me];
+        case 'eth_chainId': return '0xaa36a7';
+        case 'eth_getBalance': return '0xde0b6b3a7640000';
+        case 'eth_sendTransaction':
+          if (reject) throw Object.assign(new Error('User denied'), { code: 4001 });
+          sent.push(params?.[0]);
+          return `0x${String(sent.length).padStart(64, '0')}`;
+        case 'eth_getTransactionReceipt':
+          return { status: '0x1', gasUsed: '0x5208', blockNumber: '0x10', contractAddress: sent.length === 1 ? '0x2222222222222222222222222222222222222222' : undefined, logs: [] };
+        case 'eth_call':
+          return encodeFunctionResult({ abi: fixture.abi, functionName: 'count', result: 7n });
+      }
+      throw new Error(`unexpected ${method}`);
+    },
+  };
+  const w = await WalletChain.connect(provider);
+  assert.equal(w.network, 'Sepolia');
+  assert.equal(await w.balance(me), 10n ** 18n);
+  const { instance, tx } = await w.deploy({ name: 'Counter', abi: fixture.abi, bytecode: fixture.bytecode }, [1n], { from: me });
+  assert.ok(tx.ok && instance?.address === '0x2222222222222222222222222222222222222222');
+  assert.equal(w.explorerTx(tx.hash!), `https://sepolia.etherscan.io/tx/${tx.hash}`);
+  const fn = (name: string) => fixture.abi.find((x: { name?: string }) => x.name === name);
+  assert.equal((await w.call(instance!, fn('count'), [], { from: me })).result, 7n);
+  const write = await w.call(instance!, fn('add'), [2n], { from: me });
+  assert.ok(write.ok && write.gasUsed === 21000n);
+  assert.match((sent[1] as { data: string }).data, /^0x1003e2d2/);
+  reject = true;
+  assert.equal((await w.call(instance!, fn('add'), [2n], { from: me })).error, 'You rejected it in the wallet.');
+  await assert.rejects(WalletChain.connect(undefined), /No browser wallet/);
+  assert.equal(walletError(new Error('insufficient funds for gas * price + value')), 'Not enough ETH in this account for the value plus gas.');
+});
