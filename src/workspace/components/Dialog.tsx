@@ -2,6 +2,9 @@
 
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 
+/** Open dialogs, oldest first, so only the topmost reacts to keys that arrive while focus is outside every dialog */
+const openDialogs: HTMLElement[] = [];
+
 interface DialogProps {
   title: string;
   description?: string;
@@ -54,8 +57,27 @@ export function Dialog({ title, description, onClose, children, width = 'max-w-l
       }
     };
     node?.addEventListener('keydown', onKey);
+
+    // If focus drops to the page (a focused control was removed or disabled), the keys must still work:
+    // the topmost dialog handles them from the document until focus is back inside it
+    if (node) openDialogs.push(node);
+    const onDocumentKey = (e: KeyboardEvent) => {
+      if (!node || openDialogs[openDialogs.length - 1] !== node || node.contains(document.activeElement)) return;
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onCloseRef.current();
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        (focusables()[0] ?? node).focus();
+      }
+    };
+    document.addEventListener('keydown', onDocumentKey);
+
     return () => {
       node?.removeEventListener('keydown', onKey);
+      document.removeEventListener('keydown', onDocumentKey);
+      const at = openDialogs.indexOf(node as HTMLDivElement);
+      if (at >= 0) openDialogs.splice(at, 1);
       previous?.focus?.();
     };
   }, []);

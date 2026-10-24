@@ -1,15 +1,21 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { ACCENT_PRESETS, DEFAULT_APPEARANCE, accentTokens, isHex, type Radius, type Tone } from '../appearance';
 import { comboFromEvent, formatCombo } from '../project';
 import { DEFAULT_SETTINGS, useWorkspace, type Settings } from '../store';
 import { useToast } from '../toasts';
 import { AiModelSettings } from './AiModelSettings';
+import { ModelAdvisor } from './ModelAdvisor';
+import { ConnectorSettings } from './ConnectorSettings';
+import { SkillSettings } from './SkillSettings';
+import { MaintenanceSettings } from './MaintenanceSettings';
+import type { UpdateStatus } from '../maintenance-client';
 import type { Command } from './CommandPalette';
 import { Dialog } from './Dialog';
 
 export const EXTENSIONS: { id: keyof Settings['extensions'] | string; name: string; description: string }[] = [
-  { id: 'byteField', name: 'Byte field', description: 'The compiled binary drifting behind the glass.' },
+  { id: 'aiComplete', name: 'AI autocomplete', description: 'Grey-text suggestions as you type, from the model chosen for Autocomplete (Settings → AI models). Tab accepts, Ctrl/⌘ + → accepts a word, Esc dismisses.' },
   { id: 'wordWrap', name: 'Word wrap', description: 'Wrap long lines in the editor.' },
   { id: 'minimap', name: 'Minimap', description: 'Code overview along the editor’s right edge.' },
   { id: 'bracketPairs', name: 'Bracket pairs', description: 'Colourise matching brackets and draw pair guides.' },
@@ -17,13 +23,16 @@ export const EXTENSIONS: { id: keyof Settings['extensions'] | string; name: stri
   { id: 'todoHighlights', name: 'TODO highlights', description: 'Underline TODO, FIXME, HACK and NOTE comments.' },
 ];
 
-type Tab = 'general' | 'ai' | 'keys' | 'extensions';
+export type SettingsTab = 'general' | 'appearance' | 'ai' | 'skills' | 'connectors' | 'maintenance' | 'keys' | 'extensions';
+type Tab = SettingsTab;
+const TAB_LABELS: Record<Tab, string> = { general: 'General', appearance: 'Appearance', ai: 'AI models', skills: 'Skills', connectors: 'Connectors', maintenance: 'Maintenance', keys: 'Shortcuts', extensions: 'Extensions' };
 
-export function SettingsDialog({ commands, isMac, onClose }: { commands: Command[]; isMac: boolean; onClose: () => void }) {
+export function SettingsDialog({ commands, isMac, onClose, initialTab = 'general', update, refreshUpdate }: { commands: Command[]; isMac: boolean; onClose: () => void; initialTab?: SettingsTab; update: UpdateStatus | null; refreshUpdate: (force?: boolean) => Promise<void> }) {
   const { settings, updateSettings } = useWorkspace();
   const { notify } = useToast();
-  const [tab, setTab] = useState<Tab>('general');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [recording, setRecording] = useState<string | null>(null);
+  const [hexDraft, setHexDraft] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -53,7 +62,7 @@ export function SettingsDialog({ commands, isMac, onClose }: { commands: Command
         {hint && <span className="block text-xs text-gray-500">{hint}</span>}
       </span>
       <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} className="peer sr-only" />
-      <span aria-hidden="true" className="relative h-5 w-9 shrink-0 rounded-full border border-border-strong bg-white/[0.06] transition-colors peer-checked:bg-gray-100 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-gray-100 after:absolute after:top-0.5 after:left-0.5 after:h-3.5 after:w-3.5 after:rounded-full after:bg-gray-400 after:transition-all peer-checked:after:left-[18px] peer-checked:after:bg-black" />
+      <span aria-hidden="true" className="relative h-5 w-9 shrink-0 rounded-full border border-border-strong bg-white/[0.06] transition-colors peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-accent after:absolute after:top-0.5 after:left-0.5 after:h-3.5 after:w-3.5 after:rounded-full after:bg-gray-400 after:transition-all peer-checked:after:left-[18px] peer-checked:after:bg-[var(--color-accent-fg)]" />
     </label>
   );
 
@@ -81,16 +90,17 @@ export function SettingsDialog({ commands, isMac, onClose }: { commands: Command
   };
 
   return (
-    <Dialog title="Settings" onClose={onClose} width="max-w-2xl" tall>
-      <div className="segmented mb-4 self-start" role="tablist" aria-label="Settings sections">
-        {(['general', 'ai', 'keys', 'extensions'] as Tab[]).map((t) => (
-          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-            {t === 'general' ? 'General' : t === 'ai' ? 'AI models' : t === 'keys' ? 'Keyboard shortcuts' : 'Extensions'}
+    <Dialog title="Settings" onClose={onClose} width="max-w-4xl" tall>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
+      <div className="flex shrink-0 gap-1 overflow-x-auto md:w-40 md:flex-col md:overflow-visible" role="tablist" aria-label="Settings sections" aria-orientation="vertical">
+        {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
+          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`shrink-0 rounded-lg px-3 py-1.5 text-left text-sm transition-colors ${tab === t ? 'bg-[var(--accent-soft)] text-accent' : 'text-gray-400 hover:bg-white/[0.04] hover:text-gray-100'}`}>
+            {TAB_LABELS[t]}
           </button>
         ))}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto pr-1">
         {tab === 'general' && (
           <div className="divide-y divide-border">
             <div className="flex items-center justify-between py-2.5">
@@ -128,7 +138,89 @@ export function SettingsDialog({ commands, isMac, onClose }: { commands: Command
           </div>
         )}
 
-        {tab === 'ai' && <AiModelSettings />}
+        {tab === 'appearance' && (
+          <div className="divide-y divide-border">
+            <div className="py-3">
+              <div className="text-sm text-gray-100">Accent colour</div>
+              <p className="mt-0.5 text-xs text-gray-400">Pick any colour. It is adjusted automatically where needed so text stays readable.</p>
+              <div className="mt-3 flex flex-wrap items-center gap-2" role="group" aria-label="Accent presets">
+                {ACCENT_PRESETS.map((preset) => (
+                  <button
+                    key={preset.hex}
+                    title={preset.name}
+                    aria-label={preset.name}
+                    aria-pressed={settings.appearance.accent === preset.hex}
+                    onClick={() => { setHexDraft(null); updateSettings({ appearance: { ...settings.appearance, accent: preset.hex } }); }}
+                    className="h-7 w-7 rounded-full border border-border-strong transition-transform hover:scale-110 aria-pressed:ring-2 aria-pressed:ring-offset-2 aria-pressed:ring-offset-[var(--panel)] aria-pressed:ring-[var(--color-accent)]"
+                    style={{ background: preset.hex }}
+                  />
+                ))}
+                <label className="ml-2 flex items-center gap-2 text-xs text-gray-400">
+                  Custom
+                  <input
+                    type="color"
+                    value={settings.appearance.accent}
+                    onChange={(e) => { setHexDraft(null); updateSettings({ appearance: { ...settings.appearance, accent: e.target.value } }); }}
+                    className="h-7 w-9 cursor-pointer rounded border border-border bg-transparent p-0.5"
+                    aria-label="Custom accent colour"
+                  />
+                  <input
+                    value={hexDraft ?? settings.appearance.accent}
+                    onChange={(e) => {
+                      const value = e.target.value.startsWith('#') ? e.target.value : `#${e.target.value}`;
+                      setHexDraft(value);
+                      if (isHex(value)) updateSettings({ appearance: { ...settings.appearance, accent: value.toLowerCase() } });
+                    }}
+                    onBlur={() => setHexDraft(null)}
+                    spellCheck={false}
+                    maxLength={7}
+                    className="input h-8 w-24 font-mono text-xs"
+                    aria-label="Accent hex value"
+                    aria-invalid={hexDraft !== null && !isHex(hexDraft)}
+                  />
+                </label>
+              </div>
+              <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
+                <span className="rounded px-2 py-1 font-medium" style={{ background: accentTokens(settings.appearance.accent, settings.theme).accent, color: accentTokens(settings.appearance.accent, settings.theme).foreground }}>Preview</span>
+                <span>Buttons, links and highlights use this colour.</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-2.5">
+              <span className="text-sm text-gray-100">Background tone</span>
+              <div className="segmented" role="group" aria-label="Background tone">
+                {(['neutral', 'cool', 'warm'] as Tone[]).map((tone) => (
+                  <button key={tone} aria-pressed={settings.appearance.tone === tone} onClick={() => updateSettings({ appearance: { ...settings.appearance, tone } })} className="capitalize">{tone}</button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center justify-between py-2.5">
+              <span className="text-sm text-gray-100">Corners</span>
+              <div className="segmented" role="group" aria-label="Corner radius">
+                {(['sharp', 'default', 'round'] as Radius[]).map((radius) => (
+                  <button key={radius} aria-pressed={settings.appearance.radius === radius} onClick={() => updateSettings({ appearance: { ...settings.appearance, radius } })} className="capitalize">{radius}</button>
+                ))}
+              </div>
+            </div>
+            <div className="py-3">
+              <button onClick={() => { setHexDraft(null); updateSettings({ appearance: DEFAULT_APPEARANCE }); }} className="btn btn-ghost btn-sm -ml-3">Reset appearance</button>
+            </div>
+          </div>
+        )}
+
+        {tab === 'ai' && (
+          <div className="space-y-8">
+            <ModelAdvisor />
+            <div className="border-t border-border pt-6">
+              <h3 className="eyebrow mb-3">Choose by hand</h3>
+              <AiModelSettings />
+            </div>
+          </div>
+        )}
+
+        {tab === 'skills' && <SkillSettings />}
+        {tab === 'connectors' && <ConnectorSettings />}
+
+        {tab === 'maintenance' && <MaintenanceSettings update={update} refresh={refreshUpdate} />}
 
         {tab === 'keys' && (
           <div>
@@ -155,7 +247,7 @@ export function SettingsDialog({ commands, isMac, onClose }: { commands: Command
                       <td className="py-2 text-right">
                         <button
                           onClick={() => setRecording(c.id)}
-                          className={`kbd h-7 min-w-[5rem] justify-center px-2 ${recording === c.id ? 'border-gray-100 text-gray-100' : ''}`}
+                          className={`kbd h-7 min-w-[5rem] justify-center px-2 ${recording === c.id ? 'border-accent text-accent' : ''}`}
                           aria-label={`Change shortcut for ${c.title}${current ? `, currently ${formatCombo(current, isMac)}` : ''}`}
                         >
                           {recording === c.id ? 'Press keys…' : current ? formatCombo(current, isMac) : '—'}
@@ -192,6 +284,7 @@ export function SettingsDialog({ commands, isMac, onClose }: { commands: Command
             <p className="pt-3 text-xs text-gray-500">Built-in extensions. Each one contributes editor behaviour and can be switched off without affecting the others.</p>
           </div>
         )}
+      </div>
       </div>
     </Dialog>
   );

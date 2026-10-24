@@ -8,7 +8,10 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/SiteHeader';
-import { TEMPLATES } from '@/lib/templates';
+import { TEMPLATES as ALL_TEMPLATES } from '@/lib/templates';
+
+// The landing and onboarding pages show the headline languages; the New project dialog has every starter
+const TEMPLATES = ALL_TEMPLATES.filter((t) => ['typescript', 'python'].includes(t.language ?? 'typescript'));
 
 const STEPS = ['Welcome', 'Pick a template', 'Ready'] as const;
 
@@ -30,9 +33,9 @@ export default function OnboardingPage() {
               <span
                 className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border font-mono text-xs ${
                   i < step
-                    ? 'border-gray-100 bg-gray-100 text-black'
+                    ? 'border-accent bg-accent text-[var(--color-accent-fg)]'
                     : i === step
-                      ? 'border-gray-100 text-gray-100'
+                      ? 'border-accent text-accent'
                       : 'border-border-strong text-gray-500'
                 }`}
                 aria-current={i === step ? 'step' : undefined}
@@ -84,7 +87,7 @@ export default function OnboardingPage() {
                   onClick={() => setTemplateId(t.id)}
                   className={`rounded-lg border p-4 text-left transition-colors ${
                     templateId === t.id
-                      ? 'border-gray-100 bg-white/[0.04]'
+                      ? 'border-accent bg-[var(--accent-soft)]'
                       : 'border-border hover:border-border-strong'
                   }`}
                 >

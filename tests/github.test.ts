@@ -149,3 +149,24 @@ test('pullTree reads text blobs and skips binary and oversized files', async () 
   assert.deepEqual(pulled.files, { 'src/main.ts': 'console.log(1)' });
   assert.deepEqual(pulled.skipped, ['huge.json', 'logo.png']);
 });
+
+test('device sign-in: GitHub’s answers, and which flow a host gets', async () => {
+  const { readPoll, githubClientId } = await import('../src/lib/github-device.ts');
+  assert.deepEqual(readPoll({ access_token: 'gho_x', scope: 'repo' }), { status: 'done', token: 'gho_x', scope: 'repo' });
+  assert.deepEqual(readPoll({ error: 'authorization_pending' }), { status: 'pending' });
+  assert.deepEqual(readPoll({ error: 'slow_down', interval: 10 }), { status: 'pending', interval: 10 });
+  assert.equal(readPoll({ error: 'expired_token' }).status, 'expired');
+  assert.equal(readPoll({ error: 'access_denied' }).status, 'denied');
+  assert.match((readPoll({ error: 'device_flow_disabled' }) as { message: string }).message, /Enable Device Flow/);
+  assert.equal(githubClientId({ NEXT_PUBLIC_GITHUB_CLIENT_ID: 'Ov23li' }), 'Ov23li');
+  assert.equal(githubClientId({ GITHUB_CLIENT_ID: 'a', NEXT_PUBLIC_GITHUB_CLIENT_ID: 'b' }), 'a');
+
+  const { webFlowFor, secureCookies } = await import('../src/lib/github-device.ts');
+  const env = { GITHUB_CLIENT_ID: 'id', GITHUB_CLIENT_SECRET: 's', NEXT_PUBLIC_BASE_URL: 'http://localhost:3000' };
+  assert.equal(webFlowFor('localhost:3000', env), true);
+  assert.equal(webFlowFor('127.0.0.1:54321', env), false, 'the desktop app’s random port: device flow');
+  assert.equal(webFlowFor('localhost:3000', { GITHUB_CLIENT_ID: 'id' }), false, 'no secret: device flow');
+  assert.equal(secureCookies(null, 'http:'), false, 'plain HTTP keeps the session');
+  assert.equal(secureCookies('https', 'http:'), true, 'behind a TLS proxy');
+  assert.equal(secureCookies(null, 'https:'), true);
+});

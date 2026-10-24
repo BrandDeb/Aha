@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 import { AI_MODEL, SYSTEM_PROMPT, buildMessages, parseAiRequest } from '@/lib/ai';
-import { isSameOrigin } from '@/lib/github-session';
+import { getBaseUrl, isSameOrigin } from '@/lib/github-session';
+import { isTrustedHost } from '@/lib/host';
 import { clientKey, createRateLimiter } from '@/lib/rate-limit';
 
 /** Each request spends the operator's API credits; cap it per client */
@@ -22,6 +23,10 @@ export function GET() {
 export async function POST(request: NextRequest) {
   if (!isSameOrigin(request)) {
     return NextResponse.json({ error: 'Cross-origin request rejected' }, { status: 403 });
+  }
+  // A DNS-rebinding page passes the origin check; its Host header still names its own domain
+  if (!isTrustedHost(request.headers.get('host'), getBaseUrl(), process.env.ALLOWED_HOSTS)) {
+    return NextResponse.json({ error: 'Not available for this host name.' }, { status: 403 });
   }
   if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
     return NextResponse.json(

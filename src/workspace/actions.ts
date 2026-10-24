@@ -3,6 +3,9 @@
 import { createContext, useContext } from 'react';
 import type { CompileResult } from '@/lib/compiler-browser';
 import type { CompileTarget } from '@/types';
+import type { SettingsTab } from './components/SettingsDialog';
+import type { PythonCommand, PythonOutcome, PythonStream } from './python-client';
+import type { RunOptions, RunOutcome as LanguageOutcome } from './run-client';
 
 export interface RunOutcome {
   ok: boolean;
@@ -30,9 +33,19 @@ export interface WorkspaceActions {
   /** Open a panel in the right sidebar */
   openPanel: (panel: PanelId) => void;
   downloadArtifact: (result?: CompileResult | null) => Promise<void>;
+  /** Run a Python command with uv; file changes it makes are merged into the project */
+  python: (command: PythonCommand, onOutput?: (stream: PythonStream, text: string) => void, signal?: AbortSignal) => Promise<PythonOutcome>;
+  /** Run the project in another language (Go, Rust, Java, C, Ruby…) on this machine; files the program writes are merged into the project */
+  runLanguage: (options: RunOptions, onOutput?: (stream: PythonStream, text: string) => void, signal?: AbortSignal) => Promise<LanguageOutcome>;
+  /** Open a build artifact in the output viewer (defaults to the last build) */
+  inspect: (result?: CompileResult | null) => void;
+  /** Sign in (or sign up) with GitHub: the redirect flow when this server has one, else a one-time code */
+  signIn: () => void;
+  /** Open Settings on a tab (Assistant for keys and models, Maintenance…) */
+  openSettings: (tab?: SettingsTab) => void;
 }
 
-export type PanelId = 'build' | 'git' | 'ai' | 'history' | 'graph' | 'package';
+export type PanelId = 'build' | 'git' | 'ai' | 'agent' | 'history' | 'graph' | 'package' | 'python' | 'languages' | 'worker' | 'kit' | 'ci' | 'contracts' | 'optimize' | 'web3';
 
 export const ActionsContext = createContext<WorkspaceActions | null>(null);
 

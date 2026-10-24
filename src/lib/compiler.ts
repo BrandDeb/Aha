@@ -8,10 +8,13 @@ import { promisify } from 'util';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
+import { bundledZigDir, hasSystemZig, withBundledZig, ZIG_MISSING_MESSAGE } from './zig.ts';
+import { ensureZig } from './zig-install.ts';
 
 const execFileAsync = promisify(execFile);
 
-type Target = 'exe' | 'llvm' | 'asm' | 'wasm';
+type Target = 'exe' | 'wasm' | 'llvm' | 'asm' | 'obj' | 'ir' | 'wat' | 'lib' | 'reactor';
+type WindowsSubsystem = 'console' | 'gui';
 type Platform = 'linux' | 'macos' | 'windows';
 type Arch = 'x64' | 'arm64';
 type Optimization = 'release' | 'dev';
@@ -26,6 +29,14 @@ interface CompileOptions {
   platform?: Platform;
   arch?: Arch;
   optimization?: Optimization;
+  /** Remove symbols from executables (default on) */
+  strip?: boolean;
+  /** Build executables with AddressSanitizer and the runtime RC audit */
+  sanitize?: boolean;
+  /** Embed scriptc's dynamic engine (about 620 KB) for code static compilation can't handle */
+  dynamic?: boolean;
+  /** Windows executables: open a console window or not */
+  windowsSubsystem?: WindowsSubsystem;
 }
 
 /** A scriptc diagnostic, mapped back to the user's source */
@@ -56,6 +67,10 @@ interface CompileResult {
   diagnostics?: Diagnostic[];
   /** Timings of each build stage, in order */
   phases?: BuildPhase[];
+  /** The target that was built */
+  target?: Target;
+  /** Whether `output` is text or base64 bytes */
+  format?: 'text' | 'binary';
 }
 
 interface BuildPhase {
@@ -84,7 +99,8 @@ interface ExecError extends Error {
   killed?: boolean;
 }
 
-export const TEMP_DIR = path.join(process.cwd(), 'temp');
+// The desktop app points this at its cache folder: the install folder is read-only there
+export const TEMP_DIR = process.env.NANOCLI_TEMP_DIR ? path.resolve(/* turbopackIgnore: true */ process.env.NANOCLI_TEMP_DIR) : path.join(process.cwd(), 'temp');
 
 /** Maximum accepted source size (bytes) */
 export const MAX_CODE_SIZE = 512 * 1024;
@@ -103,7 +119,10 @@ const EXEC_MAX_BUFFER = 10 * 1024 * 1024;
 /** Builds are CPU heavy; cap how many run at once */
 const MAX_CONCURRENT_BUILDS = Number(process.env.MAX_CONCURRENT_BUILDS) || 2;
 
-const TARGETS: readonly Target[] = ['exe', 'llvm', 'asm', 'wasm'];
+const TARGETS: readonly Target[] = ['exe', 'wasm', 'llvm', 'asm', 'obj', 'ir', 'wat', 'lib', 'reactor'];
+const WINDOWS_SUBSYSTEMS: readonly WindowsSubsystem[] = ['console', 'gui'];
+/** Larger artifacts are only offered as a download, not inlined in the response */
+const MAX_INLINE_OUTPUT = 8 * 1024 * 1024;
 const PLATFORMS: readonly Platform[] = ['linux', 'macos', 'windows'];
 const ARCHES: readonly Arch[] = ['x64', 'arm64'];
 const OPTIMIZATIONS: readonly Optimization[] = ['release', 'dev'];
@@ -169,6 +188,12 @@ export function parseCompileOptions(body: unknown): CompileOptions | { error: st
   if (input.optimization !== undefined && !parseOptimization(input.optimization)) {
     return { error: 'Invalid optimization' };
   }
+  for (const key of ['strip', 'sanitize', 'dynamic'] as const) {
+    if (input[key] !== undefined && typeof input[key] !== 'boolean') return { error: `${key} must be true or false` };
+  }
+  if (input.windowsSubsystem !== undefined && !oneOf(input.windowsSubsystem, WINDOWS_SUBSYSTEMS)) {
+    return { error: 'Invalid windowsSubsystem' };
+  }
 
   return {
     code,
@@ -179,6 +204,10 @@ export function parseCompileOptions(body: unknown): CompileOptions | { error: st
     platform: oneOf(input.platform, PLATFORMS),
     arch: oneOf(input.arch, ARCHES),
     optimization: parseOptimization(input.optimization),
+    strip: input.strip as boolean | undefined,
+    sanitize: input.sanitize as boolean | undefined,
+    dynamic: input.dynamic as boolean | undefined,
+    windowsSubsystem: oneOf(input.windowsSubsystem, WINDOWS_SUBSYSTEMS),
   };
 }
 
@@ -188,7 +217,9 @@ export function parseCompileOptions(body: unknown): CompileOptions | { error: st
  */
 export function isValidProjectPath(filePath: string): boolean {
   return filePath.length <= 200 &&
-    /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(filePath);
+    (/^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(filePath) ||
+      // The studio's own folder (a field kit's manifest), one level deep
+      /^\.nanocli\/[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(filePath));
 }
 
 function parseProject(rawFiles: unknown, rawEntry: unknown): { files: Record<string, string>; entry: string } | { error: string } {
@@ -202,7 +233,11 @@ function parseProject(rawFiles: unknown, rawEntry: unknown): { files: Record<str
   let total = 0;
   const files: Record<string, string> = {};
   for (const [filePath, content] of entries) {
-    if (!isValidProjectPath(filePath)) return { error: `Invalid file path: ${filePath.slice(0, 80)}` };
+    if (!isValidProjectPath(filePath)) {
+      // Dotfiles and folders the compiler never reads (.github/workflows/ci.yml, .gitignore, .env.example) are left out
+      if (/^\./.test(filePath) && !filePath.split('/').includes('..') && !/\.(?:[cm]?[jt]s|json)$/.test(filePath)) continue;
+      return { error: `Invalid file path: ${filePath.slice(0, 80)}` };
+    }
     if (typeof content !== 'string') return { error: `File content must be a string: ${filePath}` };
     total += Buffer.byteLength(content, 'utf8');
     files[filePath] = content;
@@ -251,10 +286,6 @@ export function resolveTempPath(filename: string): string | null {
 
 function downloadUrlFor(filename: string): string {
   return `/api/download/${encodeURIComponent(filename)}`;
-}
-
-function withExtension(filename: string, extension: string): string {
-  return filename.replace(/\.ts$/, extension);
 }
 
 interface PreparedBuild {
@@ -393,7 +424,7 @@ function scriptc(args: string[], env?: Record<string, string>) {
     timeout: EXEC_TIMEOUT_MS,
     maxBuffer: EXEC_MAX_BUFFER,
     cwd: TEMP_DIR,
-    env: env ? { ...process.env, ...env } : process.env,
+    env: withBundledZig(env ? { ...process.env, ...env } : process.env),
   });
 }
 
@@ -436,7 +467,7 @@ function unsupportedCrossCompile(options: CompileOptions): CompileResult | null 
     return {
       success: false,
       error: `Cross-compilation is not available: this server builds ${platform}-${arch} executables. ` +
-        'Use the WASM target for a portable binary, or the LLVM IR / assembly targets to inspect the output.',
+        'Use the WASM target for a portable binary, or the IR / assembly targets to inspect the output.',
     };
   }
   return null;
@@ -448,29 +479,80 @@ interface BuildSpec {
   args: string[];
   env?: Record<string, string>;
   binary: boolean;
+  /** Convert the built WebAssembly module to text */
+  toText?: boolean;
+  /** Build from a scriptc profile (library mode) instead of an entry file */
+  profile?: boolean;
 }
 
+/** Targets whose artifact depends on the machine the server runs on */
+const HOST_TARGETS: readonly Target[] = ['exe', 'obj', 'lib'];
+
 function buildSpec(options: CompileOptions): BuildSpec {
+  const windows = hostPlatform() === 'windows';
   const optimization = ['--optimization', options.optimization || 'release'];
+  const dynamic = options.dynamic ? ['--dynamic'] : [];
   switch (options.target) {
     case 'llvm':
       return { extension: '.ll', args: ['--emit=llvm'], binary: false };
     case 'asm':
       return { extension: '.s', args: ['--emit=asm'], binary: false };
+    case 'ir':
+      return { extension: '.ir.json', args: ['--emit=ir'], binary: false };
+    case 'obj':
+      return { extension: windows ? '.obj' : '.o', args: ['--emit=obj'], binary: true };
     case 'wasm':
-      return {
-        extension: '.wasm',
-        args: optimization,
-        env: { SCRIPTC_TARGET: 'wasm32-wasi' },
-        binary: true,
-      };
+      return { extension: '.wasm', args: [...optimization, ...dynamic], env: { SCRIPTC_TARGET: 'wasm32-wasi' }, binary: true };
+    case 'wat':
+      return { extension: '.wat', args: [...optimization, ...dynamic], env: { SCRIPTC_TARGET: 'wasm32-wasi' }, binary: false, toText: true };
+    case 'reactor':
+      return { extension: '.wasm', args: ['--lib'], env: { SCRIPTC_TARGET: 'wasm32-wasi' }, binary: true, profile: true };
+    case 'lib':
+      return { extension: windows ? '.lib' : '.a', args: ['--lib'], binary: true, profile: true };
     case 'exe':
     default:
       return {
-        extension: hostPlatform() === 'windows' ? '.exe' : '',
-        args: ['--strip', '--no-keep-llvm', ...optimization],
+        extension: windows ? '.exe' : '',
+        args: [
+          ...(options.strip === false ? [] : ['--strip']),
+          '--no-keep-llvm',
+          ...optimization,
+          ...(options.sanitize ? ['--sanitize'] : []),
+          ...dynamic,
+          ...(windows && options.windowsSubsystem === 'gui' ? ['--windows-subsystem', 'gui'] : []),
+        ],
         binary: true,
       };
+  }
+}
+
+/** The scriptc profile that drives a library build: scriptc.profile.json, or the first *.profile.json */
+export function findProfile(files: Record<string, string> | undefined): string | null {
+  const names = Object.keys(files ?? {});
+  return names.find((n) => /(^|\/)scriptc\.profile\.json$/.test(n)) ?? names.find((n) => /\.profile\.json$/.test(n)) ?? null;
+}
+
+/** Turn a WebAssembly module into the text format */
+async function wasmToText(wasm: Buffer): Promise<string> {
+  const { default: initWabt } = await import('wabt');
+  const wabt = await initWabt();
+  const parsed = wabt.readWasm(new Uint8Array(wasm), {
+    mutable_globals: true,
+    sat_float_to_int: true,
+    sign_extension: true,
+    multi_value: true,
+    bulk_memory: true,
+    reference_types: true,
+    simd: true,
+    exceptions: true,
+    tail_call: true,
+    extended_const: true,
+  });
+  try {
+    parsed.applyNames();
+    return parsed.toText({ foldExprs: false, inlineExport: false });
+  } finally {
+    parsed.destroy();
   }
 }
 
@@ -478,12 +560,24 @@ function buildSpec(options: CompileOptions): BuildSpec {
  * Compile a file or project with scriptc
  */
 export async function compileTypeScript(options: CompileOptions): Promise<CompileResult> {
-  if ((options.target || 'exe') === 'exe') {
+  const target = options.target ?? 'exe';
+  if (HOST_TARGETS.includes(target)) {
     const unsupported = unsupportedCrossCompile(options);
     if (unsupported) return unsupported;
   }
 
   const spec = buildSpec(options);
+  const profilePath = spec.profile ? findProfile(options.files) : null;
+  if (spec.profile && !profilePath) {
+    return {
+      success: false,
+      error: 'Library builds need a scriptc profile: add a scriptc.profile.json that names the entry module and the exported functions (see the “Library” template).',
+    };
+  }
+  // WebAssembly needs zig: the desktop app fetches it the first time (outside the build slot)
+  if (spec.env?.SCRIPTC_TARGET === 'wasm32-wasi' && !bundledZigDir() && !hasSystemZig(process.env)) {
+    await ensureZig().catch((error) => console.warn(`> Could not fetch zig: ${(error as Error).message}`));
+  }
   const queuedAt = Date.now();
 
   return withBuildSlot(async () => {
@@ -501,14 +595,27 @@ export async function compileTypeScript(options: CompileOptions): Promise<Compil
       const outputFilename = `${build.id}-${build.base}${spec.extension}`;
       const outputPath = path.join(TEMP_DIR, outputFilename);
 
-      const { stdout, stderr } = await scriptc(['build', build.entryPath, '-o', outputPath, ...spec.args], spec.env);
+      const input = profilePath ? ['--profile', path.join(build.dir, profilePath)] : [build.entryPath];
+      const wasmPath = spec.toText ? path.join(TEMP_DIR, `${build.id}-${build.base}.wasm`) : outputPath;
+      const { stdout, stderr } = await scriptc(['build', ...input, '-o', wasmPath, ...spec.args], spec.env);
       lap('compile');
 
-      const artifact = await fs.readFile(outputPath);
+      let artifact: Buffer;
+      if (spec.toText) {
+        const text = await wasmToText(await fs.readFile(wasmPath));
+        await fs.rm(wasmPath, { force: true });
+        artifact = Buffer.from(text, 'utf8');
+        await fs.writeFile(outputPath, artifact);
+      } else {
+        artifact = await fs.readFile(outputPath);
+      }
       lap('package');
+      const inline = artifact.length <= MAX_INLINE_OUTPUT;
       return {
         success: true,
-        output: spec.binary ? artifact.toString('base64') : artifact.toString('utf8'),
+        target,
+        format: spec.binary ? 'binary' : 'text',
+        ...(inline ? { output: spec.binary ? artifact.toString('base64') : artifact.toString('utf8') } : {}),
         filename: outputFilename,
         downloadUrl: downloadUrlFor(outputFilename),
         size: artifact.length,
@@ -522,8 +629,14 @@ export async function compileTypeScript(options: CompileOptions): Promise<Compil
       lap('compile');
       const result = failure(error, build);
       result.phases = phases;
+      if (options.sanitize && target === 'exe' && /libclang_rt|asan|sanitiz/i.test(String((error as ExecError)?.stderr))) {
+        result.error = 'The sanitizer build failed: it needs clang’s AddressSanitizer runtime (Ubuntu: `sudo apt install libclang-rt-dev`; macOS: Xcode’s clang includes it; Windows: install the LLVM toolchain). Turn “Sanitizers” off to build without it.';
+        result.diagnostics = [];
+      }
       if (options.target === 'wasm' && /spawnSync zig ENOENT/.test(String((error as ExecError)?.stderr))) {
-        result.error = 'WASM linking needs zig on the server PATH (scriptc uses it as the wasm32-wasi linker).';
+        // The raw "SC3004 spawnSync zig ENOENT" diagnostic means nothing to a user
+        result.error = ZIG_MISSING_MESSAGE;
+        result.diagnostics = [];
       }
       return result;
     }

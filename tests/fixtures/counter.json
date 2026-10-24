@@ -1,0 +1,142 @@
+{
+ "source": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.20;\ncontract Counter {\n    error TooBig(uint256 value, uint256 max);\n    event Changed(address indexed by, uint256 value);\n    uint256 public count;\n    address public owner;\n    constructor(uint256 start) payable { count = start; owner = msg.sender; }\n    function add(uint256 n) external { if (count + n > 100) revert TooBig(count + n, 100); count += n; emit Changed(msg.sender, count); }\n    function onlyOwnerReset() external { require(msg.sender == owner, \"not the owner\"); count = 0; }\n    function divide(uint256 d) external view returns (uint256) { return count / d; }\n    function deposit() external payable {}\n    function info() external view returns (uint256, address) { return (count, owner); }\n}",
+ "abi": [
+  {
+   "inputs": [
+    {
+     "internalType": "uint256",
+     "name": "start",
+     "type": "uint256"
+    }
+   ],
+   "stateMutability": "payable",
+   "type": "constructor"
+  },
+  {
+   "inputs": [
+    {
+     "internalType": "uint256",
+     "name": "value",
+     "type": "uint256"
+    },
+    {
+     "internalType": "uint256",
+     "name": "max",
+     "type": "uint256"
+    }
+   ],
+   "name": "TooBig",
+   "type": "error"
+  },
+  {
+   "anonymous": false,
+   "inputs": [
+    {
+     "indexed": true,
+     "internalType": "address",
+     "name": "by",
+     "type": "address"
+    },
+    {
+     "indexed": false,
+     "internalType": "uint256",
+     "name": "value",
+     "type": "uint256"
+    }
+   ],
+   "name": "Changed",
+   "type": "event"
+  },
+  {
+   "inputs": [
+    {
+     "internalType": "uint256",
+     "name": "n",
+     "type": "uint256"
+    }
+   ],
+   "name": "add",
+   "outputs": [],
+   "stateMutability": "nonpayable",
+   "type": "function"
+  },
+  {
+   "inputs": [],
+   "name": "count",
+   "outputs": [
+    {
+     "internalType": "uint256",
+     "name": "",
+     "type": "uint256"
+    }
+   ],
+   "stateMutability": "view",
+   "type": "function"
+  },
+  {
+   "inputs": [],
+   "name": "deposit",
+   "outputs": [],
+   "stateMutability": "payable",
+   "type": "function"
+  },
+  {
+   "inputs": [
+    {
+     "internalType": "uint256",
+     "name": "d",
+     "type": "uint256"
+    }
+   ],
+   "name": "divide",
+   "outputs": [
+    {
+     "internalType": "uint256",
+     "name": "",
+     "type": "uint256"
+    }
+   ],
+   "stateMutability": "view",
+   "type": "function"
+  },
+  {
+   "inputs": [],
+   "name": "info",
+   "outputs": [
+    {
+     "internalType": "uint256",
+     "name": "",
+     "type": "uint256"
+    },
+    {
+     "internalType": "address",
+     "name": "",
+     "type": "address"
+    }
+   ],
+   "stateMutability": "view",
+   "type": "function"
+  },
+  {
+   "inputs": [],
+   "name": "onlyOwnerReset",
+   "outputs": [],
+   "stateMutability": "nonpayable",
+   "type": "function"
+  },
+  {
+   "inputs": [],
+   "name": "owner",
+   "outputs": [
+    {
+     "internalType": "address",
+     "name": "",
+     "type": "address"
+    }
+   ],
+   "stateMutability": "view",
+   "type": "function"
+  }
+ ],
+ "bytecode": "60806040526040516103353803806103358339810160408190526020916038565b5f55600180546001600160a01b03191633179055604e565b5f602082840312156047575f5ffd5b5051919050565b6102da8061005b5f395ff3fe60806040526004361061006e575f3560e01c80633e823f791161004c5780633e823f79146100e857806340ea8cad146101075780638da5cb5b1461011b578063d0e30db0146100b8575f5ffd5b806306661abd146100725780631003e2d214610099578063370158ea146100ba575b5f5ffd5b34801561007d575f5ffd5b506100865f5481565b6040519081526020015b60405180910390f35b3480156100a4575f5ffd5b506100b86100b336600461024f565b610152565b005b3480156100c5575f5ffd5b505f54600154604080519283526001600160a01b03909116602083015201610090565b3480156100f3575f5ffd5b5061008661010236600461024f565b6101ec565b348015610112575f5ffd5b506100b8610200565b348015610126575f5ffd5b5060015461013a906001600160a01b031681565b6040516001600160a01b039091168152602001610090565b6064815f546101619190610266565b111561019d57805f546101749190610266565b604051631ab6737f60e21b81526004810191909152606460248201526044015b60405180910390fd5b805f5f8282546101ad9190610266565b90915550505f5460405190815233907fb52dda022b6c1a1f40905a85f257f689aa5d69d850e49cf939d688fbe5af59469060200160405180910390a250565b5f815f546101fa9190610285565b92915050565b6001546001600160a01b0316331461024a5760405162461bcd60e51b815260206004820152600d60248201526c3737ba103a34329037bbb732b960991b6044820152606401610194565b5f8055565b5f6020828403121561025f575f5ffd5b5035919050565b808201808211156101fa57634e487b7160e01b5f52601160045260245ffd5b5f8261029f57634e487b7160e01b5f52601260045260245ffd5b50049056fea2646970667358221220a191967c9517e4313fe2919c84dbc360b424f1c0ae9e9b5fb4086360c4e30d5564736f6c63430008260033"
+}

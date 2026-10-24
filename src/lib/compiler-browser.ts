@@ -15,6 +15,10 @@ interface CompileOptions {
   platform?: CompilePlatform;
   arch?: 'x64' | 'arm64';
   optimization?: 'release' | 'dev';
+  strip?: boolean;
+  sanitize?: boolean;
+  dynamic?: boolean;
+  windowsSubsystem?: 'console' | 'gui';
 }
 
 /** A scriptc diagnostic, located in the submitted source */
@@ -40,6 +44,9 @@ interface CompileResult {
   durationMs?: number;
   diagnostics?: Diagnostic[];
   phases?: { name: 'queue' | 'write' | 'compile' | 'package'; ms: number }[];
+  target?: CompileTarget;
+  /** Whether `output` is text or base64 bytes */
+  format?: 'text' | 'binary';
 }
 
 interface CoverageResult {

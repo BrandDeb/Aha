@@ -48,3 +48,10 @@ next-env.d.ts
 .scriptc/
 
 !.env.example
+
+
+# desktop app: assembled by scripts/desktop-prepare.mjs, built by tauri
+/desktop/
+/src-tauri/target/
+/src-tauri/binaries/
+/src-tauri/gen/

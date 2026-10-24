@@ -160,6 +160,15 @@ export function getGitHubClient(token: string) {
       
       return response.json() as Promise<T>;
     },
+    /** For endpoints that answer without a body (201/204) */
+    requestRaw: async (method: string, endpoint: string): Promise<void> => {
+      const response = await fetch(`${GITHUB_API_BASE}${endpoint}`, {
+        method,
+        headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
+        cache: 'no-store',
+      });
+      if (!response.ok) throw new GitHubApiError(response.status, `GitHub API error: ${response.status} - ${await response.text()}`);
+    },
   };
 }
 
@@ -442,3 +451,88 @@ export async function createGist(
 }
 
 export type { GitHubBranch, PulledTree, MultiFileCommitResult };
+
+// ---------------------------------------------------------------------------
+// GitHub Actions: the runs of a branch, their jobs and logs, re-running
+// ---------------------------------------------------------------------------
+
+interface WorkflowRun {
+  id: number;
+  name: string;
+  /** queued, in_progress, completed… */
+  status: string;
+  /** success, failure, cancelled, skipped… (null while running) */
+  conclusion: string | null;
+  headSha: string;
+  event: string;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+  path: string;
+}
+
+interface WorkflowJob {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  url: string;
+  steps: { name: string; number: number; status: string; conclusion: string | null }[];
+}
+
+/** The latest runs on a branch (one per workflow and commit is what the UI shows) */
+export async function listWorkflowRuns(token: string, owner: string, repo: string, branch: string): Promise<WorkflowRun[]> {
+  if (!isValidBranchName(branch)) throw new Error('Invalid branch');
+  const data = await getGitHubClient(token).request<{ workflow_runs: Record<string, unknown>[] }>(
+    'GET',
+    `${repoBase(owner, repo)}/actions/runs?branch=${encodeURIComponent(branch)}&per_page=15&exclude_pull_requests=true`
+  );
+  return data.workflow_runs.map((r) => ({
+    id: r.id as number,
+    name: (r.name as string) || (r.display_title as string) || 'Workflow',
+    status: r.status as string,
+    conclusion: (r.conclusion as string | null) ?? null,
+    headSha: r.head_sha as string,
+    event: r.event as string,
+    url: r.html_url as string,
+    createdAt: r.created_at as string,
+    updatedAt: r.updated_at as string,
+    path: (r.path as string) ?? '',
+  }));
+}
+
+export async function listRunJobs(token: string, owner: string, repo: string, runId: number): Promise<WorkflowJob[]> {
+  const data = await getGitHubClient(token).request<{ jobs: Record<string, unknown>[] }>('GET', `${repoBase(owner, repo)}/actions/runs/${runId}/jobs?per_page=50&filter=latest`);
+  return data.jobs.map((j) => ({
+    id: j.id as number,
+    name: j.name as string,
+    status: j.status as string,
+    conclusion: (j.conclusion as string | null) ?? null,
+    url: j.html_url as string,
+    steps: ((j.steps as Record<string, unknown>[]) ?? []).map((s) => ({ name: s.name as string, number: s.number as number, status: s.status as string, conclusion: (s.conclusion as string | null) ?? null })),
+  }));
+}
+
+const MAX_LOG_BYTES = 2 * 1024 * 1024;
+
+/** A job's log, without GitHub's timestamps, keeping the end (where failures are) */
+export async function getJobLog(token: string, owner: string, repo: string, jobId: number, tailLines = 300): Promise<string> {
+  // GitHub answers with a redirect to short-lived storage; fetch drops the Authorization header on the way there
+  const response = await fetch(`${GITHUB_API_BASE}${repoBase(owner, repo)}/actions/jobs/${jobId}/logs`, {
+    headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new GitHubApiError(response.status, `GitHub API error: ${response.status}`);
+  const text = (await response.text()).slice(-MAX_LOG_BYTES);
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\d{4}-\d\d-\d\dT[\d:.]+Z ?/, ''))
+    .slice(-tailLines)
+    .join('\n');
+}
+
+export async function rerunFailedJobs(token: string, owner: string, repo: string, runId: number): Promise<void> {
+  await getGitHubClient(token).requestRaw('POST', `${repoBase(owner, repo)}/actions/runs/${runId}/rerun-failed-jobs`);
+}
+
+export type { WorkflowRun, WorkflowJob };

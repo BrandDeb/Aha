@@ -7,6 +7,16 @@
  * `eval`/`Function`, and use ES module syntax instead of `module.exports`.
  */
 
+import { LANGUAGE_STARTERS } from './language-templates.ts';
+import { generatePipeline } from './pipelines/generate.ts';
+import { detectStacks } from './pipelines/stack.ts';
+import { PROJECT_TEMPLATES } from './project-templates.ts';
+import { MORE_PROJECT_TEMPLATES } from './project-templates-more.ts';
+import { PYTHON_TEMPLATES } from './python-templates.ts';
+import { WEB_STARTERS } from './web-templates.ts';
+import { CSS_STARTERS } from './css-templates.ts';
+import { APP_STARTERS } from './app-templates.ts';
+
 export interface Template {
   id: string;
   name: string;
@@ -19,28 +29,21 @@ export interface Template {
   files?: Record<string, string>;
   /** Uses sockets (http, fetch): native only, since WASI Preview 1 has no socket API */
   network?: boolean;
+  /** Built as a library from a scriptc.profile.json (static archive or WASM reactor), not as an executable */
+  library?: boolean;
+  /** Default is typescript. Every other language keeps its files at the project root (uv expects pyproject.toml there, go.mod and Cargo.toml too). Values: typescript, python, web (a framework with its own dev server, see frameworks.ts), or an id from languages.ts */
+  language?: string;
+  /** A full app (a page and an API) served by its own server, with a live preview */
+  app?: boolean;
 }
 
 /** All files of a template as a project, entry under src/ */
 export function templateFiles(template: Template): { files: Record<string, string>; entry: string } {
-  const entry = template.filename.includes('/') ? template.filename : `src/${template.filename}`;
+  const entry = (template.language ?? 'typescript') !== 'typescript' || template.filename.includes('/') ? template.filename : `src/${template.filename}`;
   return { files: { [entry]: template.code, ...template.files }, entry };
 }
 
-export const DEFAULT_CODE = `// NanoCLI Studio — write TypeScript, get a native binary.
-// Click "Compile" to build it with scriptc.
-
-const args = process.argv.slice(2);
-const name = args[0] ?? 'World';
-
-console.log(\`Hello, \${name}!\`);
-
-function add(a: number, b: number): number {
-  return a + b;
-}
-
-console.log(\`3 + 5 = \${add(3, 5)}\`);
-`;
+export { DEFAULT_CODE } from './default-code.ts';
 
 export const TEMPLATES: Template[] = [
   {
@@ -300,6 +303,45 @@ try {
 `,
   },
   {
+    id: 'library',
+    name: 'Library (WASM reactor)',
+    description: 'A counter other programs can call: build it as a static library or a WASM reactor',
+    filename: 'counter.ts',
+    library: true,
+    code: `// A library has no main(): it exports functions that a host program calls.
+// scriptc.profile.json lists the exports and the host callbacks this module can call.
+// Build it from the Output menu: "Static library (.a)" or "WASM reactor".
+
+// Provided by the host (declared in the profile's "callbacks")
+declare function changed(value: number): void;
+
+let count = 0;
+
+export function step(delta: number): number {
+  count += delta;
+  changed(count);
+  return count;
+}
+`,
+    files: {
+      'src/scriptc.profile.json': `{
+  "profile_format": 1,
+  "name": "counter",
+  "entry": "counter.ts",
+  "emission": "llvm",
+  "abi": {
+    "prefix": "counter_",
+    "init_symbol": "counter_init",
+    "sink_register_symbol": "counter_sink",
+    "callback_register_symbol": "counter_callback"
+  },
+  "callbacks": [{ "name": "changed", "params": ["f64"], "returns": "void" }],
+  "exports": [{ "export": "step", "symbol": "counter_step", "params": ["f64"], "returns": "f64" }]
+}
+`,
+    },
+  },
+  {
     id: 'fibonacci',
     name: 'Fibonacci Benchmark',
     description: 'CPU-bound recursion to compare native speed with Node',
@@ -385,4 +427,18 @@ async function countdown(seconds: number): Promise<void> {
 countdown(Number(process.argv[2] ?? '3'));
 `,
   },
+  ...PYTHON_TEMPLATES,
+  ...[...PROJECT_TEMPLATES, ...MORE_PROJECT_TEMPLATES].map(({ id, name, description, filename, files, language }): Template => {
+    const { [filename]: code, ...rest } = files;
+    return { id, name, description, filename, code, files: { ...rest, ...ciFor(files) }, language };
+  }),
+  ...LANGUAGE_STARTERS.map(({ id, name, description, filename, code, files, language }): Template => ({ id, name, description, filename, code, files, language })),
+  ...APP_STARTERS.map(({ id, name, description, filename, code, files, language }): Template => ({ id, name, description, filename, code, files, language, app: true })),
+  ...[...WEB_STARTERS, ...CSS_STARTERS].map(({ id, name, description, filename, code, files }): Template => ({ id, name, description, filename, code, files, language: 'web' })),
 ];
+
+/** The CI workflow the Pipelines tab would generate for these files (a project template ships with it) */
+function ciFor(files: Record<string, string>): Record<string, string> {
+  const generated = generatePipeline(detectStacks(files), files, { provider: 'github' });
+  return 'error' in generated ? {} : { [generated.path]: generated.content };
+}

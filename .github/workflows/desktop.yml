@@ -1,0 +1,230 @@
+name: Desktop apps
+
+# Builds NanoCLI Studio for macOS (Apple silicon) and Windows with Tauri: on pull requests that touch
+# the desktop app, on pushes to main, on version tags, and on demand. Installers are uploaded as workflow
+# artifacts and published with stable names (the download page links to them): a version tag gets its
+# own release, every other build replaces the files of the rolling `desktop-latest` pre-release.
+on:
+  pull_request:
+    paths:
+      - 'src-tauri/**'
+      - 'scripts/desktop-prepare.mjs'
+      - 'scripts/supervise.js'
+      - '.github/workflows/desktop.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package-lock.json'
+      - 'src-tauri/**'
+      - 'scripts/**'
+      - '.github/workflows/desktop.yml'
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (Apple silicon)
+            os: macos-latest
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+            artifact: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          - name: Windows (x64)
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+            artifact: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust builds
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.target }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rust tests
+        working-directory: src-tauri
+        shell: bash
+        # Tauri's build script wants the bundled Node.js and the app folder to exist; the tests use neither,
+        # so placeholders stand in until the next step assembles the real ones
+        run: |
+          mkdir -p binaries ../desktop/app
+          touch "binaries/node-${{ matrix.target }}$([ '${{ runner.os }}' = 'Windows' ] && echo .exe)"
+          cargo test --target ${{ matrix.target }}
+          rm -rf binaries/node-* ../desktop
+
+      - name: Assemble the app (studio build, production dependencies, verified Node.js)
+        # The GitHub OAuth app's client ID (public, not a secret) is built in, so "Sign in with GitHub" works in the app
+        env:
+          NEXT_PUBLIC_GITHUB_CLIENT_ID: ${{ vars.NANOCLI_GITHUB_CLIENT_ID }}
+        run: node scripts/desktop-prepare.mjs --target ${{ matrix.target }}
+
+      - name: Signing (only when the secrets are set)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Tauri signs and notarizes when these are present; without them the app is signed ad hoc
+          # (signingIdentity "-" in tauri.conf.json): an unsigned app downloaded on Apple silicon is reported
+          # as "damaged", while an ad-hoc signed one gets the usual prompt that System Settings can approve
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            if [ -n "${!name}" ]; then
+              echo "::add-mask::${!name}"
+              { echo "$name<<EOF"; echo "${!name}"; echo "EOF"; } >> "$GITHUB_ENV"
+            fi
+          done
+
+      - name: Build with Tauri
+        run: npx tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+
+      - name: Check the macOS signature
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          app="$(ls -d src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app | head -1)"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv "$app" 2>&1 | grep -E 'Identifier|Signature|TeamIdentifier' || true
+          echo "Node.js entitlements:"
+          codesign -d --entitlements - "$app/Contents/MacOS/node"
+
+      # Start the signed app's server the way the app does (bundled Node, supervisor, production) and
+      # wait for it to answer: a signing or packaging problem shows up here, not on someone's Mac
+      - name: Smoke test (the signed app's server starts and answers)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          app="$(cd "$(ls -d src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app | head -1)" && pwd)"
+          root="$app/Contents/Resources/app"
+          temp="$(mktemp -d)"
+          (cd "$root" && NODE_ENV=production HOST=127.0.0.1 PORT=47123 NEXT_PUBLIC_BASE_URL=http://127.0.0.1:47123 \
+            NANOCLI_TEMP_DIR="$temp" NANOCLI_DESKTOP=1 NEXT_TELEMETRY_DISABLED=1 NANOCLI_HOME="$temp/home" \
+            "$app/Contents/MacOS/node" scripts/supervise.js > "$temp/server.log" 2>&1) &
+          ok=""
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:47123/api/health > /dev/null 2>&1; then ok=1; break; fi
+            sleep 1
+          done
+          curl -fsS -o /dev/null -w "studio page: %{http_code}\n" http://127.0.0.1:47123/ || true
+          pkill -f "supervise.js" || true
+          echo "--- server log"; cat "$temp/server.log"
+          [ -n "$ok" ] || { echo "::error::The signed app's server did not start"; exit 1; }
+
+      # Install with the real installer (silently, for this user) and start the installed app's server the way
+      # the app does: a packaging problem (missing files, paths too long, a Node that won't start) shows up here
+      - name: Smoke test (install, then the installed app's server starts and answers)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe" | Select-Object -First 1
+          Start-Process -Wait -FilePath $installer.FullName -ArgumentList '/S'
+          $dir = Join-Path $env:LOCALAPPDATA 'NanoCLI Studio'
+          if (-not (Test-Path (Join-Path $dir 'node.exe'))) { Get-ChildItem $env:LOCALAPPDATA -Depth 1 | Select-Object FullName; throw "node.exe not found in $dir" }
+          $root = Join-Path $dir 'app'
+          $temp = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP 'nanocli-smoke') -Force
+          $env:NODE_ENV = 'production'; $env:HOST = '127.0.0.1'; $env:PORT = '47123'
+          $env:NEXT_PUBLIC_BASE_URL = 'http://127.0.0.1:47123'; $env:NANOCLI_TEMP_DIR = $temp.FullName
+          $env:NANOCLI_DESKTOP = '1'; $env:NEXT_TELEMETRY_DISABLED = '1'; $env:NANOCLI_HOME = Join-Path $temp.FullName 'home'
+          $log = Join-Path $temp.FullName 'server.log'
+          $server = Start-Process -PassThru -NoNewWindow -FilePath (Join-Path $dir 'node.exe') -ArgumentList 'scripts/supervise.js' -WorkingDirectory $root -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+          $ok = $false
+          for ($i = 0; $i -lt 90 -and -not $ok; $i++) {
+            try { if ((Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 http://127.0.0.1:47123/api/health).StatusCode -eq 200) { $ok = $true } } catch { Start-Sleep -Seconds 1 }
+          }
+          try { "studio page: " + (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:47123/).StatusCode } catch { "studio page: $($_.Exception.Message)" }
+          taskkill /PID $server.Id /T /F | Out-Null
+          '--- server log'; Get-Content $log, "$log.err" -ErrorAction SilentlyContinue
+          if (-not $ok) { throw "The installed app's server did not start" }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanocli-studio-${{ matrix.target }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish downloads
+    needs: build
+    # Not for pull requests from forks: their builds stay workflow artifacts
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    concurrency:
+      group: desktop-publish
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: nanocli-studio-*
+          path: built
+
+      - name: Stable file names and checksums
+        run: |
+          mkdir out
+          cp built/nanocli-studio-aarch64-apple-darwin/*.dmg out/NanoCLI-Studio-macOS-arm64.dmg
+          cp built/nanocli-studio-x86_64-pc-windows-msvc/*.exe out/NanoCLI-Studio-Windows-x64-setup.exe
+          (cd out && sha256sum NanoCLI-Studio-* > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+      - name: Publish to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SOURCE: ${{ github.event.pull_request.head.ref || github.ref_name }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"; TITLE="NanoCLI Studio $TAG"; PRE=""
+          else
+            TAG=desktop-latest; TITLE="NanoCLI Studio (latest build)"; PRE="--prerelease"
+            # The rolling tag follows the build it carries
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" -f sha="$SHA" -F force=true >/dev/null 2>&1 \
+              || gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$SHA" >/dev/null
+          fi
+          NOTES="Built from $SHA ($SOURCE) by $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID.
+
+          - macOS: Apple silicon, macOS 11 or newer (NanoCLI-Studio-macOS-arm64.dmg)
+          - Windows: 10 or 11, x64 (NanoCLI-Studio-Windows-x64-setup.exe)
+
+          Unsigned builds: on macOS right-click the app and choose Open the first time; on Windows choose More info, then Run anyway. SHA-256 checksums are in SHA256SUMS.txt."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes "$NOTES" $PRE
+          else
+            gh release create "$TAG" --verify-tag --title "$TITLE" --notes "$NOTES" $PRE
+          fi
+          gh release upload "$TAG" out/* --clobber

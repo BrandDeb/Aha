@@ -44,7 +44,7 @@ export function GraphPanel() {
       {Object.keys(graph.edges).length === 0 ? (
         <p className="text-sm text-gray-500">No TypeScript or JavaScript files yet.</p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border p-2">
+        <div className="overflow-x-auto rounded-xl border border-border p-2">
           <svg width={layout.width} height={layout.height} role="img" aria-label="Import graph of the project" className="mx-auto block">
             <defs>
               <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">

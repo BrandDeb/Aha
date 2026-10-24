@@ -1,0 +1,746 @@
+'use client';
+
+/**
+ * Proposals: every task given to the agent becomes one. A proposal is the
+ * agent's work as something to review, like a small pull request that lives
+ * next to your files: the goal, the plan, what it did, the changes (one lane,
+ * or several when it tried different approaches), and the evidence for them.
+ * Nothing in a proposal touches the project until it is accepted.
+ *
+ * The running agent keeps its working copies (Stage objects) in refs; what the
+ * interface shows is copied into state as plain data after every step, so
+ * components render from state alone.
+ */
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { chipsFor, evidenceFrom, verdict, type Evidence } from '@/lib/agent/evidence';
+import { isHarnessFile, runHarnessLoop, type HarnessEvent } from '@/lib/agent/harness';
+import { runAgent } from '@/lib/agent/loop';
+import { callModelFor } from '@/lib/agent/model';
+import { parseReview, REVIEW_LABEL, REVIEWER_PROMPT, reviewInput, type Review } from '@/lib/agent/review';
+import { autoAcceptable, riskOf } from '@/lib/agent/risk';
+import { forkGoal, forkLaneId, type ForkDirection } from '@/lib/forks';
+import { linesWritten, recordWhy, WHY_FILE } from '@/lib/why';
+import { contractsOf } from '@/lib/contracts';
+import { systemPromptFor } from '@/lib/agent/prompt';
+import { Stage, type SerializedStage } from '@/lib/agent/stage';
+import { workspaceTools } from '@/lib/agent/tools';
+import { skillTools } from '@/lib/skills/format';
+import { fetchSkillIndex, skillLibrary } from './skills-client';
+import { DEFAULT_BUDGET, type AgentEvent, type ImageInput, type Budget, type Message, type Risk, type StopReason, type ToolCall, type ToolResult } from '@/lib/agent/types';
+import { resolveFor, resolveProvider } from '@/lib/ai-providers';
+import { createAgentHost } from './agent-host';
+import { useAiConfig } from './ai-config';
+import { buildConnectorTools } from './connectors-client';
+import { getConnectors } from './connectors-config';
+import { useWorkspace } from './store';
+import { useToast } from './toasts';
+
+export interface LogEntry {
+  id: number;
+  kind: 'you' | 'agent' | 'tool' | 'notice';
+  text?: string;
+  call?: ToolCall;
+  risk?: Risk;
+  result?: ToolResult;
+  approved?: boolean;
+  lane?: string;
+}
+
+export interface FileChange {
+  path: string;
+  kind: 'added' | 'modified' | 'deleted';
+  before: string;
+  after: string;
+  added: number;
+  removed: number;
+}
+
+export interface Lane {
+  id: string;
+  label: string;
+  status: 'running' | 'done';
+  steps: number;
+  /** Harness² score, when approaches were compared */
+  score?: number;
+  scoreNotes?: string[];
+  evidence?: Evidence;
+  /** The second reviewer's reading of this lane's changes */
+  review?: { status: 'running' } | ({ status: 'done' } & Review) | { status: 'error'; error: string };
+  recommended?: boolean;
+  files: FileChange[];
+  saved: SerializedStage;
+}
+
+export type ProposalStatus = 'working' | 'review' | 'accepted' | 'discarded';
+
+export interface Proposal {
+  id: string;
+  goal: string;
+  createdAt: number;
+  status: ProposalStatus;
+  model: string;
+  step: number;
+  plan: string;
+  log: LogEntry[];
+  lanes: Lane[];
+  laneId: string;
+  lessons: string[];
+  outcome?: { reason: StopReason; summary: string };
+  pending?: { call: ToolCall; risk: Risk };
+  /** Hidden from the editor tabs (still listed in the Agent tab) */
+  closed?: boolean;
+  /** Who started it: you, the debugger, or the worker */
+  origin?: 'you' | 'debug' | 'worker';
+  /** The worker's task kind (todo, tests, improve…), for its track record */
+  task?: string;
+  /** Forked: one lane per direction, built at the same time, for you to compare and pick */
+  fork?: boolean;
+  /** What auto-accept decided once the proposal was ready: accepted, or why it waits for you */
+  auto?: { accepted: boolean; why: string; score: number };
+}
+
+export interface AgentPrefs {
+  budget: 'quick' | 'standard' | 'long';
+  trustCommands: boolean;
+  /** 0 = one run; 1-3 = compare that many variants against the current setup */
+  approaches: number;
+  /** Start a debugging proposal by itself when something fails (once per distinct failure) */
+  autoDebug: boolean;
+  /** A second reviewer reads every finished proposal before you do */
+  review: boolean;
+  /** Accept finished proposals at or under this risk score by themselves (0 = never) */
+  autoAccept: number;
+}
+
+export const BUDGETS: Record<AgentPrefs['budget'], { label: string; budget: Partial<Budget> }> = {
+  quick: { label: 'Quick · 10 steps', budget: { maxSteps: 10, maxToolCalls: 30, maxMillis: 3 * 60_000, maxFixAttempts: 2 } },
+  standard: { label: 'Standard · 25 steps', budget: DEFAULT_BUDGET },
+  long: { label: 'Long · 60 steps', budget: { maxSteps: 60, maxToolCalls: 200, maxMillis: 25 * 60_000, maxFixAttempts: 6 } },
+};
+
+const STORE_KEY = 'nanocli:proposals';
+const PREFS_KEY = 'nanocli:agent-prefs';
+const MAX_KEPT = 15;
+const DEFAULT_PREFS: AgentPrefs = { budget: 'standard', trustCommands: false, approaches: 0, autoDebug: false, review: true, autoAccept: 0 };
+
+/** Plain data the interface renders from */
+export function snapshotFiles(stage: Stage, hide: (p: string) => boolean = () => false): FileChange[] {
+  return Object.entries(stage.changes())
+    .sort(([a], [b]) => (hide(a) === hide(b) ? a.localeCompare(b) : hide(a) ? 1 : -1))
+    .map(([path, kind]) => {
+      const d = stage.diff(path);
+      return { path, kind, before: d.before, after: d.after, added: d.added, removed: d.removed };
+    });
+}
+
+interface ProposalsValue {
+  proposals: Proposal[];
+  activeId: string | null;
+  active: Proposal | null;
+  prefs: AgentPrefs;
+  setPrefs: (patch: Partial<AgentPrefs>) => void;
+  /** Start a new proposal; returns its id, or null when no model is set up */
+  /** `label` is what the tab shows when the task itself is long (a debugging brief); `quiet` skips the "choose a model" toast */
+  ask: (goal: string, options?: { approaches?: number; label?: string; quiet?: boolean; background?: boolean; origin?: Proposal['origin']; task?: string; forks?: ForkDirection[]; images?: ImageInput[] }) => string | null;
+  followUp: (id: string, text: string) => void;
+  stop: (id: string) => void;
+  answer: (id: string, allowed: boolean, always?: boolean) => void;
+  accept: (id: string, paths?: string[]) => void;
+  discard: (id: string, paths?: string[]) => void;
+  remove: (id: string) => void;
+  selectLane: (id: string, laneId: string) => void;
+  open: (id: string | null) => void;
+  close: (id: string) => void;
+}
+
+const Ctx = createContext<ProposalsValue | null>(null);
+
+function load<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function ProposalsProvider({ children }: { children: ReactNode }) {
+  const { project, dispatch, saveSnapshot, hydrated } = useWorkspace();
+  const { notify } = useToast();
+  const config = useAiConfig();
+  const configRef = useRef(config);
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [prefs, setPrefsState] = useState<AgentPrefs>(DEFAULT_PREFS);
+  const [loaded, setLoaded] = useState(false);
+
+  const stages = useRef(new Map<string, Map<string, Stage>>());
+  const controllers = useRef(new Map<string, AbortController>());
+  const answers = useRef(new Map<string, (allowed: boolean, always?: boolean) => void>());
+  const histories = useRef(new Map<string, Message[]>());
+  /** Images that come with a new request (a screenshot to build from), handed to its first run only */
+  const pendingImages = useRef(new Map<string, ImageInput[]>());
+  const idCounter = useRef(0);
+  const projectRef = useRef(project);
+  useEffect(() => {
+    projectRef.current = project;
+  }, [project]);
+  const prefsRef = useRef<AgentPrefs>(DEFAULT_PREFS);
+
+  const proposalsRef = useRef<Proposal[]>([]);
+  useEffect(() => {
+    proposalsRef.current = proposals;
+  }, [proposals]);
+
+  // Restore saved proposals (their working copies are rebuilt on demand)
+  useEffect(() => {
+    if (!hydrated) return;
+    const saved = load<Proposal[]>(STORE_KEY, []);
+    /* eslint-disable react-hooks/set-state-in-effect -- storage is only readable after hydration */
+    const restored = saved
+      .filter((p) => p && typeof p.id === 'string' && Array.isArray(p.lanes))
+      .map((p) => (p.status === 'working' ? { ...p, status: 'review' as const, pending: undefined, outcome: { reason: 'aborted' as const, summary: 'Stopped when the page was reloaded.' }, lanes: p.lanes.map((l) => ({ ...l, status: 'done' as const })) } : { ...p, pending: undefined }));
+    // Anything started before this ran (the worker, auto-debug) stays, newest first
+    setProposals((prev) => [...prev, ...restored.filter((r) => !prev.some((p) => p.id === r.id))]);
+    setPrefsState({ ...DEFAULT_PREFS, ...load<Partial<AgentPrefs>>(PREFS_KEY, {}) });
+    setLoaded(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const timer = setTimeout(() => {
+      try {
+        const keep = proposals.slice(0, MAX_KEPT).map((p) => ({ ...p, pending: undefined, log: p.log.slice(-80) }));
+        localStorage.setItem(STORE_KEY, JSON.stringify(keep));
+      } catch {
+        // storage full: proposals stay for this session only
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [proposals, loaded]);
+
+  // Stop everything when the workspace goes away
+  useEffect(() => {
+    const running = controllers.current;
+    return () => running.forEach((c) => c.abort());
+  }, []);
+
+  useEffect(() => {
+    prefsRef.current = prefs;
+  }, [prefs]);
+
+  const setPrefs = useCallback((patch: Partial<AgentPrefs>) => {
+    setPrefsState((prev) => {
+      const next = { ...prev, ...patch };
+      try {
+        localStorage.setItem(PREFS_KEY, JSON.stringify(next));
+      } catch {
+        // per-session only
+      }
+      return next;
+    });
+  }, []);
+
+  const update = useCallback((id: string, fn: (p: Proposal) => Proposal) => setProposals((prev) => prev.map((p) => (p.id === id ? fn(p) : p))), []);
+  const log = useCallback((id: string, entry: Omit<LogEntry, 'id'>) => update(id, (p) => ({ ...p, log: [...p.log, { id: ++idCounter.current, ...entry }] })), [update]);
+
+  const syncLane = useCallback(
+    (id: string, laneId: string, patch: Partial<Lane> = {}) => {
+      const stage = stages.current.get(id)?.get(laneId);
+      if (!stage) return;
+      update(id, (p) => ({ ...p, lanes: p.lanes.map((l) => (l.id === laneId ? { ...l, ...patch, files: snapshotFiles(stage, isHarnessFile), saved: stage.serialize() } : l)) }));
+    },
+    [update]
+  );
+
+  const approver = useCallback(
+    (id: string, trusted: Set<string>) => (call: ToolCall, spec: { risk: Risk }) =>
+      trusted.has(call.name)
+        ? Promise.resolve(true)
+        : new Promise<boolean>((resolve) => {
+            update(id, (p) => ({ ...p, pending: { call, risk: spec.risk } }));
+            answers.current.set(id, (allowed, always) => {
+              if (always) trusted.add(call.name);
+              answers.current.delete(id);
+              update(id, (p) => ({ ...p, pending: undefined }));
+              resolve(allowed);
+            });
+          }),
+    [update]
+  );
+
+  const finish = useCallback(
+    (id: string, outcome: Proposal['outcome'], ok: boolean) => {
+      update(id, (p) => ({ ...p, status: 'review', pending: undefined, outcome, lanes: p.lanes.map((l) => ({ ...l, status: 'done' })) }));
+      controllers.current.delete(id);
+      answers.current.delete(id);
+      if (ok) notify({ kind: 'success', title: 'Proposal ready to review', detail: outcome?.summary.slice(0, 120) });
+    },
+    [update, notify]
+  );
+
+  /** The second reviewer: reads one lane's changes cold, with the goal, the evidence and the contracts */
+  const reviewLane = useCallback(
+    async (id: string, laneId: string, goal: string, summary: string, evidence: Evidence | undefined, target: Exclude<ReturnType<typeof resolveProvider>, { error: string }>) => {
+      const stage = stages.current.get(id)?.get(laneId);
+      if (!stage || !prefsRef.current.review) return;
+      const changes = snapshotFiles(stage, isHarnessFile).filter((f) => !isHarnessFile(f.path));
+      if (!changes.length) return;
+      const setReview = (review: Lane['review']) => update(id, (p) => ({ ...p, lanes: p.lanes.map((l) => (l.id === laneId ? { ...l, review } : l)) }));
+      setReview({ status: 'running' });
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3 * 60_000);
+      try {
+        const input = reviewInput({
+          goal,
+          summary,
+          changes: changes.map((c) => ({ path: c.path, before: c.kind === 'added' ? '' : c.before, after: c.kind === 'deleted' ? '' : c.after })),
+          evidence: evidence ? chipsFor(evidence).map((c) => c.label) : [],
+          contracts: contractsOf(stage.files()).contracts.map((c) => c.rule),
+        });
+        // The reviewer's own model when one is set (a different model catches different mistakes)
+        const own = resolveFor(configRef.current, 'reviewer');
+        const reviewer = 'error' in own || own.provider.kind === 'server' ? target : own;
+        const turn = await callModelFor(reviewer)({ system: REVIEWER_PROMPT, messages: [{ role: 'user', content: input }], tools: [], signal: controller.signal });
+        setReview({ status: 'done', ...parseReview(turn.text) });
+      } catch (error) {
+        setReview({ status: 'error', error: (error as Error).name === 'AbortError' ? 'The review took too long' : (error as Error).message });
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    [update]
+  );
+
+  /** One agent run on one lane; also used for follow-ups, which continue the conversation */
+  const runSingle = useCallback(
+    async (id: string, laneId: string, goal: string, target: Exclude<ReturnType<typeof resolveProvider>, { error: string }>) => {
+      const p = projectRef.current;
+      const lanes = stages.current.get(id) ?? new Map<string, Stage>();
+      stages.current.set(id, lanes);
+      const stage = lanes.get(laneId) ?? new Stage(p.files);
+      stage.rebase(p.files);
+      lanes.set(laneId, stage);
+      const controller = new AbortController();
+      controllers.current.set(id, controller);
+      const host = createAgentHost({ stage, projectName: p.name, entry: p.entry, files: stage.files(), onPlan: (plan) => update(id, (x) => ({ ...x, plan })) });
+      const events: AgentEvent[] = [];
+      try {
+        const connected = await buildConnectorTools(getConnectors(), controller.signal);
+        if (connected.connected.length) log(id, { kind: 'notice', text: `Connected: ${connected.connected.map((c) => c.name).join(', ')}` });
+        for (const f of connected.failed) log(id, { kind: 'notice', text: `${f.name} is not available: ${f.error}` });
+        const skills = (await fetchSkillIndex())?.skills ?? [];
+        const images = pendingImages.current.get(id);
+        pendingImages.current.delete(id);
+        const run = await runAgent({
+          goal,
+          ...(images ? { images } : {}),
+          system: systemPromptFor(stage.files(), skills),
+          tools: [...workspaceTools(host), ...connected.tools, ...skillTools(skillLibrary(skills, () => stage.files()))],
+          callModel: callModelFor(target),
+          budget: BUDGETS[prefs.budget].budget,
+          autoApprove: prefs.trustCommands ? ['read', 'stage', 'build', 'exec'] : ['read', 'stage', 'build'],
+          history: histories.current.get(id) ?? [],
+          signal: controller.signal,
+          approve: approver(id, new Set()),
+          onEvent: (event) => {
+            events.push(event);
+            if (event.type === 'step') update(id, (x) => ({ ...x, step: event.step, lanes: x.lanes.map((l) => (l.id === laneId ? { ...l, steps: event.step } : l)) }));
+            else if (event.type === 'text') log(id, { kind: 'agent', text: event.text });
+            else if (event.type === 'notice') log(id, { kind: 'notice', text: event.text });
+            else if (event.type === 'tool') log(id, { kind: 'tool', call: event.call, risk: event.risk });
+            else if (event.type === 'approval') update(id, (x) => ({ ...x, log: x.log.map((e) => (e.call?.id === event.call.id ? { ...e, approved: event.approved } : e)) }));
+            else if (event.type === 'result') {
+              update(id, (x) => ({ ...x, log: x.log.map((e) => (e.call?.id === event.call.id ? { ...e, result: event.result } : e)) }));
+              syncLane(id, laneId);
+            }
+          },
+        });
+        histories.current.set(id, run.messages);
+        const evidence = evidenceFrom(run, events, stage, isHarnessFile);
+        syncLane(id, laneId, { evidence, review: undefined });
+        finish(id, { reason: run.reason, summary: run.summary }, run.reason === 'finished');
+        if (run.reason === 'finished') void reviewLane(id, laneId, proposalsRef.current.find((x) => x.id === id)?.goal ?? goal, run.summary, evidence, target);
+      } catch (error) {
+        finish(id, { reason: (error as Error).name === 'AbortError' ? 'aborted' : 'error', summary: (error as Error).message }, false);
+      }
+    },
+    [approver, finish, log, prefs.budget, prefs.trustCommands, syncLane, update, reviewLane]
+  );
+
+  /**
+   * Fork the future: one agent per direction, at the same time, each on its own copy of the project. They can build
+   * and run their work in the sandbox but never run commands on this machine; you compare the results and pick one.
+   */
+  const runForks = useCallback(
+    async (id: string, goal: string, forks: ForkDirection[], target: Exclude<ReturnType<typeof resolveProvider>, { error: string }>) => {
+      const p = projectRef.current;
+      const lanes = new Map<string, Stage>();
+      stages.current.set(id, lanes);
+      const controller = new AbortController();
+      controllers.current.set(id, controller);
+      const skills = (await fetchSkillIndex())?.skills ?? [];
+      const outcomes = await Promise.all(
+        forks.map(async (fork, i) => {
+          const laneId = forkLaneId(i);
+          const stage = new Stage(p.files);
+          lanes.set(laneId, stage);
+          const host = createAgentHost({ stage, projectName: p.name, entry: p.entry, files: stage.files(), onPlan: () => {} });
+          const events: AgentEvent[] = [];
+          try {
+            const run = await runAgent({
+              goal: forkGoal(goal, fork, forks),
+              system: systemPromptFor(stage.files(), skills),
+              tools: [...workspaceTools(host), ...skillTools(skillLibrary(skills, () => stage.files()))],
+              callModel: callModelFor(target),
+              budget: { maxSteps: 14, maxToolCalls: 50, maxMillis: 6 * 60_000, maxFixAttempts: 3 },
+              autoApprove: ['read', 'stage', 'build'],
+              history: [],
+              signal: controller.signal,
+              approve: async () => false,
+              onEvent: (event) => {
+                events.push(event);
+                if (event.type === 'step') update(id, (x) => ({ ...x, lanes: x.lanes.map((l) => (l.id === laneId ? { ...l, steps: event.step } : l)) }));
+                else if (event.type === 'tool') log(id, { kind: 'tool', call: event.call, risk: event.risk, lane: laneId });
+                else if (event.type === 'result') {
+                  update(id, (x) => ({ ...x, log: x.log.map((e) => (e.call?.id === event.call.id ? { ...e, result: event.result } : e)) }));
+                  syncLane(id, laneId);
+                }
+              },
+            });
+            const evidence = evidenceFrom(run, events, stage, isHarnessFile);
+            syncLane(id, laneId, { evidence, status: 'done', scoreNotes: [run.summary.split('\n').filter(Boolean).slice(-1)[0]?.slice(0, 160) ?? ''] });
+            return run.reason === 'finished';
+          } catch {
+            update(id, (x) => ({ ...x, lanes: x.lanes.map((l) => (l.id === laneId ? { ...l, status: 'done', scoreNotes: ['stopped'] } : l)) }));
+            return false;
+          }
+        })
+      );
+      const done = outcomes.filter(Boolean).length;
+      if (controller.signal.aborted) finish(id, { reason: 'aborted', summary: 'Stopped.' }, false);
+      else finish(id, { reason: done ? 'finished' : 'error', summary: done ? `${done} of ${forks.length} versions are ready. Compare them side by side, pick the one you like, then ship it or keep going from it.` : 'None of the versions finished.' }, done > 0);
+    },
+    [finish, log, syncLane, update]
+  );
+
+  /** Try the task with the current setup and with variants of the agent's harness, then recommend the best (Harness²-style) */
+  const runApproaches = useCallback(
+    async (id: string, goal: string, k: number, target: Exclude<ReturnType<typeof resolveProvider>, { error: string }>) => {
+      const p = projectRef.current;
+      const controller = new AbortController();
+      controllers.current.set(id, controller);
+      const lanes = new Map<string, Stage>();
+      stages.current.set(id, lanes);
+      const onEvent = (event: HarnessEvent) => {
+        if (event.type === 'notice') log(id, { kind: 'notice', text: event.text });
+        else if (event.type === 'probe-start')
+          update(id, (x) => ({ ...x, laneId: x.laneId || event.id, lanes: [...x.lanes, { id: event.id, label: event.id === 'baseline' ? 'Current setup' : event.id, status: 'running', steps: 0, files: [], saved: { edits: [], before: {} } }] }));
+        else if (event.type === 'probe-step') {
+          const e = event.event;
+          if (e.type === 'step') update(id, (x) => ({ ...x, lanes: x.lanes.map((l) => (l.id === event.id ? { ...l, steps: e.step } : l)) }));
+          else if (e.type === 'tool') log(id, { kind: 'tool', call: e.call, risk: e.risk, lane: event.id });
+          else if (e.type === 'result') update(id, (x) => ({ ...x, log: x.log.map((l) => (l.call?.id === e.call.id ? { ...l, result: e.result } : l)) }));
+        } else if (event.type === 'probe-done') update(id, (x) => ({ ...x, lanes: x.lanes.map((l) => (l.id === event.id ? { ...l, status: 'done', score: event.score, scoreNotes: event.evidence } : l)) }));
+        else if (event.type === 'composing') log(id, { kind: 'notice', text: 'Comparing the approaches…' });
+      };
+      try {
+        const skills = (await fetchSkillIndex())?.skills ?? [];
+        const result = await runHarnessLoop({
+          goal,
+          files: p.files,
+          makeHost: (s) => createAgentHost({ stage: s, projectName: p.name, entry: p.entry, files: s.files(), onPlan: () => {} }),
+          callModel: callModelFor(target),
+          system: (files) => systemPromptFor(files, skills),
+          extraTools: (s) => skillTools(skillLibrary(skills, () => s.files())),
+          k,
+          mode: 'parallel',
+          budget: { maxSteps: 12, maxToolCalls: 40, maxMillis: 4 * 60_000, maxFixAttempts: 3 },
+          signal: controller.signal,
+          onEvent,
+        });
+        for (const probe of result.probes) lanes.set(probe.variant.id, probe.stage);
+        lanes.set('recommended', result.stage);
+        const best = result.best;
+        const recommended: Lane = {
+          id: 'recommended',
+          label: 'Recommended',
+          status: 'done',
+          steps: best.run.steps,
+          score: best.score,
+          scoreNotes: best.evidence,
+          recommended: true,
+          evidence: evidenceFrom(best.run, best.events, result.stage, isHarnessFile),
+          files: snapshotFiles(result.stage, isHarnessFile),
+          saved: result.stage.serialize(),
+        };
+        update(id, (x) => ({
+          ...x,
+          lessons: result.lessons,
+          laneId: 'recommended',
+          lanes: [
+            recommended,
+            ...x.lanes.map((l) => {
+              const probe = result.probes.find((r) => r.variant.id === l.id);
+              return probe ? { ...l, status: 'done' as const, evidence: evidenceFrom(probe.run, probe.events, probe.stage, isHarnessFile), files: snapshotFiles(probe.stage, isHarnessFile), saved: probe.stage.serialize() } : l;
+            }),
+          ],
+        }));
+        const summary =
+          best === result.baseline
+            ? `No variant beat the current setup (score ${best.score}), so its result is recommended and no harness changes are proposed.`
+            : `“${best.variant.id}” scored ${best.score} against ${result.baseline.score} for the current setup. The recommendation is its result plus the harness changes that earned it.`;
+        finish(id, { reason: 'finished', summary }, true);
+        void reviewLane(id, 'recommended', goal, summary, recommended.evidence, target);
+      } catch (error) {
+        finish(id, { reason: (error as Error).name === 'AbortError' ? 'aborted' : 'error', summary: (error as Error).message }, false);
+      }
+    },
+    [finish, log, update, reviewLane]
+  );
+
+  const targetOrExplain = useCallback((quiet = false, job: 'agent' | 'worker' = 'agent') => {
+    const target = resolveFor(config, job);
+    if ('error' in target) {
+      if (!quiet) notify({ kind: 'error', title: 'Choose a model first', detail: `${target.error} Open the Agent tab to pick one; free and local options are listed.` });
+      return null;
+    }
+    if (target.provider.kind === 'server') {
+      if (!quiet) notify({ kind: 'error', title: 'The agent needs your own model', detail: 'Pick a provider with a key, or a local model such as Ollama, in the Agent tab.' });
+      return null;
+    }
+    return target;
+  }, [config, notify]);
+
+  const ask = useCallback<ProposalsValue['ask']>(
+    (goal, options = {}) => {
+      const text = goal.trim();
+      if (!text) return null;
+      // The worker can run on its own (cheaper) model; everything else uses the agent's
+      const target = targetOrExplain(options.quiet, options.origin === 'worker' ? 'worker' : 'agent');
+      if (!target) return null;
+      const forks = options.forks?.length ? options.forks : null;
+      const k = forks ? 0 : (options.approaches ?? prefs.approaches);
+      const id = `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      const proposal: Proposal = {
+        id,
+        goal: options.label?.trim() || text,
+        createdAt: Date.now(),
+        status: 'working',
+        model: `${target.provider.name} · ${target.model}`,
+        step: 0,
+        plan: '',
+        log: [{ id: ++idCounter.current, kind: 'you', text }],
+        lanes: forks
+          ? forks.map((f, i) => ({ id: forkLaneId(i), label: f.label, status: 'running' as const, steps: 0, files: [], saved: { edits: [], before: {} } }))
+          : k
+            ? []
+            : [{ id: 'main', label: 'Changes', status: 'running', steps: 0, files: [], saved: { edits: [], before: {} } }],
+        laneId: forks ? forkLaneId(0) : k ? '' : 'main',
+        ...(forks ? { fork: true } : {}),
+        lessons: [],
+        origin: options.origin ?? 'you',
+        ...(options.task ? { task: options.task } : {}),
+      };
+      if (options.images?.length) pendingImages.current.set(id, options.images);
+      setProposals((prev) => [proposal, ...prev]);
+      // Background work (the worker) opens as a tab but doesn't take the editor from you
+      if (!options.background) setActiveId(id);
+      if (forks) void runForks(id, text, forks, target);
+      else if (k) void runApproaches(id, text, k, target);
+      else void runSingle(id, 'main', text, target);
+      return id;
+    },
+    [prefs.approaches, runApproaches, runForks, runSingle, targetOrExplain]
+  );
+
+  const followUp = useCallback<ProposalsValue['followUp']>(
+    (id, text) => {
+      const target = targetOrExplain();
+      const proposal = proposals.find((p) => p.id === id);
+      if (!target || !proposal || !text.trim() || proposal.status === 'working') return;
+      const laneId = proposal.laneId || 'main';
+      // A follow-up continues from the selected lane's work
+      const lanes = stages.current.get(id) ?? new Map<string, Stage>();
+      stages.current.set(id, lanes);
+      if (!lanes.get(laneId)) {
+        const lane = proposal.lanes.find((l) => l.id === laneId);
+        if (lane) lanes.set(laneId, Stage.restore(projectRef.current.files, lane.saved));
+      }
+      update(id, (p) => ({ ...p, status: 'working', outcome: undefined, log: [...p.log, { id: ++idCounter.current, kind: 'you', text: text.trim() }] }));
+      void runSingle(id, laneId, text.trim(), target);
+    },
+    [proposals, runSingle, targetOrExplain, update]
+  );
+
+  const stop = useCallback((id: string) => {
+    controllers.current.get(id)?.abort();
+    answers.current.get(id)?.(false);
+  }, []);
+
+  const answer = useCallback((id: string, allowed: boolean, always?: boolean) => answers.current.get(id)?.(allowed, always), []);
+
+  /** The working copy for the selected lane, rebuilt from storage after a reload */
+  const laneStage = useCallback((proposal: Proposal): Stage | null => {
+    const lanes = stages.current.get(proposal.id) ?? new Map<string, Stage>();
+    stages.current.set(proposal.id, lanes);
+    const existing = lanes.get(proposal.laneId);
+    if (existing) return existing;
+    const lane = proposal.lanes.find((l) => l.id === proposal.laneId);
+    if (!lane) return null;
+    const restored = Stage.restore(projectRef.current.files, lane.saved);
+    lanes.set(lane.id, restored);
+    return restored;
+  }, []);
+
+  const accept = useCallback<ProposalsValue['accept']>(
+    (id, paths) => {
+      const proposal = proposals.find((p) => p.id === id);
+      if (!proposal || proposal.status === 'working') return;
+      const stage = laneStage(proposal);
+      if (!stage) return;
+      const current = projectRef.current.files;
+      const conflicts = stage.conflicts(current);
+      const chosen = (paths ?? Object.keys(stage.changes())).filter((p) => !conflicts.includes(p));
+      if (conflicts.length) notify({ kind: 'info', title: `${conflicts.length} file${conflicts.length > 1 ? 's' : ''} skipped`, detail: `${conflicts.join(', ')} changed since the agent started. Review them by hand.` });
+      if (!chosen.length) return;
+      const { files, removed } = stage.toPut(chosen);
+      // Why-history: the lines this writes remember the goal they served
+      const lane = laneOf(proposal);
+      const written = linesWritten(snapshotFiles(stage, isHarnessFile).filter((f) => chosen.includes(f.path)), (path) => !isHarnessFile(path));
+      if (Object.keys(written).length) {
+        files[WHY_FILE] = recordWhy(current[WHY_FILE], {
+          id: `${proposal.id}:${Date.now().toString(36)}`,
+          at: Date.now(),
+          goal: proposal.goal.slice(0, 300),
+          summary: proposal.outcome?.summary?.slice(0, 600),
+          origin: proposal.origin ?? 'you',
+          verdict: lane?.evidence ? verdict(lane.evidence).headline : undefined,
+          review: lane?.review?.status === 'done' ? REVIEW_LABEL[lane.review.verdict] : undefined,
+          files: written,
+        });
+      }
+      saveSnapshot(`Before accepting: ${proposal.goal.slice(0, 40)}`);
+      dispatch({ type: 'put', files, removed });
+      stage.rebase({ ...Object.fromEntries(Object.entries(current).filter(([p]) => !removed.includes(p))), ...files });
+      const left = stage.size;
+      update(id, (p) => ({ ...p, status: left ? p.status : 'accepted', lanes: p.lanes.map((l) => (l.id === p.laneId ? { ...l, files: snapshotFiles(stage, isHarnessFile), saved: stage.serialize() } : l)) }));
+      notify({ kind: 'success', title: `Applied ${chosen.length} change${chosen.length > 1 ? 's' : ''}`, detail: 'The previous version is in History.' });
+    },
+    [dispatch, laneStage, notify, proposals, saveSnapshot, update]
+  );
+
+  const discard = useCallback<ProposalsValue['discard']>(
+    (id, paths) => {
+      const proposal = proposals.find((p) => p.id === id);
+      if (!proposal) return;
+      if (!paths) {
+        stop(id);
+        update(id, (p) => ({ ...p, status: 'discarded' }));
+        return;
+      }
+      const stage = laneStage(proposal);
+      if (!stage) return;
+      paths.forEach((p) => stage.revert(p));
+      update(id, (p) => ({ ...p, status: stage.size ? p.status : 'discarded', lanes: p.lanes.map((l) => (l.id === p.laneId ? { ...l, files: snapshotFiles(stage, isHarnessFile), saved: stage.serialize() } : l)) }));
+    },
+    [laneStage, proposals, stop, update]
+  );
+
+  const remove = useCallback(
+    (id: string) => {
+      stop(id);
+      stages.current.delete(id);
+      histories.current.delete(id);
+      setProposals((prev) => prev.filter((p) => p.id !== id));
+      setActiveId((current) => (current === id ? null : current));
+    },
+    [stop]
+  );
+
+  const selectLane = useCallback((id: string, laneId: string) => update(id, (p) => ({ ...p, laneId })), [update]);
+
+  // Auto-accept: when a proposal started in this session is ready (and reviewed, when the reviewer is on), decide once.
+  // Proposals restored from an earlier session are never accepted behind your back.
+  const startedHere = useRef(new Set<string>());
+  useEffect(() => {
+    for (const p of proposals) if (p.status === 'working') startedHere.current.add(p.id);
+    if (!prefs.autoAccept) return;
+    for (const p of proposals) {
+      if (p.status !== 'review' || p.auto || p.pending || !startedHere.current.has(p.id)) continue;
+      const lane = laneOf(p);
+      if (!lane || lane.status !== 'done' || !lane.evidence) continue;
+      if (prefs.review && (!lane.review || lane.review.status === 'running')) continue;
+      const files = lane.files.filter((f) => !isHarnessFile(f.path));
+      if (!files.length) continue;
+      const risk = riskOf({ files, evidence: lane.evidence, review: lane.review?.status === 'done' ? lane.review : null });
+      const decision = autoAcceptable(risk, prefs.autoAccept, verdict(lane.evidence).verified);
+      // Decided once per proposal (auto is set), when it becomes ready: not a cascade
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      update(p.id, (x) => ({ ...x, auto: { accepted: decision.ok, why: decision.why, score: risk.score } }));
+      if (decision.ok) {
+        accept(p.id);
+        notify({ kind: 'success', title: `Auto-accepted: ${p.goal.slice(0, 60)}`, detail: `Risk ${risk.score}, verified. The version before it is in History.` });
+      }
+    }
+  }, [proposals, prefs.autoAccept, prefs.review, update, accept, notify]);
+
+  const open = useCallback(
+    (id: string | null) => {
+      if (id) update(id, (p) => (p.closed ? { ...p, closed: false } : p));
+      setActiveId(id);
+    },
+    [update]
+  );
+
+  const close = useCallback(
+    (id: string) => {
+      update(id, (p) => ({ ...p, closed: true }));
+      setActiveId((current) => (current === id ? null : current));
+    },
+    [update]
+  );
+
+  const value = useMemo<ProposalsValue>(() => {
+    const active = proposals.find((p) => p.id === activeId) ?? null;
+    return { proposals, activeId: active ? activeId : null, active, prefs, setPrefs, ask, followUp, stop, answer, accept, discard, remove, selectLane, open, close };
+  }, [proposals, activeId, prefs, setPrefs, ask, followUp, stop, answer, accept, discard, remove, selectLane, open, close]);
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+export function useProposals(): ProposalsValue {
+  const value = useContext(Ctx);
+  if (!value) throw new Error('useProposals must be used inside ProposalsProvider');
+  return value;
+}
+
+/** “3 min ago” */
+export function ago(at: number, now = Date.now()): string {
+  const s = Math.max(0, Math.round((now - at) / 1000));
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86_400) return `${Math.floor(s / 3600)} h ago`;
+  return new Date(at).toLocaleDateString();
+}
+
+/** The selected lane of a proposal */
+export const laneOf = (p: Proposal): Lane | undefined => p.lanes.find((l) => l.id === p.laneId) ?? p.lanes[0];
+
+export { verdict };
+
+/** Where a proposal stands, in a word, for lists */
+export function stateOf(p: Proposal): { label: string; tone: string } {
+  if (p.pending) return { label: 'waiting for you', tone: 'text-warn' };
+  if (p.status === 'working') return { label: 'working', tone: 'text-gray-300' };
+  if (p.status === 'accepted') return { label: 'accepted', tone: 'text-gray-500' };
+  if (p.status === 'discarded') return { label: 'discarded', tone: 'text-gray-500' };
+  const evidence = laneOf(p)?.evidence;
+  const judged = evidence && verdict(evidence);
+  return judged?.verified ? { label: 'verified', tone: 'text-accent' } : { label: 'review', tone: 'text-warn' };
+}

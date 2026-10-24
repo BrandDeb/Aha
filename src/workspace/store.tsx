@@ -7,8 +7,13 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
-import { DEFAULT_CODE } from '@/lib/templates';
+import { DEFAULT_CODE } from '@/lib/default-code';
+import type { CompileTarget } from '@/types';
 import { deletePath, isRunnable, isValidPath, movePath, type Project } from './project';
+import { DEFAULT_APPEARANCE, normalizeAppearance, type Appearance } from './appearance';
+import { markHealthy } from './recovery';
+import { applyAppearance } from './appearance-dom';
+import { DEFAULT_BUILD_OPTIONS, type BuildOptions } from './targets';
 
 // ---------------------------------------------------------------------------
 // Settings
@@ -28,9 +33,17 @@ export interface Settings {
   keybindings: Record<string, string>;
   /** Built-in extensions that are switched on */
   extensions: Record<string, boolean>;
+  /** Accent colour, background tone and corner radius */
+  appearance: Appearance;
+  /** Output target and compiler options for builds */
+  target: CompileTarget;
+  build: BuildOptions;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  appearance: DEFAULT_APPEARANCE,
+  target: 'exe',
+  build: DEFAULT_BUILD_OPTIONS,
   theme: 'dark',
   highContrast: false,
   fontSize: 14,
@@ -40,7 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   printWidth: 100,
   tabWidth: 2,
   keybindings: {},
-  extensions: { minimap: false, wordWrap: true, bracketPairs: true, stickyScroll: true, todoHighlights: true, byteField: true },
+  extensions: { aiComplete: true, minimap: false, wordWrap: true, bracketPairs: true, stickyScroll: true, todoHighlights: true },
 };
 
 // ---------------------------------------------------------------------------
@@ -76,6 +89,8 @@ interface EditorState {
 
 type Action =
   | { type: 'write'; path: string; content: string }
+  /** Merge files in (and remove some) without opening tabs, e.g. what uv or a program changed */
+  | { type: 'put'; files: Record<string, string>; removed?: string[] }
   | { type: 'create'; path: string; content?: string }
   | { type: 'mkdir'; path: string }
   | { type: 'delete'; path: string }
@@ -108,6 +123,16 @@ function reducer(state: EditorState, action: Action): EditorState {
     case 'write':
       if (!(action.path in project.files) || project.files[action.path] === action.content) return state;
       return { ...state, project: { ...project, files: { ...project.files, [action.path]: action.content } } };
+    case 'put': {
+      let next = project;
+      for (const gone of action.removed ?? []) if (gone in next.files) next = deletePath(next, gone);
+      const files = { ...next.files };
+      for (const [file, content] of Object.entries(action.files)) if (isValidPath(file)) files[file] = content;
+      const entry = next.entry in files ? next.entry : Object.keys(files).find(isRunnable) ?? '';
+      const tabs = state.tabs.filter((t) => t in files);
+      const active = state.active in files ? state.active : tabs[tabs.length - 1] ?? entry;
+      return { ...state, project: { ...next, files, entry }, tabs: tabs.length ? tabs : active ? [active] : [], active };
+    }
     case 'create': {
       if (!isValidPath(action.path) || action.path in project.files) return state;
       const files = { ...project.files, [action.path]: action.content ?? '' };
@@ -248,6 +273,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         ...DEFAULT_SETTINGS,
         ...storedSettings,
         extensions: { ...DEFAULT_SETTINGS.extensions, ...storedSettings.extensions },
+        build: { ...DEFAULT_BUILD_OPTIONS, ...storedSettings.build },
+        appearance: normalizeAppearance(storedSettings.appearance),
       });
     }
     setSnapshots(load<Snapshot[]>(HISTORY_KEY) ?? []);
@@ -262,6 +289,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [state, hydrated]);
 
+  // Once the workspace has loaded and stayed up for a few seconds, keep a copy to fall back to after a crash
+  useEffect(() => {
+    if (!hydrated) return;
+    const timer = setTimeout(() => markHealthy(localStorage), 8000);
+    return () => clearTimeout(timer);
+  }, [hydrated]);
+
   // Persist and apply settings
   useEffect(() => {
     if (!hydrated) return;
@@ -270,6 +304,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     root.toggle('dark', settings.theme === 'dark');
     root.toggle('light', settings.theme === 'light');
     root.toggle('hc', settings.highContrast);
+    applyAppearance(settings.appearance, settings.theme === 'light' ? 'light' : 'dark');
   }, [settings, hydrated]);
 
   const updateSettings = useCallback((patch: Partial<Settings>) => {

@@ -2,6 +2,8 @@
  * Pure project/VFS helpers. No React, no DOM — unit tested in tests/workspace.test.ts.
  */
 
+import { monacoLanguageFor } from '../lib/languages.ts';
+
 export interface Project {
   name: string;
   /** Project-relative path -> file content */
@@ -19,10 +21,19 @@ export interface TreeNode {
   children: TreeNode[];
 }
 
-/** Same rules the server enforces (see isValidProjectPath in lib/compiler.ts) */
+/**
+ * Same rules the runners enforce (isSafeRelativePath in lib/proc.ts): no escaping the project, no odd
+ * characters; dotfiles (.npmrc, .env.example) and framework names (+page.svelte, @scope) are fine
+ */
 export function isValidPath(filePath: string): boolean {
-  return filePath.length > 0 && filePath.length <= 200 &&
-    /^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(filePath);
+  return (
+    filePath.length > 0 &&
+    filePath.length <= 200 &&
+    /^(?:[A-Za-z0-9_@+-][A-Za-z0-9_.@+-]*\/|\.[A-Za-z0-9_][A-Za-z0-9_.@+-]*\/)*\.?[A-Za-z0-9_@+-][A-Za-z0-9_.@+-]*$/.test(filePath) &&
+    !filePath.split('/').some((part) => part === '..' || part === '.') &&
+    // Tool-owned folders never belong in the project: a virtualenv, git's own database
+    !/^(?:\.venv|\.git)\//.test(filePath)
+  );
 }
 
 /** Resolve `target` against a working directory like a shell would */
@@ -133,18 +144,24 @@ export function deletePath(project: Project, target: string): Project {
   return { ...project, files, folders, entry };
 }
 
+export function isPython(filePath: string): boolean {
+  return /\.py$/.test(filePath);
+}
+
 export function isRunnable(filePath: string): boolean {
-  return /\.(?:ts|mts|cts|js|mjs|cjs)$/.test(filePath) && !filePath.endsWith('.d.ts');
+  return (/\.(?:ts|mts|cts|js|mjs|cjs)$/.test(filePath) && !filePath.endsWith('.d.ts')) || isPython(filePath) || monacoLanguageFor(filePath) !== null;
 }
 
 export function languageFor(filePath: string): string {
   if (/\.(?:ts|mts|cts|tsx)$/.test(filePath)) return 'typescript';
   if (/\.(?:js|mjs|cjs|jsx)$/.test(filePath)) return 'javascript';
+  if (isPython(filePath)) return 'python';
+  if (filePath.endsWith('.toml')) return 'ini'; // closest built-in highlighting for TOML
   if (filePath.endsWith('.json')) return 'json';
   if (filePath.endsWith('.md')) return 'markdown';
   if (filePath.endsWith('.css')) return 'css';
-  if (filePath.endsWith('.html')) return 'html';
-  return 'plaintext';
+  if (/\.(?:html|vue|svelte|astro)$/.test(filePath)) return 'html'; // components: closest built-in highlighting
+  return monacoLanguageFor(filePath) ?? 'plaintext';
 }
 
 // ---------------------------------------------------------------------------
