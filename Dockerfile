@@ -22,25 +22,25 @@ COPY . .
 
 RUN npm run build
 
-# Stage 1b: Runtime dependencies for the target platform (native modules are built for it here)
-FROM node:24-alpine AS deps
+# Stage 1b: Runtime dependencies for the target platform, also installed on the build machine's own architecture.
+# Running Node for another platform under QEMU (arm64 on an amd64 runner) dies at random with SIGILL on the machine
+# code V8's JIT emits, and without the JIT it cannot run node-gyp. So nothing runs for the target here: npm fetches
+# the target's packages (--cpu/--libc pick its optional binaries, such as scriptc's compiler) with install scripts
+# off, and the one script that matters, scriptc's (it only copies its compiler into place), runs on its own.
+# bufferutil and utf-8-validate are not compiled; both fall back to plain JavaScript.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS deps
+ARG TARGETARCH
 
 WORKDIR /app
 
-# Toolchain for native modules without prebuilt binaries (e.g. bufferutil on arm64 musl)
-RUN apk add --no-cache python3 make g++
-
 COPY package*.json ./
 
-# Production dependencies only. The runtime image installs zig from the system packages,
-# so drop the bundled copy (~375 MB).
-# Building for another platform (arm64 on an amd64 runner) runs Node under QEMU, which intermittently dies with
-# SIGILL on the machine code V8's JIT emits; --jitless makes V8 interpret instead. Installing is I/O-bound, so this
-# costs little, and native builds are unaffected.
-ARG BUILDPLATFORM
-ARG TARGETPLATFORM
-RUN if [ "$TARGETPLATFORM" != "$BUILDPLATFORM" ]; then export NODE_OPTIONS=--jitless; fi \
-  && npm ci --omit=dev && rm -rf node_modules/@zigc
+# The runtime image installs zig from the system packages, so drop the bundled copy (~375 MB)
+RUN set -e; \
+  case "$TARGETARCH" in arm64) cpu=arm64 ;; amd64) cpu=x64 ;; *) echo "unsupported architecture: $TARGETARCH"; exit 1 ;; esac; \
+  npm ci --omit=dev --ignore-scripts --os=linux --cpu=$cpu --libc=musl; \
+  node --input-type=module -e "const m = await import('/app/node_modules/scriptc/scripts/install-native.mjs'); m.installNativeCli('/app/node_modules/scriptc', '@scriptc/cli-linux-$cpu-musl');"; \
+  rm -rf node_modules/@zigc
 
 # Stage 2: Production image
 FROM node:24-alpine AS runner
