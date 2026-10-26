@@ -6,7 +6,18 @@
  * in Next.js API routes.
  */
 
+// Node (22+) keeps compiled code between starts: the server starts about a quarter faster after the first time
+try {
+  const home = process.env.NANOCLI_HOME || require('node:path').join(require('node:os').homedir(), '.nanocli');
+  require('node:module').enableCompileCache?.(process.env.NODE_COMPILE_CACHE || require('node:path').join(home, 'cache', 'node-compile'));
+} catch {
+  // an older Node, or a read-only home: start without it
+}
+
+const fs = require('fs');
 const http = require('http');
+const path = require('path');
+const zlib = require('zlib');
 const { EventEmitter } = require('events');
 const WebSocketServer = require('websocket').server;
 const next = require('next');
@@ -52,12 +63,87 @@ function isOriginAllowed(origin, host) {
   }
 }
 
+/**
+ * DNS-rebinding defence (mirrors src/lib/host.ts): a page on evil.example can
+ * point its domain at 127.0.0.1, and then its Origin and Host agree. The Host
+ * header still names evil.example, so only this machine's names and the
+ * configured site are accepted.
+ */
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+const hostnameOf = (host) => (host.startsWith('[') ? host.slice(0, host.indexOf(']') + 1) : host.replace(/:\d+$/, ''));
+function isTrustedHost(hostHeader) {
+  if (!hostHeader) return false;
+  const name = hostnameOf(hostHeader.toLowerCase());
+  if (LOCAL_HOSTS.has(name)) return true;
+  const allowed = (process.env.ALLOWED_HOSTS || '').split(',').map((h) => hostnameOf(h.trim().toLowerCase())).filter(Boolean);
+  if (allowed.includes(name)) return true;
+  try {
+    return new URL(process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000').hostname.toLowerCase() === name;
+  } catch {
+    return false;
+  }
+}
+
+const MAX_CLIENTS_PER_ROOM = Number(process.env.WS_MAX_CLIENTS_PER_ROOM) || 16;
+const MAX_ROOMS = Number(process.env.WS_MAX_ROOMS) || 1000;
+/** Messages per second a connection may send (bursts up to twice that); edits are sent per keystroke batch */
+const MESSAGES_PER_SECOND = 40;
+
 function isValidId(value) {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_ID_LENGTH && ID_PATTERN.test(value);
 }
 
 // Create HTTP server
+/**
+ * Next serves its static chunks gzip-compressed; browsers that accept brotli get a copy about 17% smaller.
+ * The files never change (their names are content hashes), so each is compressed once, at the highest
+ * quality, in the background, and kept in memory; until it is ready Next serves the gzip copy as usual.
+ */
+const STATIC_ROOT = path.join(process.cwd(), '.next', 'static');
+const BROTLI_LIMIT = 64 * 1024 * 1024;
+const brotliCache = new Map(); // relative path → Buffer, or null while compressing
+let brotliBytes = 0;
+
+function serveBrotli(req, res) {
+  if (dev || (req.method !== 'GET' && req.method !== 'HEAD')) return false;
+  const url = req.url || '';
+  if (!url.startsWith('/_next/static/') || !/\bbr\b/.test(String(req.headers['accept-encoding'] || ''))) return false;
+  const rel = url.slice('/_next/static/'.length).split('?')[0];
+  // Only plain chunk names: nothing encoded, nothing that could leave the folder
+  if (!/^[A-Za-z0-9_][\w.-]*(\/[A-Za-z0-9_][\w.-]*)*\.(js|css)$/.test(rel)) return false;
+  const cached = brotliCache.get(rel);
+  if (cached) {
+    res.writeHead(200, {
+      'Content-Type': rel.endsWith('.css') ? 'text/css; charset=utf-8' : 'application/javascript; charset=utf-8',
+      'Content-Encoding': 'br',
+      'Content-Length': cached.length,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Vary': 'Accept-Encoding',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    res.end(req.method === 'HEAD' ? undefined : cached);
+    return true;
+  }
+  if (cached === undefined && brotliBytes < BROTLI_LIMIT) {
+    brotliCache.set(rel, null);
+    fs.readFile(path.join(STATIC_ROOT, rel), (readError, data) => {
+      if (readError) return brotliCache.delete(rel);
+      zlib.brotliCompress(data, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: data.length } }, (error, compressed) => {
+        if (error || brotliBytes + compressed.length > BROTLI_LIMIT) return brotliCache.delete(rel);
+        brotliBytes += compressed.length;
+        brotliCache.set(rel, compressed);
+      });
+    });
+  }
+  return false;
+}
+
+/** Requests that do work (not static files or health checks): the autopilot only acts when there have been none for a while */
+const PASSIVE = /^\/(?:_next\/|monaco\/|esbuild\/|favicon|api\/health)/;
+
 const server = http.createServer((req, res) => {
+  if (!PASSIVE.test(req.url || '/')) globalThis.__nanocliLastActivity = Date.now();
+  if (serveBrotli(req, res)) return;
   // Handle Next.js requests
   handle(req, res);
 });
@@ -79,7 +165,7 @@ wsServer.on('request', (request) => {
   const clientId = url.searchParams.get('clientId');
   const clientName = (url.searchParams.get('name') || 'Anonymous').slice(0, MAX_NAME_LENGTH);
   
-  if (!isOriginAllowed(request.origin, request.httpRequest.headers.host)) {
+  if (!isOriginAllowed(request.origin, request.httpRequest.headers.host) || !isTrustedHost(request.httpRequest.headers.host)) {
     request.reject(403, 'Origin not allowed');
     return;
   }
@@ -91,6 +177,10 @@ wsServer.on('request', (request) => {
 
   if (projects.get(projectId)?.has(clientId)) {
     request.reject(409, 'clientId already connected');
+    return;
+  }
+  if ((projects.get(projectId)?.size ?? 0) >= MAX_CLIENTS_PER_ROOM || (!projects.has(projectId) && projects.size >= MAX_ROOMS)) {
+    request.reject(503, 'Too many connections');
     return;
   }
   
@@ -127,9 +217,16 @@ wsServer.on('request', (request) => {
     name: clientName,
   }, clientId);
   
-  // Handle incoming messages
+  // Handle incoming messages: a token bucket per connection, so one client can't flood a room
+  let tokens = MESSAGES_PER_SECOND * 2;
+  let refilled = Date.now();
   connection.on('message', (message) => {
     if (message.type !== 'utf8') return;
+    const now = Date.now();
+    tokens = Math.min(MESSAGES_PER_SECOND * 2, tokens + ((now - refilled) / 1000) * MESSAGES_PER_SECOND);
+    refilled = now;
+    if (tokens < 1) return;
+    tokens -= 1;
     try {
       const data = JSON.parse(message.utf8Data);
       if (!data || typeof data !== 'object' || Array.isArray(data)) return;
@@ -184,6 +281,9 @@ function broadcastToProject(projectId, message, excludeClientId = null) {
 
 // Start server
 const PORT = process.env.PORT || 3000;
+// Loopback only by default. The studio can run Python and compile code, so it must not be
+// reachable from the rest of the network unless the operator says so (HOST=0.0.0.0).
+const HOST = process.env.HOST || '127.0.0.1';
 
 app.prepare().then(() => {
   server.on('upgrade', (req, socket, head) => {
@@ -198,9 +298,15 @@ app.prepare().then(() => {
     }
   });
 
-  server.listen(PORT, () => {
+  server.listen(PORT, HOST, () => {
     console.log(`> Ready on http://localhost:${PORT}`);
     console.log(`> WebSocket available at ws://localhost:${PORT}${WS_PATH}`);
+    if (process.env.NANOCLI_PYTHON !== '0') {
+      console.log('> Python (uv) is enabled: programs run on this machine. Set NANOCLI_PYTHON=0 to turn it off.');
+      if (!['127.0.0.1', 'localhost', '::1'].includes(HOST)) {
+        console.warn(`> WARNING: listening on ${HOST} with Python enabled. Anyone who can reach this port can run code on this machine.`);
+      }
+    }
   });
 });
 
@@ -218,6 +324,13 @@ function shutdown() {
     process.exit(0);
   }, 5000).unref();
 }
+
+// A crash is better restarted than limped along: log it, then exit so the supervisor
+// (npm run dev / npm start) or the container runtime starts a clean process
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+  process.exit(1);
+});
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);

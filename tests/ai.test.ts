@@ -54,6 +54,9 @@ test('rate limiter allows the limit per window, then reports the wait', async ()
   assert.equal(limiter.check('a', 2), 60);
   assert.equal(limiter.check('b', 2), 0);
   assert.equal(limiter.check('a', 60_001), 0);
-  assert.equal(clientKey(new Headers({ 'x-forwarded-for': '1.2.3.4, 10.0.0.1' })), '1.2.3.4');
+  // One reverse proxy appends the address it saw; whatever the client wrote before it is ignored
+  assert.equal(clientKey(new Headers({ 'x-forwarded-for': '1.2.3.4' })), '1.2.3.4');
+  assert.equal(clientKey(new Headers({ 'x-forwarded-for': 'spoofed-by-client, 1.2.3.4' })), '1.2.3.4');
+  assert.equal(clientKey(new Headers({ 'x-forwarded-for': 'spoofed, 1.2.3.4, 10.0.0.1' }), 2), '1.2.3.4', 'CDN in front of the proxy');
   assert.equal(clientKey(new Headers()), 'direct');
 });

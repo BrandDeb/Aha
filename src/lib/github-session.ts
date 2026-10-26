@@ -3,14 +3,29 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { GitHubApiError } from './github';
+import { GitHubApiError, type GitHubUser } from './github';
+import { secureCookies, webFlowFor } from './github-device';
 
-export const GITHUB_COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
-  path: '/',
-};
+/**
+ * Session cookies: httpOnly, and Secure when the page is served over HTTPS. Over plain HTTP (localhost,
+ * the desktop app's loopback server) a Secure cookie would be dropped by some browsers, signing you out.
+ */
+export function cookieOptions(request: NextRequest) {
+  return { httpOnly: true, secure: secureCookies(request.headers.get('x-forwarded-proto'), request.nextUrl.protocol), sameSite: 'lax' as const, path: '/' };
+}
+
+const SESSION_DAYS = 30;
+
+/** Signed in: the token (never readable by the page) and the public profile the UI shows */
+export function setSession(response: NextResponse, request: NextRequest, token: string, user: GitHubUser): NextResponse {
+  const options = { ...cookieOptions(request), maxAge: 60 * 60 * 24 * SESSION_DAYS };
+  response.cookies.set('github_token', token, options);
+  response.cookies.set('github_user', JSON.stringify({ id: user.id, login: user.login, avatar_url: user.avatar_url, name: user.name }), options);
+  return response;
+}
+
+/** The redirect sign-in needs a client secret and a callback on the host the studio is served from */
+export const webFlowAvailable = (request: NextRequest) => webFlowFor(request.headers.get('host'));
 
 export function getBaseUrl(): string {
   return process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';

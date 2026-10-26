@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { SYSTEM_PROMPT, buildMessages, parseAiRequest } from '@/lib/ai';
-import { getProvider, resolveProvider, streamChat } from '@/lib/ai-providers';
+import { getProvider, resolveFor, streamChat } from '@/lib/ai-providers';
 import type { Diagnostic } from '@/lib/compiler-browser';
 import { useAiConfig } from '../ai-config';
 import { AiModelSettings, useServerAi } from '../components/AiModelSettings';
@@ -50,6 +50,13 @@ function inline(text: string): ReactNode[] {
 }
 
 /** A block whose first line is `// path/to/file.ts` targets that file */
+/** A command to type, not code to put in a file: Apply would replace the file with it */
+export function isShellBlock(lang: string | undefined, code: string): boolean {
+  if (/^(?:bash|sh|shell|zsh|fish|console|terminal|powershell|ps1?|cmd|bat)$/i.test(lang ?? '')) return true;
+  const lines = code.trim().split('\n');
+  return lines.length <= 4 && lines.every((l) => /^\s*(?:\$ |>\s|(?:scriptc|npm|npx|pnpm|yarn|bun|uv|pip|python3?|node|go|cargo|make|git|cd|ls|mkdir|curl)\s)/.test(l));
+}
+
 function targetPath(code: string): string | null {
   const first = code.split('\n')[0].trim();
   const match = /^(?:\/\/|#)\s*([\w./-]+\.\w+)\s*$/.exec(first);
@@ -106,7 +113,7 @@ export function AiPanel({ diagnostics, getSelection }: AiPanelProps) {
       diagnostics: diagnostics.map((d) => ({ ...d, file: d.file ?? project.entry })),
     };
     try {
-      const target = resolveProvider(config);
+      const target = resolveFor(config, 'ask');
       if ('error' in target) {
         fail(target.error);
         setConfiguring(true);
@@ -240,7 +247,7 @@ export function AiPanel({ diagnostics, getSelection }: AiPanelProps) {
                             notify({ kind: 'info', title: 'Copied to clipboard' });
                           }}
                         >Copy</button>
-                        {(!streaming || i < messages.length - 1) && (
+                        {(!streaming || i < messages.length - 1) && !isShellBlock(block.lang, block.code) && (
                           <button className="btn btn-ghost btn-sm h-6 px-2 text-xs" onClick={() => apply(block.code)}>
                             Apply{targetPath(block.code) ? '' : ` to ${active.split('/').pop()}`}
                           </button>

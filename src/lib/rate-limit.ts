@@ -27,7 +27,12 @@ export function createRateLimiter(limit: number, windowMs: number) {
   };
 }
 
-/** Best-effort client key: first X-Forwarded-For hop (set by the reverse proxy), else a shared bucket */
-export function clientKey(headers: Headers): string {
-  return headers.get('x-forwarded-for')?.split(',')[0].trim() || headers.get('x-real-ip') || 'direct';
+/**
+ * Best-effort client key. Proxies append to X-Forwarded-For, so its first entries are whatever the
+ * client sent; the address our own proxy saw is TRUST_PROXY_HOPS entries from the end (default 1,
+ * one reverse proxy). Without the header (direct connections) everyone shares one bucket.
+ */
+export function clientKey(headers: Pick<Headers, 'get'>, hops = Number(process.env.TRUST_PROXY_HOPS) || 1): string {
+  const chain = headers.get('x-forwarded-for')?.split(',').map((h) => h.trim()).filter(Boolean) ?? [];
+  return chain[Math.max(0, chain.length - hops)] || headers.get('x-real-ip') || 'direct';
 }

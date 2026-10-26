@@ -37,7 +37,7 @@ export function HistoryPanel() {
             const changed = Object.keys(diffStatus(snapshot.files, project.files)).length;
             const hasActive = active in snapshot.files;
             return (
-              <li key={snapshot.id} className="rounded-2xl border border-border p-3">
+              <li key={snapshot.id} className="rounded-xl border border-border p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm text-gray-100">{snapshot.label}</p>

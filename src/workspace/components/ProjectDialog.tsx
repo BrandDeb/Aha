@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import type { GitHubUserInfo } from '@/types';
+import { useActions } from '../actions';
 import { useWorkspace } from '../store';
 import { useToast } from '../toasts';
 import { exportZip, importZip } from '../zip';
@@ -10,6 +11,7 @@ import { Dialog } from './Dialog';
 export function ProjectDialog({ user, onClose }: { user: GitHubUserInfo | null; onClose: () => void }) {
   const { project, dispatch, saveSnapshot } = useWorkspace();
   const { notify } = useToast();
+  const actions = useActions();
   const fileRef = useRef<HTMLInputElement>(null);
   const [gistUrl, setGistUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -95,7 +97,9 @@ export function ProjectDialog({ user, onClose }: { user: GitHubUserInfo | null; 
           {user ? (
             <button onClick={exportGist} disabled={busy} className="btn btn-secondary">{busy ? 'Exporting…' : 'Export to secret gist'}</button>
           ) : (
-            <p className="text-sm text-gray-400">Sign in with GitHub to export to a gist.</p>
+            <p className="text-sm text-gray-400">
+              <button onClick={actions.signIn} className="text-accent underline-offset-4 hover:underline">Sign in with GitHub</button> to export to a gist.
+            </p>
           )}
           {gistUrl && (
             <a href={gistUrl} target="_blank" rel="noreferrer" className="block truncate font-mono text-xs text-gray-100 underline underline-offset-4">{gistUrl}</a>

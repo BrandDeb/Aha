@@ -209,3 +209,120 @@ test('diagnostics point at the file that failed in a project', { skip: scriptcMi
   assert.equal(result.diagnostics?.[0]?.file, 'src/bad.ts');
   assert.equal(result.diagnostics?.[0]?.line, 2);
 });
+
+test('withBundledZig appends the bundled zig so a system zig still wins', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { withBundledZig, bundledZigDir } = await import('../src/lib/zig.ts');
+  const root = mkdtempSync(path.join(tmpdir(), 'zig-'));
+  try {
+    assert.equal(bundledZigDir(root), null);
+    const env = { PATH: '/usr/bin' };
+    assert.equal(withBundledZig(env, root), env); // nothing installed: untouched
+
+    const bin = path.join(root, 'node_modules', '@zigc', `${process.platform}-${process.arch}`, 'bin');
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(path.join(bin, process.platform === 'win32' ? 'zig.exe' : 'zig'), '');
+    const next = withBundledZig(env, root);
+    assert.equal(next.PATH, `/usr/bin${path.delimiter}${bin}`);
+    assert.equal(withBundledZig(next, root), next); // not added twice
+    assert.equal(withBundledZig({ Path: 'C:\\x' }, root).Path, `C:\\x${path.delimiter}${bin}`); // Windows casing
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Output targets and build options
+// ---------------------------------------------------------------------------
+
+const FIB = "function fib(n: number): number { return n < 2 ? n : fib(n - 1) + fib(n - 2); }\nconsole.log(`fib = ${fib(10)}`);\n";
+const bytesOf = (output: string | undefined) => Buffer.from(output ?? '', 'base64');
+
+test('parseCompileOptions accepts the new targets and build options, and rejects bad ones', () => {
+  for (const target of ['obj', 'ir', 'wat', 'lib', 'reactor']) {
+    const parsed = parseCompileOptions({ code: 'x', target, strip: false, sanitize: false, dynamic: true, windowsSubsystem: 'gui' });
+    assert.ok(!('error' in parsed), target);
+    assert.equal(parsed.dynamic, true);
+    assert.equal(parsed.windowsSubsystem, 'gui');
+  }
+  assert.deepEqual(parseCompileOptions({ code: 'x', strip: 'yes' }), { error: 'strip must be true or false' });
+  assert.deepEqual(parseCompileOptions({ code: 'x', sanitize: 1 }), { error: 'sanitize must be true or false' });
+  assert.deepEqual(parseCompileOptions({ code: 'x', windowsSubsystem: 'headless' }), { error: 'Invalid windowsSubsystem' });
+  assert.deepEqual(parseCompileOptions({ code: 'x', target: 'exe; rm -rf /' }), { error: 'Invalid target' });
+});
+
+test('text targets return readable output: LLVM IR, scriptc IR, assembly, WAT', { skip: scriptcMissing }, async () => {
+  const llvm = await compileTypeScript({ code: FIB, target: 'llvm' });
+  assert.ok(llvm.success, llvm.error);
+  assert.equal(llvm.format, 'text');
+  assert.match(llvm.output!, /define /);
+
+  const ir = await compileTypeScript({ code: FIB, target: 'ir' });
+  assert.ok(ir.success, ir.error);
+  assert.match(ir.filename!, /\.ir\.json$/);
+  assert.equal(typeof JSON.parse(ir.output!).irVersion, 'number');
+
+  const asm = await compileTypeScript({ code: FIB, target: 'asm' });
+  assert.ok(asm.success, asm.error);
+  assert.match(asm.output!, /\.text|\.section/);
+
+  const wat = await compileTypeScript({ code: FIB, target: 'wat' });
+  assert.ok(wat.success, wat.error);
+  assert.equal(wat.format, 'text');
+  assert.match(wat.filename!, /\.wat$/);
+  assert.match(wat.output!, /^\(module/);
+});
+
+test('binary targets return bytes with the right magic: executable, object, WASM', { skip: scriptcMissing }, async () => {
+  const exe = await compileTypeScript({ code: FIB, target: 'exe' });
+  assert.ok(exe.success, exe.error);
+  assert.equal(exe.format, 'binary');
+  if (process.platform === 'linux') assert.deepEqual([...bytesOf(exe.output).subarray(0, 4)], [0x7f, 0x45, 0x4c, 0x46]);
+
+  const obj = await compileTypeScript({ code: FIB, target: 'obj' });
+  assert.ok(obj.success, obj.error);
+  assert.match(obj.filename!, /\.o(bj)?$/);
+  assert.ok(bytesOf(obj.output).length > 100);
+
+  const wasm = await compileTypeScript({ code: FIB, target: 'wasm' });
+  assert.ok(wasm.success, wasm.error);
+  assert.deepEqual([...bytesOf(wasm.output).subarray(0, 4)], [0x00, 0x61, 0x73, 0x6d]);
+});
+
+test('strip and optimization change the executable; options that do not apply are ignored', { skip: scriptcMissing }, async () => {
+  const stripped = await compileTypeScript({ code: FIB, target: 'exe' });
+  const symbols = await compileTypeScript({ code: FIB, target: 'exe', strip: false });
+  assert.ok(stripped.success && symbols.success);
+  assert.ok(symbols.size! > stripped.size!, 'keeping symbols makes a bigger file');
+  // sanitize and windowsSubsystem only apply to native executables
+  const wasm = await compileTypeScript({ code: FIB, target: 'wasm', sanitize: true, strip: false, windowsSubsystem: 'gui' });
+  assert.ok(wasm.success, wasm.error);
+});
+
+const COUNTER = 'declare function changed(value: number): void;\nlet count = 0;\nexport function step(delta: number): number {\n  count += delta;\n  changed(count);\n  return count;\n}\n';
+const PROFILE = JSON.stringify({
+  profile_format: 1,
+  name: 'counter',
+  entry: 'counter.ts',
+  emission: 'llvm',
+  abi: { prefix: 'counter_', init_symbol: 'counter_init', sink_register_symbol: 'counter_sink', callback_register_symbol: 'counter_callback' },
+  callbacks: [{ name: 'changed', params: ['f64'], returns: 'void' }],
+  exports: [{ export: 'step', symbol: 'counter_step', params: ['f64'], returns: 'f64' }],
+});
+
+test('library targets build from scriptc.profile.json: static archive and WASM reactor', { skip: scriptcMissing }, async () => {
+  const files = { 'counter.ts': COUNTER, 'scriptc.profile.json': PROFILE };
+  const lib = await compileTypeScript({ code: COUNTER, files, entry: 'counter.ts', target: 'lib' });
+  assert.ok(lib.success, lib.error);
+  assert.match(lib.filename!, /\.(a|lib)$/);
+  assert.equal(bytesOf(lib.output).subarray(0, 7).toString(), '!<arch>');
+
+  const reactor = await compileTypeScript({ code: COUNTER, files, entry: 'counter.ts', target: 'reactor' });
+  assert.ok(reactor.success, reactor.error);
+  assert.deepEqual([...bytesOf(reactor.output).subarray(0, 4)], [0x00, 0x61, 0x73, 0x6d]);
+
+  const missing = await compileTypeScript({ code: COUNTER, target: 'lib' });
+  assert.equal(missing.success, false);
+  assert.match(missing.error!, /scriptc\.profile\.json/);
+});

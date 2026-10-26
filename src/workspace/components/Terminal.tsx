@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { formatSize } from '@/lib/compiler-browser';
 import { useActions } from '../actions';
-import { allFolders, basename, buildTree, diffStatus, isFolder, isRunnable, resolvePath, type TreeNode } from '../project';
+import { allFolders, basename, buildTree, diffStatus, isFolder, isPython, isRunnable, resolvePath, type TreeNode } from '../project';
+import { detectLanguage } from '@/lib/languages';
+import { pythonProjectId, streamCommand, streamPython, type PythonCommand, type PythonOutcome, type PythonStream } from '../python-client';
+import { fetchLanguages } from '../run-client';
 import { useWorkspace } from '../store';
 
 type LineKind = 'in' | 'out' | 'err' | 'sys';
@@ -21,11 +24,27 @@ const HELP = `Commands
   mv <from> <to>        move or rename        cp <from> <to>   copy a file
   echo <text> [> file]  print or write text   open <file>      open in the editor
   build [file]          compile a native executable with scriptc
-  run [file] [args…]    compile to WASM and run it here (Ctrl+C stops)
+  run [file] [args…]    TypeScript: compile to WASM and run it here · Python: run with uv ·
+                        Go, Rust, Java, C, Ruby, PHP… run with their own toolchain (Ctrl+C stops)
+  languages             which languages this machine can run, and how to install the rest
+  uv add <pkg…> [--dev] uv remove <pkg…>  uv sync  uv lock [--upgrade]  uv tree
+  uv init [name]        uv python pin 3.12      uv run <file.py> [args…]
+  python <file.py> [args…]   run a Python file with uv
+  install-uv            download uv here if it isn't installed
   entry [file]          show or set the entry file
   format [file]         format with Prettier  git status       changes since last pull
   history  clear  date  whoami  help
+Anything else (npm, go test, cargo, make, pytest, git…) runs in a real shell in the project's folder on
+this machine, and files it changes come back into the editor. Force it with sh <command> or !<command>.
 Redirect output with > or >>, e.g.  run src/main.ts --help > help.txt`;
+
+/** Whether this server runs real commands (asked once) */
+let shellEnabled: Promise<boolean> | null = null;
+const realShell = () =>
+  (shellEnabled ??= fetch('/api/shell', { cache: 'no-store' })
+    .then((r) => r.json())
+    .then((d) => d.enabled === true)
+    .catch(() => false));
 
 /** Split a command line into words, honouring single and double quotes */
 export function tokenize(input: string): string[] {
@@ -95,6 +114,11 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
     const p = projectRef.current;
     let words = tokenize(raw.trim());
     if (!words.length) return;
+    // A real shell, on request: sh <command> or !<command>
+    let forced = /^\s*!/.test(raw) ? raw.replace(/^\s*!/, '') : /^\s*sh\s+/.test(raw) ? raw.replace(/^\s*sh\s+/, '') : null;
+    // A line that chains or pipes commands is shell syntax: the real shell runs all of it
+    if (forced === null && /&&|\|\||\||;|\$\(|`/.test(raw.replace(/(["'])(?:\\.|(?!\1).)*\1/g, '')) && (await realShell())) forced = raw.trim();
+    if (forced !== null) words = ['__shell__'];
 
     // Output redirection: cmd args > file | >> file
     let redirect: { path: string; append: boolean } | null = null;
@@ -114,6 +138,72 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
     const resolve = (target: string | undefined, fallback = cwd) => (target === undefined ? fallback : resolvePath(cwd, target));
 
     const [command, ...args] = words;
+
+    /** Run a command on the server, printing its output as it arrives and reporting how it ended */
+    const runStreamed = async (shown: string, start: (onOutput: (stream: PythonStream, text: string) => void, signal: AbortSignal) => Promise<PythonOutcome>) => {
+      print(shown, 'sys');
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setBusy(true);
+      // Output arrives in arbitrary chunks: hold back partial lines until they are complete
+      const partial: Record<PythonStream, string> = { stdout: '', stderr: '', info: '' };
+      const emit = (stream: PythonStream, line: string) => {
+        if (stream === 'stdout') out(line);
+        else print(line, stream === 'info' ? 'sys' : 'out');
+      };
+      const onOutput = (stream: PythonStream, text: string) => {
+        const pieces = (partial[stream] + text).split('\n');
+        partial[stream] = pieces.pop() ?? '';
+        for (const line of pieces) emit(stream, line.replace(/\r$/, ''));
+      };
+      const outcome = await start(onOutput, controller.signal);
+      for (const stream of ['stdout', 'stderr', 'info'] as const) if (partial[stream]) emit(stream, partial[stream]);
+      abortRef.current = null;
+      setBusy(false);
+      if (outcome.error === 'stopped') return;
+      if (outcome.error) {
+        err(outcome.error);
+        if (/uv isn’t installed/.test(outcome.error)) print('Type install-uv to download it into the studio.', 'sys');
+        return;
+      }
+      const seconds = outcome.ms >= 1000 ? `${(outcome.ms / 1000).toFixed(1)} s` : `${outcome.ms} ms`;
+      if (outcome.timedOut) err(`Timed out after ${seconds}`);
+      else if (outcome.code === 0) print(`exit 0 · ${seconds}`, 'sys');
+      else err(`exit ${outcome.code ?? '?'} · ${seconds}`);
+      const written = Object.keys(outcome.changed).filter((f) => !['pyproject.toml', 'uv.lock', '.python-version'].includes(f));
+      if (written.length) print(`→ wrote ${written.join(', ')}`, 'sys');
+      if (outcome.skipped.length) print(`not copied back (binary or large): ${outcome.skipped.slice(0, 6).join(', ')}${outcome.skipped.length > 6 ? '…' : ''}`, 'sys');
+    };
+
+    /** A command in a real shell in the project's folder on this machine; files it changes come back */
+    const runReal = async (line: string) => {
+      if (!(await realShell())) {
+        err(`${line.split(/\s/)[0]}: not available here — this studio doesn't run commands on its server (try help)`);
+        return;
+      }
+      await runStreamed(`$ ${line}`, async (onOutput, signal) => {
+        const done = await streamCommand('/api/shell', { projectId: pythonProjectId(p.name), files: projectRef.current.files, command: line, cwd }, onOutput, signal);
+        if (Object.keys(done.changed).length || done.removed.length) dispatch({ type: 'put', files: done.changed, removed: done.removed });
+        return { ...done, ok: done.code === 0 && !done.error };
+      });
+    };
+
+    const runPythonCommand = (cmd: PythonCommand, shown: string) => runStreamed(shown, (onOutput, signal) => actions.python(cmd, onOutput, signal));
+
+    /** `run` on an entry in one of the other languages */
+    const runLanguageFile = (file: string, programArgs: string[], name: string) =>
+      runStreamed(`${name}: ${file}${programArgs.length ? ` ${programArgs.join(' ')}` : ''}`, (onOutput, signal) => actions.runLanguage({ entry: file, args: programArgs }, onOutput, signal));
+
+    /** `python <file>` / `uv run <file>` / `run` on a .py entry */
+    const runPythonFile = async (fileArg: string | undefined, programArgs: string[]) => {
+      const file = fileArg ? resolve(fileArg) : p.entry && isPython(p.entry) ? p.entry : null;
+      if (!file || !(file in p.files) || !isPython(file)) {
+        err(fileArg ? `${fileArg}: not a Python file in this project` : 'usage: python <file.py> [args…]');
+        return;
+      }
+      await runPythonCommand({ action: 'run', entry: file, args: programArgs }, `uv run ${file}${programArgs.length ? ` ${programArgs.join(' ')}` : ''}`);
+    };
+
     switch (command) {
       case 'help':
         out(HELP);
@@ -242,6 +332,7 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
       case 'build': {
         const entry = args[0] ? resolve(args[0]) : undefined;
         if (entry === null || (entry && !(entry in p.files))) { err(`build: ${args[0]}: no such file`); break; }
+        if (isPython(entry ?? p.entry)) { err('build: Python has no compile step. Use run (or python <file>).'); break; }
         print(`scriptc build ${entry ?? p.entry}`, 'sys');
         setBusy(true);
         const result = await actions.compile({ target: 'exe', entry: entry ?? undefined, quiet: true });
@@ -253,14 +344,102 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
           : `✕ ${result.error}`);
         break;
       }
+      case 'uv': {
+        const [sub, ...rest] = args;
+        const flags = rest.filter((a) => a.startsWith('-'));
+        const words2 = rest.filter((a) => !a.startsWith('-'));
+        const dev = flags.includes('--dev') || flags.includes('-d');
+        const shown = `uv ${args.join(' ')}`;
+        switch (sub) {
+          case 'add':
+            if (!words2.length) err('usage: uv add <package…> [--dev]   e.g. uv add httpx "rich>=13"');
+            else await runPythonCommand({ action: 'add', packages: words2, dev }, shown);
+            break;
+          case 'remove':
+            if (!words2.length) err('usage: uv remove <package…> [--dev]');
+            else await runPythonCommand({ action: 'remove', packages: words2, dev }, shown);
+            break;
+          case 'sync':
+          case 'tree':
+            await runPythonCommand({ action: sub }, shown);
+            break;
+          case 'lock':
+            await runPythonCommand({ action: 'lock', upgrade: flags.includes('--upgrade') || flags.includes('-U') }, shown);
+            break;
+          case 'init':
+            await runPythonCommand({ action: 'init', name: words2[0] }, shown);
+            break;
+          case 'python':
+            if (words2[0] === 'pin' && words2[1]) await runPythonCommand({ action: 'pin', version: words2[1] }, shown);
+            else err('usage: uv python pin <version>   e.g. uv python pin 3.12');
+            break;
+          case 'pip':
+            if (words2[0] === 'install' && words2.length > 1) {
+              print('The studio manages packages in pyproject.toml: running uv add instead.', 'sys');
+              await runPythonCommand({ action: 'add', packages: words2.slice(1), dev }, `uv add ${words2.slice(1).join(' ')}`);
+            } else err('usage: uv add <package…>');
+            break;
+          case 'run':
+            await runPythonFile(words2[0], rest.slice(rest.indexOf(words2[0]) + 1));
+            break;
+          default:
+            err(sub ? `uv ${sub}: not supported here. Try: uv add, remove, sync, lock, tree, init, python pin, run` : 'usage: uv <add|remove|sync|lock|tree|init|python pin|run> …');
+        }
+        break;
+      }
+      case 'python':
+      case 'python3':
+        await runPythonFile(args[0], args.slice(1));
+        break;
+      case 'pip':
+      case 'pip3':
+        err('pip isn’t used here — packages live in pyproject.toml. Use: uv add <package>');
+        break;
+      case 'languages': {
+        const info = await fetchLanguages();
+        if (!info) err('Could not reach the studio server.');
+        else if (!info.enabled) out('Running other languages is off on this server (it only runs programs when it listens on your own machine).');
+        else out(info.languages.map((l) => `${l.available ? '✓' : '·'} ${l.name.padEnd(30)} ${l.available ? (l.version ?? l.tool ?? '') : `not installed — ${l.install[navigator.platform.startsWith('Win') ? 'windows' : /Mac/.test(navigator.platform) ? 'mac' : 'linux']}`}`).join('\n'));
+        break;
+      }
+      case 'install-uv': {
+        const controller = new AbortController();
+        abortRef.current = controller;
+        setBusy(true);
+        const done = await streamPython({ action: 'install-uv' }, (_stream, text) => text.split('\n').filter(Boolean).forEach((l) => print(l, 'sys')), controller.signal);
+        abortRef.current = null;
+        setBusy(false);
+        if (done.error && done.error !== 'stopped') err(done.error);
+        else if (!done.error) out(`✓ uv ${done.uv ?? ''} is ready. Try: uv add <package>`);
+        break;
+      }
       case 'run': {
+        // `run [file] [args…]`: the first word is a file only if it doesn't look like a flag;
+        // `run -- args…` always runs the entry file with those arguments (what the Run button sends)
+        const entryOnly = args[0] === '--';
+        const rest = entryOnly ? args.slice(1) : args;
+        // A first word that names a project file you can't run (sample.txt) is an argument, not the program
+        const firstPath = !entryOnly && rest[0] && !rest[0].startsWith('-') ? resolve(rest[0]) : null;
+        const explicit = firstPath && (!(firstPath in p.files) || isRunnable(firstPath)) ? rest[0] : undefined;
+        const explicitPath = explicit ? resolve(explicit) : null;
+        const isPythonRun = explicit ? !!explicitPath && isPython(explicitPath) : !!p.entry && isPython(p.entry);
+        if (isPythonRun) {
+          await runPythonFile(explicit, explicit ? rest.slice(1) : rest);
+          break;
+        }
+        const languageFile = explicit ? explicitPath : p.entry;
+        const language = languageFile && languageFile in p.files ? detectLanguage(languageFile, Object.keys(p.files)) : null;
+        if (language && languageFile) {
+          await runLanguageFile(languageFile, explicit ? rest.slice(1) : rest, language.name);
+          break;
+        }
         let entry: string | undefined;
-        let programArgs = args;
-        if (args[0] && !args[0].startsWith('-')) {
-          const candidate = resolve(args[0]);
+        let programArgs = rest;
+        if (explicit) {
+          const candidate = resolve(explicit);
           if (candidate && candidate in p.files) {
             entry = candidate;
-            programArgs = args.slice(1);
+            programArgs = rest.slice(1);
           }
         }
         const target = entry ?? p.entry;
@@ -269,22 +448,33 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
         const controller = new AbortController();
         abortRef.current = controller;
         setBusy(true);
+        let sawUsage = false;
         const outcome = await actions.run(
           [basename(target).replace(/\.\w+$/, ''), ...programArgs],
-          (stream, line) => (stream === 'stdout' ? out(line) : err(line)),
+          (stream, line) => {
+            if (/^usage:/i.test(line.trim())) sawUsage = true;
+            if (stream === 'stdout') out(line);
+            else err(line);
+          },
           { entry: target, signal: controller.signal }
         );
         abortRef.current = null;
         setBusy(false);
         if (outcome.ok) {
           print(`exit ${outcome.code} · ${outcome.ms?.toFixed(1)} ms · ${formatSize(outcome.memoryBytes)} linear memory`, 'sys');
+          if (outcome.code && sawUsage && !programArgs.length) print('This program expects arguments — pass them after run, e.g. run <args>', 'sys');
         } else if (outcome.message) {
           err(outcome.message);
         }
         break;
       }
+      case '__shell__':
+        await runReal(forced ?? '');
+        return;
       default:
-        err(`${command}: command not found — try help`);
+        // Not a built-in: the real shell gets the whole line (it handles quotes and redirects itself)
+        await runReal(raw.trim());
+        return;
     }
 
     if (redirect) {
@@ -387,7 +577,7 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
         ))}
       </div>
       <div className="flex items-center gap-2 px-4 pt-1 pb-3">
-        <label htmlFor="terminal-input" className="shrink-0 text-gray-500">{busy ? '…' : prompt}</label>
+        <label htmlFor="terminal-input" className="shrink-0 text-accent">{busy ? '…' : prompt}</label>
         <input
           id="terminal-input"
           ref={inputRef}
@@ -397,7 +587,7 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
           spellCheck={false}
           autoComplete="off"
           aria-label="Terminal command"
-          className="min-w-0 flex-1 bg-transparent text-gray-100 caret-gray-100 outline-none"
+          className="min-w-0 flex-1 bg-transparent text-gray-100 caret-accent outline-none"
           placeholder={busy ? 'running — Ctrl+C to stop' : ''}
         />
       </div>

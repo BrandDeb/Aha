@@ -35,7 +35,8 @@ function run(binary: string, args: string[] = []): string {
 
 test('template ids and filenames are unique', () => {
   assert.equal(new Set(TEMPLATES.map((t) => t.id)).size, TEMPLATES.length);
-  assert.equal(new Set(TEMPLATES.map((t) => t.filename)).size, TEMPLATES.length);
+  const typescript = TEMPLATES.filter((t) => (t.language ?? 'typescript') === 'typescript');
+  assert.equal(new Set(typescript.map((t) => t.filename)).size, typescript.length);
 });
 
 test('the default editor program compiles and runs', { skip }, () => {
@@ -53,10 +54,23 @@ function buildProject(name: string, files: Record<string, string>, entry: string
   return binary;
 }
 
-for (const template of TEMPLATES) {
+/** Libraries have no main(): build them from their scriptc.profile.json instead of as an executable */
+function buildLibrary(name: string, files: Record<string, string>): string {
+  const root = path.join(dir, `${name}-src`);
+  for (const [file, content] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    writeFileSync(path.join(root, file), content);
+  }
+  const archive = path.join(dir, `${name}.a`);
+  execFileSync(SCRIPTC, ['build', '--lib', '--profile', path.join(root, 'src', 'scriptc.profile.json'), '-o', archive], { stdio: 'pipe', timeout: 120_000 });
+  return archive;
+}
+
+for (const template of TEMPLATES.filter((t) => (t.language ?? 'typescript') === 'typescript')) {
   test(`template "${template.name}" compiles with scriptc`, { skip }, () => {
     const { files, entry } = templateFiles(template);
-    buildProject(template.id, files, entry);
+    if (template.library) buildLibrary(template.id, files);
+    else buildProject(template.id, files, entry);
   });
 }
 

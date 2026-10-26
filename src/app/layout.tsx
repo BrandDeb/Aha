@@ -1,30 +1,29 @@
 import type { Metadata, Viewport } from "next";
-import { Doto, Hanken_Grotesk, IBM_Plex_Mono } from "next/font/google";
+import "@fontsource-variable/doto";
+import "@fontsource-variable/hanken-grotesk";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "@fontsource/ibm-plex-mono/600.css";
 import "./globals.css";
+import { healScript } from "@/lib/self-heal";
+import { SITE, siteUrl } from "@/lib/site";
 
-/* Display: dot-matrix, used sparingly (wordmark, hero) */
-const doto = Doto({
-  variable: "--font-doto",
-  subsets: ["latin"],
-  weight: ["700", "900"],
-});
-
-/* Body */
-const hanken = Hanken_Grotesk({
-  variable: "--font-hanken",
-  subsets: ["latin"],
-});
-
-/* Code, data, captions */
-const plexMono = IBM_Plex_Mono({
-  variable: "--font-plex-mono",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-});
+/* Fonts are bundled with the app (no request to Google at build or run time) */
 
 export const metadata: Metadata = {
-  title: "NanoCLI Studio",
-  description: "Write TypeScript in your browser, compile it to a native binary with scriptc, and run it.",
+  metadataBase: new URL(siteUrl()),
+  title: { default: `${SITE.name} · ${SITE.tagline}`, template: `%s · ${SITE.name}` },
+  description: SITE.description,
+  applicationName: SITE.name,
+  keywords: [...SITE.keywords],
+  publisher: SITE.publisher,
+  category: "technology",
+  alternates: { canonical: "/" },
+  openGraph: { type: "website", siteName: SITE.name, title: `${SITE.name} · ${SITE.tagline}`, description: SITE.description, url: "/", locale: "en_US" },
+  twitter: { card: "summary_large_image", title: `${SITE.name} · ${SITE.tagline}`, description: SITE.description },
+  icons: { icon: [{ url: "/favicon.ico" }, { url: "/icon.svg", type: "image/svg+xml" }], apple: "/icon.svg" },
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 } },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
@@ -35,17 +34,18 @@ export const viewport: Viewport = {
  * Applies the saved theme before first paint so there is no flash.
  * Kept tiny and dependency-free on purpose.
  */
-const themeScript = `try{var s=JSON.parse(localStorage.getItem('nanocli:settings')||'{}');var c=document.documentElement.classList;if(s.theme==='light'){c.remove('dark');c.add('light')}if(s.highContrast)c.add('hc')}catch(e){}`;
+const themeScript = `try{var s=JSON.parse(localStorage.getItem('nanocli:settings')||'{}');var c=document.documentElement.classList;if(s.theme==='light'){c.remove('dark');c.add('light')}if(s.highContrast)c.add('hc');var v=JSON.parse(localStorage.getItem('nanocli:appearance-vars')||'null');if(v){var m=v[s.theme==='light'?'light':'dark'];for(var k in m)document.documentElement.style.setProperty(k,m[k])}}catch(e){}`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`dark ${doto.variable} ${hanken.variable} ${plexMono.variable} h-full antialiased`}
+      className="dark h-full antialiased"
       suppressHydrationWarning
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: healScript }} />
       </head>
       <body className="min-h-full flex flex-col text-gray-100">
         <a href="#main" className="skip-link">Skip to content</a>
