@@ -54,7 +54,7 @@ as a proposal with evidence, and vibe coding and hand-writing as equals.
 | Terminal (real shell locally, WASM sandbox otherwise) | Done | |
 | Git and GitHub (branches, pull, commit, PR-friendly) | Done | |
 | Formatting, diagnostics for TS/JS | Done | |
-| **Extensions** (VS Code-style: themes, snippets, keymaps, language packs from Open VSX) | Now | see section 4 |
+| **Extensions** (VS Code-style, from Open VSX) | Done (themes, snippets) | keybindings, language configuration and icon themes next; see section 4 |
 | Debugger (breakpoints, step, watch) via the Debug Adapter Protocol | Next | Node inspector and debugpy first; Rewind covers a lot of it already |
 | Language intelligence beyond TS (LSP: Python, Go, Rust, Solidity…) | Next | language servers on the local runtime, Monarch fallbacks in the browser |
 | Merge-conflict editor (3-way) | Next | |
@@ -90,9 +90,11 @@ and would undo the "lightweight" goal. The plan instead:
 
 | Piece | Status |
 |---|---|
-| Declarative extensions from **Open VSX** (the open VS Code marketplace): colour themes, snippets, keybindings, language configurations, file icon themes | Now |
-| Extensions panel: search Open VSX, install, enable/disable, uninstall, per-project recommendations (`.vscode/extensions.json`) | Now |
-| Curated must-haves out of the box: popular themes (One Dark Pro, Dracula, GitHub, Catppuccin, Tokyo Night, Nord, Night Owl, Monokai Pro-style), ES7+ React snippets, Python snippets, Solidity snippets, Vim keymap | Now |
+| Declarative extensions from **Open VSX** (the open VS Code marketplace): colour themes and snippets | Done |
+| Keybindings, language configurations, file icon themes | Next |
+| Extensions panel: search Open VSX, install, enable/disable, uninstall, per-project recommendations (`.vscode/extensions.json`) | Done |
+| Curated popular list: One Dark Pro, Dracula, GitHub, Catppuccin, Tokyo Night, Nord, ES7+ React snippets | Done |
+| Vim keymap | Next, as Vim mode (monaco-vim), since VSCodeVim is code |
 | Native extension API (commands, panels, status-bar items, code actions) in a sandboxed iframe or worker | Next |
 | TextMate grammars (vscode-textmate + oniguruma wasm), loaded only for languages in use | Later |
 | LSP-based language extensions | Later (with language intelligence) |

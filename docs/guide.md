@@ -55,6 +55,7 @@ A one-line tour; each links to the section with the details. The workspace is at
 | **Python (uv)** | Run, add and lock packages with uv, from a panel or the terminal ([Python and uv](#python-and-uv)) |
 | **Web apps** | Vite, Next.js, Nuxt, SvelteKit, Astro… with live preview, in the browser or on a dev server ([Web apps](#web-apps-and-live-preview)) |
 | **Click to edit** | Pick an element in the running app: edit its text and classes in the source, or ask for a change ([Web apps](#web-apps-and-live-preview)) |
+| **Extensions** | VS Code colour themes and snippets from Open VSX, read and never run ([Extensions](#extensions)) |
 | **Smart contracts** | Solidity compiled in the browser, deployed to an in-page chain or your wallet, every function a form ([Smart contracts](#smart-contracts-deploy--run)) |
 
 **Build with the agent**
@@ -929,6 +930,29 @@ of them.
 
 ---
 
+## Extensions
+
+The **Extensions** panel (Project group) installs VS Code extensions from [Open VSX](https://open-vsx.org), the open
+registry VS Code forks use. Search it, or start from **Popular** (Dracula, One Dark Pro, GitHub, Catppuccin, Tokyo
+Night, Nord, ES7+ React snippets). When the project has a `.vscode/extensions.json`, its recommendations are listed too.
+
+| An extension's… | In the studio |
+|---|---|
+| Colour themes | Become editor themes. Pick one under the extension; **Back to the studio theme** undoes it |
+| Snippets | Offered as you type in the languages they are for (`rafce` in a React file, for example) |
+| Code (commands, language servers, keymaps such as Vim), keybindings, grammars, icon themes | Not supported: the panel lists what the extension contributes that the studio skips |
+
+**Nothing from an extension runs.** The server downloads the `.vsix` from Open VSX only, opens it as a zip and reads
+its manifest and JSON files (at most 40 MB downloaded, 4 MB per file). It sends the browser the themes and snippets it
+found, and the browser keeps them (`aha:extensions` in local storage). Turning an extension off or uninstalling it
+removes its themes and snippets at once; no reload needed.
+
+Themes are mapped from TextMate scopes to the editor's tokens, so the colours of keywords, strings, comments,
+numbers, types, functions and tags match the original; finer distinctions that need a TextMate grammar (for example
+`this` versus other variables) do not carry over yet.
+
+---
+
 ## Signing in with GitHub
 
 Sign-in (and sign-up: GitHub's page offers a free account) needs one GitHub OAuth app and **no domain**:
@@ -1103,6 +1127,12 @@ names must be plain requirements (no URLs or paths); environment variables can't
 ### `/api/skills`
 
 `GET` lists skills (built in and installed); `GET ?name=` returns one, `GET ?name=&file=` one of its files. `POST` with `action`: `discover` / `install` (GitHub), `update`, `create`, `enable`, `remove` (same-origin, local only).
+
+### `/api/extensions`
+
+`GET ?q=` searches Open VSX → `{ results: [{ id, version, displayName, description, downloads }] }`; `GET ?id=publisher.name`
+→ `{ extension }`. `POST { id, version? }` downloads the package from Open VSX and returns `{ pack }`: its themes,
+snippets and the contributions it skipped. Same origin, a trusted host and a rate limit (40 installs per 10 minutes).
 
 ### `/api/connectors`
 

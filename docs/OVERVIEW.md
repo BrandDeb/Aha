@@ -100,7 +100,7 @@ Browser (Next.js client, React 19)            Server (Next.js routes + server.js
 ## State of the work
 
 **Done** (details in BACKLOG.md):
-- **Editor.** Monaco with TypeScript intelligence, terminal, Git, file tree, command palette, themes.
+- **Editor.** Monaco with TypeScript intelligence, terminal, Git, file tree, command palette, themes, VS Code themes and snippets from Open VSX.
 - **Languages.** 40+ languages run in the studio; Python via uv; TypeScript to a native binary via scriptc.
 - **Web apps.** Templates, an app gallery and a stack builder, with a live preview (in the browser, or real dev servers when local).
 - **Agent.** Proposals with evidence, a second reviewer, a risk score and auto-accept, fork-the-future variants, rewind, live values, why-history, specs to tests.
@@ -110,7 +110,7 @@ Browser (Next.js client, React 19)            Server (Next.js routes + server.js
 - **Platform.** Desktop apps, Docker, self-healing and self-updating, the docs site, the pricing page.
 
 **Next** (specs in ROADMAP.md):
-1. VS Code-style extensions.
+1. Extensions, round two: keybindings, language configuration, icon themes.
 2. Watchers, round two: webhooks and running with the window closed.
 
 ### Waiting on the owner

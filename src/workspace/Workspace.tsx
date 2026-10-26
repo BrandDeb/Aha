@@ -72,6 +72,7 @@ const ContractsPanel = dynamic(() => import('./panels/ContractsPanel').then((m) 
 const KitPanel = dynamic(() => import('./panels/KitPanel').then((m) => m.KitPanel), { ssr: false, loading: PanelLoading });
 const PipelinesPanel = dynamic(() => import('./panels/PipelinesPanel').then((m) => m.PipelinesPanel), { ssr: false, loading: PanelLoading });
 const ChannelPanel = dynamic(() => import('./panels/ChannelPanel').then((m) => m.ChannelPanel), { ssr: false, loading: PanelLoading });
+const ExtensionsPanel = dynamic(() => import('./panels/ExtensionsPanel').then((m) => m.ExtensionsPanel), { ssr: false, loading: PanelLoading });
 const WatchersPanel = dynamic(() => import('./panels/WatchersPanel').then((m) => m.WatchersPanel), { ssr: false, loading: PanelLoading });
 const WorkerPanel = dynamic(() => import('./panels/WorkerPanel').then((m) => m.WorkerPanel), { ssr: false, loading: PanelLoading });
 const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then((m) => m.SettingsDialog), { ssr: false });
@@ -142,6 +143,7 @@ const GROUPS: { id: string; label: string; panels: { id: PanelId; label: string;
       { id: 'optimize', label: 'Optimize', hint: 'SEO, answer engines, AI engines (GEO), social cards, accessibility, mobile and speed, with fixes' },
       { id: 'graph', label: 'Graph', hint: 'How the files import each other' },
       { id: 'kit', label: 'Kit', hint: 'The field kit: playbook, checks and setup' },
+      { id: 'extensions', label: 'Extensions', hint: 'VS Code themes and snippets from Open VSX' },
     ],
   },
 ];
@@ -1374,6 +1376,7 @@ export function Workspace() {
                 {shownPanel === 'worker' && <WorkerPanel worker={worker} />}
                 {shownPanel === 'watchers' && <WatchersPanel watchers={watchers} />}
                 {shownPanel === 'channel' && <ChannelPanel />}
+                {shownPanel === 'extensions' && <ExtensionsPanel />}
                 {shownPanel === 'optimize' && <OptimizePanel onOpen={(file) => openLocation({ file, line: 1 })} />}
                 {shownPanel === 'web3' && <Web3Panel onOpen={(file, line) => openLocation({ file, line: line ?? 1 })} />}
                 {shownPanel === 'contracts' && <ContractsPanel onOpen={(file, line) => openLocation({ file, line: line ?? 1 })} />}

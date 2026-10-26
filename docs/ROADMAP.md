@@ -106,6 +106,11 @@ test branch makes it fail.
 
 ### 4. Extensions (VS Code-style, from Open VSX)
 
+> **Shipped** (first version): the Extensions panel (search, popular, project recommendations, on/off, uninstall),
+> colour themes and snippets. Dracula and the ES7 React snippets pass a browser test, and uninstalling restores the
+> studio theme. Still to do: keybindings, language configuration and icon themes. The Vim keymap moves to Vim mode
+> (item 68 in the backlog), because VSCodeVim is code, not a declarative contribution.
+
 **Why.** Users expect their theme, snippets and keymap.
 
 **What.** An **Extensions** panel: search [Open VSX](https://open-vsx.org), install, enable/disable, per-project
