@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { formatSize, type CompileResult, type CoverageResult } from '@/lib/compiler-browser';
 import { useActions, type RunOutcome } from '../actions';
 import { useWorkspace } from '../store';
@@ -22,15 +22,19 @@ interface BuildPanelProps {
   lastRun: (RunOutcome & { entry: string }) | null;
 }
 
+const noSubscribe = () => () => {};
+const readBuiltOnce = () => {
+  try {
+    return localStorage.getItem('nanocli:built-once') === '1';
+  } catch {
+    return false;
+  }
+};
+
 export function BuildPanel({ result, building, coverage, analyzing, onCoverage, lastRun }: BuildPanelProps) {
   // The three-step guide is for the first visit; after a first build or run a single line is enough
-  const [builtBefore] = useState(() => {
-    try {
-      return localStorage.getItem('nanocli:built-once') === '1';
-    } catch {
-      return false;
-    }
-  });
+  // Read after hydration (the server can't see localStorage, so both first render the guide)
+  const builtBefore = useSyncExternalStore(noSubscribe, readBuiltOnce, () => false);
   useEffect(() => {
     if (!result && !lastRun) return;
     try {

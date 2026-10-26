@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Fragment, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { buildTree, diffStatus, dirname, isRunnable, isValidPath, type TreeNode } from '../project';
 import { useWorkspace } from '../store';
 import { useToast } from '../toasts';
@@ -178,9 +178,10 @@ export function FileTree({ errorCounts, onCollapse, collapseTitle }: { errorCoun
           const isActive = node.path === active;
           const change = changes[node.path];
           const errors = errorCounts[node.path] ?? 0;
-          if (editing?.mode === 'rename' && editing.path === node.path) return <div key={node.path}>{editor(depth)}</div>;
+          if (editing?.mode === 'rename' && editing.path === node.path) return <Fragment key={node.path}>{editor(depth)}</Fragment>;
           return (
-            <li key={node.path} role="none">
+            <Fragment key={node.path}>
+            <li role="none">
               <div
                 role="treeitem"
                 aria-level={depth + 1}
@@ -228,8 +229,10 @@ export function FileTree({ errorCounts, onCollapse, collapseTitle }: { errorCoun
                   >✕</button>
                 </span>
               </div>
-              {editing && editing.mode !== 'rename' && editing.parent === node.path && node.type === 'folder' && editor(depth + 1)}
             </li>
+            {/* The new-item field goes after the folder, not inside its <li> (an <li> can't hold another) */}
+            {editing && editing.mode !== 'rename' && editing.parent === node.path && node.type === 'folder' && editor(depth + 1)}
+            </Fragment>
           );
         })}
       </ul>

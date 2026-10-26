@@ -342,6 +342,10 @@ interface CodeEditorProps {
   rewind?: { line: number; text: string } | null;
 }
 
+/** Files the TypeScript worker needs as models to resolve imports across the project */
+const TYPED_SOURCE = /\.(?:[cm]?[jt]sx?|json)$/i;
+const MAX_BACKGROUND_MODELS = 150;
+
 export function CodeEditor({
   path = 'main.ts',
   language = 'typescript',
@@ -490,8 +494,15 @@ export function CodeEditor({
     // Compared in Monaco's own form: it percent-encodes characters such as + and @ (SvelteKit's +page.svelte)
     const wanted = new Set(Object.keys(files).map((p) => monaco.Uri.parse(uriFor(p)).toString()));
     let added = false;
+    // Only files the TypeScript worker resolves imports from get a model ahead of time, and at most
+    // MAX_BACKGROUND_MODELS of them: every model listens to Monaco's language service, which reports a
+    // listener leak at 200. Other files get their model when they are opened.
+    let budget = MAX_BACKGROUND_MODELS;
     for (const [filePath, content] of Object.entries(files)) {
       if (filePath === path) continue;
+      const existing = monaco.editor.getModel(monaco.Uri.parse(uriFor(filePath)));
+      if (!existing && (!TYPED_SOURCE.test(filePath) || budget <= 0)) continue;
+      if (!existing) budget--;
       const uri = monaco.Uri.parse(uriFor(filePath));
       const model = monaco.editor.getModel(uri);
       if (!model) {
