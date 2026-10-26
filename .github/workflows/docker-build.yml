@@ -43,6 +43,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha
+            type=sha,format=long
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -60,17 +61,29 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-push
     if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Registries only accept lowercase names (the repository is BrandDeb/Aha); the long sha tag is pushed above
       - name: Pull Docker image
         run: |
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          echo "IMAGE=${REGISTRY}/${IMAGE_NAME,,}:sha-${GITHUB_SHA}" >> "$GITHUB_ENV"
+          docker pull "${REGISTRY}/${IMAGE_NAME,,}:sha-${GITHUB_SHA}"
 
       - name: Run container
         run: |
-          docker run -d -p 3000:3000 --name test-nano-cli ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          docker run -d -p 3000:3000 --name test-nano-cli "$IMAGE"
           sleep 10
           curl -f http://localhost:3000 || exit 1
 
