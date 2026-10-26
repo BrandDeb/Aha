@@ -88,7 +88,7 @@ interface EditorState {
   git: GitLink | null;
 }
 
-type Action =
+export type Action =
   | { type: 'write'; path: string; content: string }
   /** Merge files in (and remove some) without opening tabs, e.g. what uv or a program changed */
   | { type: 'put'; files: Record<string, string>; removed?: string[] }

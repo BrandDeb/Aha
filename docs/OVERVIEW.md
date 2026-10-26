@@ -104,16 +104,15 @@ Browser (Next.js client, React 19)            Server (Next.js routes + server.js
 - **Languages.** 40+ languages run in the studio; Python via uv; TypeScript to a native binary via scriptc.
 - **Web apps.** Templates, an app gallery and a stack builder, with a live preview (in the browser, or real dev servers when local).
 - **Agent.** Proposals with evidence, a second reviewer, a risk score and auto-accept, fork-the-future variants, rewind, live values, why-history, specs to tests.
-- **Autonomy.** An autonomous worker, auto-debug, watchers (agents on schedules, changes and failures) and a morning report.
+- **Autonomy.** An autonomous worker, auto-debug, watchers (agents on schedules, changes and failures), a channel where running agents coordinate, and a morning report.
 - **Connectors and skills.** A 52-server MCP catalog plus built-ins; ecosystem skills.
 - **Web3.** Solidity compile and analysis, an in-page chain, wallet deploys and a dapp starter.
 - **Platform.** Desktop apps, Docker, self-healing and self-updating, the docs site, the pricing page.
 
 **Next** (specs in ROADMAP.md):
-1. Agent channels: agents messaging each other.
-2. A performance budget in CI.
-3. VS Code-style extensions.
-4. Watchers, round two: webhooks and running with the window closed.
+1. A performance budget in CI.
+2. VS Code-style extensions.
+3. Watchers, round two: webhooks and running with the window closed.
 
 ### Waiting on the owner
 

@@ -67,7 +67,7 @@ A one-line tour; each links to the section with the details. The workspace is at
 | **Risk score and auto-accept** | Every proposal scored 0–100 with reasons; let the low-risk ones through ([Risk score](#risk-score-and-auto-accept)) |
 | **Fork the future** | One request built three ways at once, compared live ([Fork the future](#fork-the-future)) |
 | **Contracts and specs** | Rules that stay true; plain-English specs become property tests ([Contracts](#contracts)) |
-| **Debugging, worker and watchers** | Failures debugged on their own; an AI teammate that keeps going on the next useful task; [watchers](#watchers-agents-that-wake-on-their-own) that wake on a schedule, on changes or on failures ([Agent](#agent)) |
+| **Debugging, worker, watchers, channel** | Failures debugged on their own; an AI teammate that keeps going on the next useful task; [watchers](#watchers-agents-that-wake-on-their-own) that wake on a schedule, on changes or on failures; a [channel](#the-channel-agents-that-talk-to-each-other) where running agents coordinate ([Agent](#agent)) |
 | **Skills** | 46 built in (debugging, TDD, React, FastAPI, Solidity…), more from GitHub ([Skills](#skills-what-the-agent-knows-how-to-do)) |
 | **Connectors** | A catalog of 52 MCP servers plus GitHub, databases, web and your own commands ([Connectors](#connectors)) |
 | **Models** | Free tiers, local models or your own keys, with an advisor per job ([Assistant](#assistant)) |
@@ -465,6 +465,28 @@ reason, and repeats fold into one line.
 Watchers are saved in `.aha/watchers.json`, so they travel with the project and its Git history. Their log stays in
 your browser. They run while the studio is open. Running in the background with the window closed (desktop app) and
 webhook triggers are on the [roadmap](ROADMAP.md).
+
+### The channel: agents that talk to each other
+
+Agents running at the same time share a channel per project, in the **Channel** tab (Agent group). Start "Back end:
+rename the items API" and "Front end: update the client for it" together, and the back-end agent posts its decision
+("renamed `/api/items` to `/api/products`"), the front-end agent finds it, asks the back end whether the response
+changed, and asks you whether the old URL should keep working. Nobody copies answers between windows.
+
+Agents get five tools for it: `post_message` (a decision, a handoff or a note), `ask_agent` (another agent, or you;
+it waits up to two minutes and then decides on its own, saying what it assumed), `answer_question`, `list_agents`
+and `search_channel`. A busy agent sees what was sent to it after its next step, so questions are answered between
+steps rather than by interrupting. An agent that has finished answers with its summary.
+
+| Setting | What happens |
+|---|---|
+| **Open** | Agents talk freely. |
+| **Ask first** | A message from one agent to another waits until you pass it on or decline it. Questions to you never wait. |
+| **Off** | Each agent works alone. |
+
+When an agent asks you something, a notice with *Answer* appears and the status bar counts the waiting questions.
+You can also write to every agent, or to one, from the tab. The history is saved in `.aha/channels/<day>.jsonl`, so
+it travels with the project; later agents search it before deciding something an earlier one already decided.
 
 ### Skills: what the agent knows how to do
 

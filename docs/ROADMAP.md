@@ -63,6 +63,10 @@ log records skipped runs; docs written.
 
 ### 2. Agent channels (agents that talk to each other)
 
+> **Shipped** (first version): the channel, the five agent tools, open / ask first / off, questions to you with a
+> notice, searchable history in `.aha/channels/`. Still to do: a bridge to an external relay so a teammate's agent can
+> join, and per-proposal access settings.
+
 *Inspired by [Agent Relay](https://agentrelay.com): agents message each other directly instead of the human copying
 answers between them.*
 

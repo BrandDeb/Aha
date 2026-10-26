@@ -23,6 +23,8 @@ import { forkGoal, forkLaneId, type ForkDirection } from '@/lib/forks';
 import { linesWritten, recordWhy, WHY_FILE } from '@/lib/why';
 import { contractsOf } from '@/lib/contracts';
 import { systemPromptFor } from '@/lib/agent/prompt';
+import { channelBrief, channelTools, withInbox, type Channel, type ChannelMode } from '@/lib/agent/channel';
+import { agentLabel, useProjectChannel } from './channel-client';
 import { Stage, type SerializedStage } from '@/lib/agent/stage';
 import { workspaceTools } from '@/lib/agent/tools';
 import { skillTools } from '@/lib/skills/format';
@@ -111,6 +113,8 @@ export interface AgentPrefs {
   review: boolean;
   /** Accept finished proposals at or under this risk score by themselves (0 = never) */
   autoAccept: number;
+  /** Agents on the project channel: talk freely, wait for your OK between agents, or work alone */
+  channel: ChannelMode;
 }
 
 export const BUDGETS: Record<AgentPrefs['budget'], { label: string; budget: Partial<Budget> }> = {
@@ -122,7 +126,7 @@ export const BUDGETS: Record<AgentPrefs['budget'], { label: string; budget: Part
 const STORE_KEY = 'aha:proposals';
 const PREFS_KEY = 'aha:agent-prefs';
 const MAX_KEPT = 15;
-const DEFAULT_PREFS: AgentPrefs = { budget: 'standard', trustCommands: false, approaches: 0, autoDebug: false, review: true, autoAccept: 0 };
+const DEFAULT_PREFS: AgentPrefs = { budget: 'standard', trustCommands: false, approaches: 0, autoDebug: false, review: true, autoAccept: 0, channel: 'open' };
 
 /** Plain data the interface renders from */
 export function snapshotFiles(stage: Stage, hide: (p: string) => boolean = () => false): FileChange[] {
@@ -152,6 +156,8 @@ interface ProposalsValue {
   selectLane: (id: string, laneId: string) => void;
   open: (id: string | null) => void;
   close: (id: string) => void;
+  /** The project's agent channel (talk to running agents, answer their questions) */
+  channel: Channel;
 }
 
 const Ctx = createContext<ProposalsValue | null>(null);
@@ -190,6 +196,7 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
     projectRef.current = project;
   }, [project]);
   const prefsRef = useRef<AgentPrefs>(DEFAULT_PREFS);
+  const channel = useProjectChannel(project, dispatch, prefs.channel);
 
   const proposalsRef = useRef<Proposal[]>([]);
   useEffect(() => {
@@ -330,6 +337,9 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
       controllers.current.set(id, controller);
       const host = createAgentHost({ stage, projectName: p.name, entry: p.entry, files: stage.files(), onPlan: (plan) => update(id, (x) => ({ ...x, plan })) });
       const events: AgentEvent[] = [];
+      // On the project channel (unless you turned it off): it can tell the others what it changed and ask them or you
+      const onChannel = prefsRef.current.channel !== 'off';
+      if (onChannel) channel.join({ id, label: agentLabel(proposalsRef.current.find((x) => x.id === id)?.goal ?? goal), goal });
       try {
         const connected = await buildConnectorTools(getConnectors(), controller.signal);
         if (connected.connected.length) log(id, { kind: 'notice', text: `Connected: ${connected.connected.map((c) => c.name).join(', ')}` });
@@ -337,11 +347,12 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
         const skills = (await fetchSkillIndex())?.skills ?? [];
         const images = pendingImages.current.get(id);
         pendingImages.current.delete(id);
+        const tools = [...workspaceTools(host), ...connected.tools, ...skillTools(skillLibrary(skills, () => stage.files()))];
         const run = await runAgent({
           goal,
           ...(images ? { images } : {}),
-          system: systemPromptFor(stage.files(), skills),
-          tools: [...workspaceTools(host), ...connected.tools, ...skillTools(skillLibrary(skills, () => stage.files()))],
+          system: systemPromptFor(stage.files(), skills) + (onChannel ? channelBrief(channel, id) : ''),
+          tools: onChannel ? withInbox([...tools, ...channelTools(channel, id)], channel, id) : tools,
           callModel: callModelFor(target),
           budget: BUDGETS[prefs.budget].budget,
           autoApprove: prefs.trustCommands ? ['read', 'stage', 'build', 'exec'] : ['read', 'stage', 'build'],
@@ -362,15 +373,17 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
           },
         });
         histories.current.set(id, run.messages);
+        if (onChannel) channel.finish(id, run.summary.slice(0, 1500));
         const evidence = evidenceFrom(run, events, stage, isHarnessFile);
         syncLane(id, laneId, { evidence, review: undefined });
         finish(id, { reason: run.reason, summary: run.summary }, run.reason === 'finished');
         if (run.reason === 'finished') void reviewLane(id, laneId, proposalsRef.current.find((x) => x.id === id)?.goal ?? goal, run.summary, evidence, target);
       } catch (error) {
+        if (onChannel) channel.finish(id, `Stopped: ${(error as Error).message}`.slice(0, 500));
         finish(id, { reason: (error as Error).name === 'AbortError' ? 'aborted' : 'error', summary: (error as Error).message }, false);
       }
     },
-    [approver, finish, log, prefs.budget, prefs.trustCommands, syncLane, update, reviewLane]
+    [approver, finish, log, prefs.budget, prefs.trustCommands, syncLane, update, reviewLane, channel]
   );
 
   /**
@@ -708,8 +721,8 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ProposalsValue>(() => {
     const active = proposals.find((p) => p.id === activeId) ?? null;
-    return { proposals, activeId: active ? activeId : null, active, prefs, setPrefs, ask, followUp, stop, answer, accept, discard, remove, selectLane, open, close };
-  }, [proposals, activeId, prefs, setPrefs, ask, followUp, stop, answer, accept, discard, remove, selectLane, open, close]);
+    return { proposals, activeId: active ? activeId : null, active, prefs, setPrefs, ask, followUp, stop, answer, accept, discard, remove, selectLane, open, close, channel };
+  }, [proposals, activeId, prefs, setPrefs, ask, followUp, stop, answer, accept, discard, remove, selectLane, open, close, channel]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

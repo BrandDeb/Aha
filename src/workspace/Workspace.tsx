@@ -34,6 +34,8 @@ import { useDevServer } from './devserver-client';
 import { laneOf, useProposals, verdict } from './proposals';
 import { useWorker } from './worker';
 import { useWatchers } from './watchers';
+import { useChannelUpdates } from './channel-client';
+import { YOU } from '@/lib/agent/channel';
 import { useWorkspace } from './store';
 import { useToast } from './toasts';
 import { useLiveValues } from './live-client';
@@ -69,6 +71,7 @@ const Web3Panel = dynamic(() => import('./panels/Web3Panel').then((m) => m.Web3P
 const ContractsPanel = dynamic(() => import('./panels/ContractsPanel').then((m) => m.ContractsPanel), { ssr: false, loading: PanelLoading });
 const KitPanel = dynamic(() => import('./panels/KitPanel').then((m) => m.KitPanel), { ssr: false, loading: PanelLoading });
 const PipelinesPanel = dynamic(() => import('./panels/PipelinesPanel').then((m) => m.PipelinesPanel), { ssr: false, loading: PanelLoading });
+const ChannelPanel = dynamic(() => import('./panels/ChannelPanel').then((m) => m.ChannelPanel), { ssr: false, loading: PanelLoading });
 const WatchersPanel = dynamic(() => import('./panels/WatchersPanel').then((m) => m.WatchersPanel), { ssr: false, loading: PanelLoading });
 const WorkerPanel = dynamic(() => import('./panels/WorkerPanel').then((m) => m.WorkerPanel), { ssr: false, loading: PanelLoading });
 const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then((m) => m.SettingsDialog), { ssr: false });
@@ -118,6 +121,7 @@ const GROUPS: { id: string; label: string; panels: { id: PanelId; label: string;
       { id: 'agent', label: 'Do', hint: 'Give it a task: it works on a copy and comes back with a proposal and the proof that it works' },
       { id: 'ai', label: 'Ask', hint: 'Questions and explanations about your code; nothing changes' },
       { id: 'worker', label: 'Keep going', hint: 'It picks up the next useful task by itself while you work' },
+      { id: 'channel', label: 'Channel', hint: 'Running agents tell each other what they changed and ask each other, or you' },
       { id: 'watchers', label: 'Watchers', hint: 'Agents that wake on a schedule, on changes or on failures, and say when they hold back' },
     ],
   },
@@ -777,6 +781,20 @@ export function Workspace() {
   const watcherFailure = useMemo(() => (failure ? { signature: failure.signature, title: failure.title } : null), [failure]);
   const watchers = useWatchers(watcherFailure);
 
+  // Agents' questions for you on the channel: a notice when one arrives, and a count in the status bar
+  useChannelUpdates(proposals.channel);
+  const questionsForYou = proposals.channel.openQuestions(YOU);
+  useEffect(() => {
+    const seen = new Set(proposals.channel.openQuestions(YOU).map((q) => q.id));
+    return proposals.channel.subscribe(() => {
+      for (const q of proposals.channel.openQuestions(YOU)) {
+        if (seen.has(q.id)) continue;
+        seen.add(q.id);
+        notify({ kind: 'info', title: `${q.fromLabel} asks you`, detail: q.text.slice(0, 160), action: { label: 'Answer', run: () => openPanel('channel') } });
+      }
+    });
+  }, [proposals.channel, notify, openPanel]);
+
   // The morning report: built from how things stand when it opens
   const [report, setReport] = useState<MorningReport | null>(null);
   const buildMorning = () =>
@@ -1355,6 +1373,7 @@ export function Workspace() {
                 {shownPanel === 'agent' && <AgentPanel />}
                 {shownPanel === 'worker' && <WorkerPanel worker={worker} />}
                 {shownPanel === 'watchers' && <WatchersPanel watchers={watchers} />}
+                {shownPanel === 'channel' && <ChannelPanel />}
                 {shownPanel === 'optimize' && <OptimizePanel onOpen={(file) => openLocation({ file, line: 1 })} />}
                 {shownPanel === 'web3' && <Web3Panel onOpen={(file, line) => openLocation({ file, line: line ?? 1 })} />}
                 {shownPanel === 'contracts' && <ContractsPanel onOpen={(file, line) => openLocation({ file, line: line ?? 1 })} />}
@@ -1457,6 +1476,11 @@ export function Workspace() {
               title={contractStatus.counts.fail ? contractStatus.views.filter((v) => v.status === 'fail').map((v) => `✕ ${v.rule}`).join('\n') : 'Every contract checked here holds'}
             >
               {contractStatus.counts.fail ? `${contractStatus.counts.fail} contract${contractStatus.counts.fail > 1 ? 's' : ''} broken` : `contracts ${contractStatus.counts.pass}/${contractStatus.views.length}`}
+            </button>
+          )}
+          {questionsForYou.length > 0 && (
+            <button onClick={() => openPanel('channel')} className="rounded px-1.5 text-amber-300 hover:bg-white/[0.06]" title={questionsForYou.map((q) => `${q.fromLabel}: ${q.text}`).join('\n')}>
+              {questionsForYou.length} question{questionsForYou.length > 1 ? 's' : ''} for you
             </button>
           )}
           {worker.settings.mode !== 'off' && (

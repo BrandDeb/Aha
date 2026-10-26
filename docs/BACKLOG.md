@@ -44,7 +44,7 @@ as a proposal with evidence, and vibe coding and hand-writing as equals.
 | Project memory and guided tour (what this codebase is, for a newcomer, in 5 stops) | Next | |
 | Supply-chain guard (new dependencies checked for typosquats, install scripts, advisories, licence) | Next | extends the risk score |
 | **Watchers: proactive agents** (schedule, interval, change and failure triggers; restraint log; budgets) | Done | background running and webhook triggers: Next |
-| **Agent channels** (proposals message each other; typed messages; access control; searchable history) | Now | spec in ROADMAP item 2 |
+| **Agent channels** (proposals message each other; typed messages; open / ask first / off; searchable history) | Done | a bridge to external relays: Later |
 
 ## 2. Table stakes (what every top editor has)
 
