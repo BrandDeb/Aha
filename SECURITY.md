@@ -3,7 +3,8 @@
 Aha! compiles and runs code, talks to your models and services, and can update itself. This page says what
 protects each of those, what the studio deliberately does not protect against, and what the last audit found.
 
-To report a vulnerability, email the maintainers privately rather than opening a public issue.
+To report a vulnerability, use [private vulnerability reporting](https://github.com/BrandDeb/Aha/security/advisories/new)
+(the repository's Security tab, *Report a vulnerability*). Please don't open a public issue.
 
 ## Threat model
 

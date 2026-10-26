@@ -6,52 +6,64 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  check:
+    name: Lint, typecheck, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Run ESLint
-        run: npm run lint
-      
-      - name: TypeScript check
-        run: npm run typecheck
-      
-      - name: Build Next.js app
-        run: npm run build
-      
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: nextjs-build
-          path: .next/
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
 
   test:
+    name: Unit tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'npm'
-      
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v6
+          node-version: 24
+          cache: npm
+      # The Python tests run real uv commands
+      - uses: astral-sh/setup-uv@v6
+      - run: npm ci
+      - run: npm test
 
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Run tests
-        run: npm test
+  scriptc:
+    name: scriptc native build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Compile a program to a native binary and to LLVM IR
+        run: |
+          echo 'const x: number = 5; console.log(`x = ${x}`);' > "$RUNNER_TEMP/smoke.ts"
+          npx scriptc build "$RUNNER_TEMP/smoke.ts" -o "$RUNNER_TEMP/smoke" --strip
+          test "$("$RUNNER_TEMP/smoke")" = "x = 5"
+          npx scriptc build "$RUNNER_TEMP/smoke.ts" --emit=llvm -o "$RUNNER_TEMP/smoke.ll"
+          grep -q define "$RUNNER_TEMP/smoke.ll"
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Known vulnerabilities in production dependencies
+        run: npm audit --omit=dev --audit-level=high

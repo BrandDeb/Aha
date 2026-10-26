@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { agentBrief, applyFixes, audit } from '../src/lib/optimize.ts';
 import { faqLd, ldJson, llmsTxt, publicPages, siteUrl, softwareLd } from '../src/lib/site.ts';
-import { docsFromReadme } from '../src/lib/docs.ts';
-import { README } from '../src/lib/docs-readme.ts';
+import { docsFromGuide } from '../src/lib/docs.ts';
+import { GUIDE } from '../src/lib/docs-guide.ts';
 import { FAQS } from '../src/lib/faq.ts';
 import { PLANS } from '../src/lib/pricing.ts';
 import { buildStack, DEFAULT_STACK } from '../src/lib/stack/index.ts';
@@ -51,7 +51,7 @@ test('optimize: knows a Vite SPA shell is empty without JavaScript, and Next.js 
 });
 
 test('site: llms.txt, structured data and the sitemap describe the real site', () => {
-  const docs = docsFromReadme(README);
+  const docs = docsFromGuide(GUIDE);
   const txt = llmsTxt('https://nano.example', docs, FAQS, PLANS);
   assert.match(txt, /^# Aha!\n\n> /);
   assert.match(txt, /\n## Pages\n/);

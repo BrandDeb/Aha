@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { README } from '../src/lib/docs-readme.ts';
-import { docHref, docsFromReadme, parseBlocks, parseInline, searchDocs, slugify } from '../src/lib/docs.ts';
+import { GUIDE } from '../src/lib/docs-guide.ts';
+import { docHref, docsFromGuide, parseBlocks, parseInline, searchDocs, slugify } from '../src/lib/docs.ts';
 
-const pages = docsFromReadme(readFileSync('README.md', 'utf8'));
+const pages = docsFromGuide(readFileSync('docs/guide.md', 'utf8'));
 
-test('docs: every README section is a page, grouped, with a unique slug', () => {
+test('docs: every guide section is a page, grouped, with a unique slug', () => {
   assert.ok(pages.length >= 20);
   assert.equal(new Set(pages.map((p) => p.slug)).size, pages.length);
   assert.equal(pages[0].title, 'Quick start');
@@ -15,11 +15,11 @@ test('docs: every README section is a page, grouped, with a unique slug', () => 
   assert.equal(pages.find((p) => p.title === 'Agent')!.group, 'AI');
 });
 
-test('docs: README links to headings go to the page that holds them', () => {
+test('docs: guide links to headings go to the page that holds them', () => {
   assert.equal(docHref('#assistant', pages), '/docs/assistant');
   assert.equal(docHref('#which-model-for-which-job', pages), '/docs/assistant#which-model-for-which-job');
   assert.equal(docHref('https://scriptc.dev', pages), 'https://scriptc.dev');
-  // No README link is left pointing at a heading the docs don't have
+  // No guide link is left pointing at a heading the docs don't have
   const anchors = pages.flatMap((p) => p.blocks.flatMap((b) => JSON.stringify(b).match(/"href":"#[^"]+"/g) ?? []));
   for (const a of anchors) assert.ok(docHref(a.slice(8, -1), pages).startsWith('/docs/'), `${a} resolves`);
 });
@@ -45,13 +45,13 @@ test('docs: search ranks titles first and needs every word', () => {
   assert.deepEqual(searchDocs(pages, '  '), []);
 });
 
-test('docs: the baked-in README is up to date (npm run docs:sync)', () => {
-  assert.equal(README, readFileSync('README.md', 'utf8').replace(/\r\n?/g, '\n'));
+test('docs: the baked-in guide is up to date (npm run docs:sync)', () => {
+  assert.equal(GUIDE, readFileSync('docs/guide.md', 'utf8').replace(/\r\n?/g, '\n'));
 });
 
 test('docs: CRLF line endings (Windows checkouts) parse the same as LF, and never stall', () => {
-  const lf = docsFromReadme(README);
-  const crlf = docsFromReadme(README.replace(/\n/g, '\r\n'));
+  const lf = docsFromGuide(GUIDE);
+  const crlf = docsFromGuide(GUIDE.replace(/\n/g, '\r\n'));
   assert.deepEqual(crlf, lf);
   // A line no rule recognises still moves the parser on
   assert.equal(parseBlocks('### \r\ntext').length, 2);

@@ -130,4 +130,3 @@ and would undo the "lightweight" goal. The plan instead:
 | `NEXT_PUBLIC_SITE_URL` | canonical URLs, sitemap, OG images |
 | Tauri updater signing key | signed desktop updates |
 | Testing the macOS app on a real Mac | |
-| `SNYK_TOKEN` (optional) | Snyk instead of `npm audit` in CI |

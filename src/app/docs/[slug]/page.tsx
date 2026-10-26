@@ -10,7 +10,7 @@ import { loadDocs } from '../load';
 import { JsonLd } from '@/components/JsonLd';
 import { breadcrumbLd, docLd, pageMeta, siteUrl } from '@/lib/site';
 
-// Every page comes from README.md at build time
+// Every page comes from docs/guide.md at build time
 export const dynamicParams = false;
 
 export function generateStaticParams() {

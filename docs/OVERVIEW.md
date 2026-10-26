@@ -11,7 +11,7 @@ hand, or describe what you want and let the agent do it. The agent's work comes 
 (diffs, test runs, screenshots, a risk score), and you accept or reject them like a pull request.
 
 **About the name.** The project started as *NanoCLI Studio*: write TypeScript, get a native CLI binary (through the
-`scriptc` compiler). That still works (the Build panel), but the product grew into a general editor with 20+ languages,
+`scriptc` compiler). That still works (the Build panel), but the product grew into a general editor with 40+ languages,
 web app previews, an agent, connectors and web3 tools, so it was renamed **Aha!**. Everything moved with it:
 `package.json` is `aha`, browser storage uses `aha:*`, the home folder is `~/.aha/`, projects keep their files in
 `.aha/`, and settings variables are `AHA_*`. Saved data carries over by itself on first start (`src/lib/legacy-names.ts`),
@@ -79,12 +79,12 @@ Browser (Next.js client, React 19)            Server (Next.js routes + server.js
 
 ## How we work
 
-- **Branch and PR.** Work happens on `claude/aha-repository-yvfgce` and goes up through PR #15, which stays open and
-  is **not merged** until the owner says so. Every push must keep CI green.
+- **Branches and pull requests.** Work happens on a branch and lands on `main` through a pull request once CI is
+  green. One change per pull request (see [CONTRIBUTING.md](../CONTRIBUTING.md)).
 - **Before every commit:** type check, lint and `npm test` with `fail 0`. Changes to the UI also get a browser check
   (Playwright) of the real flow.
-- **Docs come from the README.** The `/docs` site is built from the README's `##` sections
-  (`scripts/build-docs.mjs` writes `src/lib/docs-readme.ts`), so a feature is documented by editing the README.
+- **Docs come from the guide.** The `/docs` site is built from the `##` sections of [guide.md](guide.md)
+  (`scripts/build-docs.mjs` writes `src/lib/docs-guide.ts`), so a feature is documented by editing the guide.
 - **Next.js 16 has breaking changes.** Read `node_modules/next/dist/docs/` before writing Next code (see `AGENTS.md`).
 - **No secrets in the repo.** Keys come from the user's settings or environment variables.
 
@@ -92,17 +92,16 @@ Browser (Next.js client, React 19)            Server (Next.js routes + server.js
 
 | Workflow | What it checks |
 |---|---|
-| `ci.yml` | Build and unit tests |
-| `ci-cd.yml` | Test and lint, integration tests, security scan, performance benchmark (Docker image and Vercel deploy only on main) |
-| `docker-build.yml` | Docker images for amd64 and arm64. arm64 is built under emulation and has crashed once in the emulator; a re-run passed |
-| `desktop.yml` | Desktop apps for macOS (Apple silicon) and Windows, and the downloads page |
-| `scriptc.yml` | The CLI templates compile on Linux and macOS |
+| `ci.yml` | Lint, typecheck, production build, unit tests, a scriptc native build, and `npm audit` |
+| `docker-build.yml` | The Docker image for amd64 and arm64 (pushed to GHCR from `main`) |
+| `desktop.yml` | Desktop apps for macOS (Apple silicon) and Windows; publishes the downloads from `main` and on `v*` tags |
+| `scriptc.yml` | Every CLI template compiles to native and WebAssembly on Linux and macOS |
 
 ## State of the work
 
 **Done** (details in BACKLOG.md):
 - **Editor.** Monaco with TypeScript intelligence, terminal, Git, file tree, command palette, themes.
-- **Languages.** 20+ languages run in the studio; Python via uv; TypeScript to a native binary via scriptc.
+- **Languages.** 40+ languages run in the studio; Python via uv; TypeScript to a native binary via scriptc.
 - **Web apps.** Templates, an app gallery and a stack builder, with a live preview (in the browser, or real dev servers when local).
 - **Agent.** Proposals with evidence, a second reviewer, a risk score and auto-accept, fork-the-future variants, rewind, live values, why-history, specs to tests.
 - **Autonomy.** An autonomous worker, auto-debug, watchers (agents on schedules, changes and failures) and a morning report.
@@ -128,7 +127,6 @@ These need an account, a key or a decision only the owner can provide:
 | GitHub OAuth client id | Sign in with GitHub (device flow) |
 | Tauri signing key | Signed desktop updates |
 | macOS test on real hardware | Confirming the desktop install fix on a Mac |
-| `SNYK_TOKEN` (optional) | The Snyk step in the security scan |
 
 ## Known rough edges
 

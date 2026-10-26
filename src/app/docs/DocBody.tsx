@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { docHref, type Block, type DocPage, type Inline } from '@/lib/docs';
 
-/** One page of the docs, from the blocks lib/docs parsed out of the README */
+/** One page of the docs, from the blocks lib/docs parsed out of docs/guide.md */
 export function DocBody({ page, pages }: { page: DocPage; pages: DocPage[] }) {
   const inline = (runs: Inline[]): ReactNode[] =>
     runs.map((r, i) => {

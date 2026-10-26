@@ -1,4 +1,4 @@
-name: Docker Build
+name: Docker
 
 on:
   push:
@@ -44,6 +44,7 @@ jobs:
             type=semver,pattern={{major}}
             type=sha
             type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
         uses: docker/build-push-action@v5

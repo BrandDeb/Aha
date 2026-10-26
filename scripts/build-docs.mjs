@@ -1,12 +1,12 @@
-// Bakes README.md into src/lib/docs-readme.ts, so the /docs pages need no file access at build or run
+// Bakes docs/guide.md into src/lib/docs-guide.ts, so the /docs pages need no file access at build or run
 // time (reading files from process.cwd() makes the bundler trace the whole project). Runs before
 // every build; tests/docs.test.ts fails when the committed copy is out of date.
 import { readFileSync, writeFileSync } from 'node:fs';
 
 // Line endings normalised, so the generated file is the same on Windows (CRLF checkouts) and everywhere else
-const readme = readFileSync('README.md', 'utf8').replace(/\r\n?/g, '\n');
-const out = `// Generated from README.md by scripts/build-docs.mjs (npm run docs:sync). Do not edit.\nexport const README = ${JSON.stringify(readme)};\n`;
-const target = 'src/lib/docs-readme.ts';
+const guide = readFileSync('docs/guide.md', 'utf8').replace(/\r\n?/g, '\n');
+const out = `// Generated from docs/guide.md by scripts/build-docs.mjs (npm run docs:sync). Do not edit.\nexport const GUIDE = ${JSON.stringify(guide)};\n`;
+const target = 'src/lib/docs-guide.ts';
 let current = '';
 try {
   current = readFileSync(target, 'utf8');
