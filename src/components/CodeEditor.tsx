@@ -9,6 +9,7 @@ import type { Diagnostic } from '@/lib/compiler-browser';
 import { NODE_TYPES } from '@/lib/monaco-node-types';
 import { DEFAULT_APPEARANCE, accentTokens, syntaxColors } from '@/workspace/appearance';
 import { liveView } from '@/lib/live/display';
+import { attachExtensions, currentEditorTheme, useEditorTheme } from '@/workspace/extensions-client';
 import type { LiveResult } from '@/lib/live/shared';
 
 // Serve the editor from this server instead of a public CDN: it works offline, loads from the same
@@ -186,7 +187,7 @@ export function setEditorAccent(hex: string): void {
   editorAccent = hex;
   if (!monacoInstance) return;
   defineThemes(monacoInstance);
-  monacoInstance.editor.setTheme(document.documentElement.classList.contains('light') ? 'aha-light' : 'aha-dark');
+  monacoInstance.editor.setTheme(currentEditorTheme(document.documentElement.classList.contains('light') ? 'light' : 'dark'));
 }
 
 /**
@@ -285,6 +286,7 @@ export const configureMonaco: BeforeMount = (monaco) => {
 
   monacoInstance = monaco;
   defineThemes(monaco);
+  attachExtensions(monaco);
 };
 
 function editorOptions(fontSize: number, extensions: EditorExtensions) {
@@ -547,6 +549,7 @@ export function CodeEditor({
     applyTodoHighlights();
   };
 
+  const editorTheme = useEditorTheme(theme === 'light' ? 'light' : 'dark');
   return (
     <MonacoEditor
       height="100%"
@@ -554,7 +557,7 @@ export function CodeEditor({
       language={language}
       value={value}
       onChange={(next) => onChange(next ?? '')}
-      theme={theme === 'light' ? 'aha-light' : 'aha-dark'}
+      theme={editorTheme}
       beforeMount={configureMonaco}
       onMount={handleMount}
       options={editorOptions(fontSize, extensions)}
@@ -582,13 +585,14 @@ export function DiffView({ original, modified, language = 'typescript', theme = 
       after?.dispose();
     });
   };
+  const editorTheme = useEditorTheme(theme === 'light' ? 'light' : 'dark');
   return (
     <MonacoDiffEditor
       height="100%"
       original={original}
       modified={modified}
       language={language}
-      theme={theme === 'light' ? 'aha-light' : 'aha-dark'}
+      theme={editorTheme}
       beforeMount={configureMonaco}
       onMount={handleMount}
       keepCurrentOriginalModel
@@ -610,13 +614,14 @@ interface OutputViewProps {
 
 /** Read-only view of a build artifact */
 export function OutputView({ value, language, name, theme = 'dark', fontSize = 13 }: OutputViewProps) {
+  const editorTheme = useEditorTheme(theme === 'light' ? 'light' : 'dark');
   return (
     <MonacoEditor
       height="100%"
       path={`file:///output/${name}`}
       language={language}
       value={value}
-      theme={theme === 'light' ? 'aha-light' : 'aha-dark'}
+      theme={editorTheme}
       beforeMount={configureMonaco}
       options={{
         ...editorOptions(fontSize, { wordWrap: false }),
