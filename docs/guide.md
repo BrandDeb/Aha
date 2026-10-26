@@ -730,7 +730,7 @@ guide to proportions rather than promises:
 
 | | |
 |---|---|
-| App JavaScript on first load | **187 KB** gzip (down from 247 KB: Git, Python, Agent, History, Graph, Package panels and the Settings, Templates, Project and output dialogs now load the first time you open them) |
+| JavaScript on a first visit | **1.28 MB** compressed for the studio, editor included (36 requests); **~290 KB** for the landing page and `/docs` (20 requests). Panels and dialogs load the first time you open them |
 | Code editor | ~570 KB brotli, served from this server and cached for a year (it used to come from a public CDN, which also meant no editor offline). The studio page preloads it (an HTTP `Link` header, only on the page itself, never on prefetches from other pages), so it downloads while the page hydrates: drawn **~0.6 s** after a cold load (was ~0.73 s), **~0.17–0.27 s** on later visits |
 | First paint | ~0.2 s; the page is interactive before the editor arrives |
 | Compression | Next's static chunks are served brotli-compressed (each compressed once, in the background, and kept in memory): 17% less than gzip, e.g. the product page 261 → 216 KB |
@@ -744,6 +744,22 @@ are cleaned up (Settings → Maintenance shows and trims them); connectors, the 
 used. If disk matters more than offline WASM builds, remove `@zigc/*` after install: the first WASM build then fetches the exact zig version from the npm registry (checked against its sha512) into `~/.aha/zig`. The desktop app does this by default and also leaves out source maps, type definitions (except scriptc's) and Next's development runtimes: 537 → 400 MB of dependencies.
 
 ---
+
+
+### Performance budget
+
+`npm run perf` measures what the studio costs a visitor and fails when it costs more than `perf-budget.json` allows.
+CI runs it on every pull request and posts the table in the job summary.
+
+| Measured | How | Allowed growth |
+|---|---|---|
+| JavaScript per page (`/`, `/landing`, `/docs`) | compressed bytes and script requests on a first visit, nothing cached | 5% (and one more request) |
+| Editor ready | from navigation to a visible, typeable editor; median of three cold loads | 50% |
+| Keystroke latency | 95th percentile of keypress to next paint, typing with 20 files open | 50% |
+| Memory | JavaScript heap after opening 20 files and collecting garbage | 5% |
+
+Timings get more room because CI machines vary between runs; sizes are exact. When growth is intended, run
+`npm run perf -- --update` after `npm run build`, commit the new `perf-budget.json`, and say why in the pull request.
 
 ## Web apps and live preview
 

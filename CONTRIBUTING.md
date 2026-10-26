@@ -20,7 +20,8 @@ npm run typecheck
 npm test
 ```
 
-All three must pass. CI runs the same checks, plus a production build, the desktop apps and the Docker image.
+All three must pass. CI runs the same checks, plus a production build, the performance budget (`npm run perf`,
+after `npm run build`), the desktop apps and the Docker image.
 
 - **Tests.** Logic lives in `src/lib/` as plain functions with unit tests in `tests/`. A change to behaviour comes
   with a test that fails without it.
