@@ -1,15 +1,17 @@
 # NanoCLI Studio Dockerfile
 # Multi-stage build for production deployment
 
-# Stage 1: Build the Next.js application
-FROM node:24-alpine AS builder
+# Stage 1: Build the Next.js application, on the build machine's own architecture.
+# The build output (.next) is plain JavaScript and the same for every platform; building it under emulation
+# (arm64 on an amd64 runner) crashed the build workers with SIGILL, so it is built once, natively.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
 
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Toolchain for native modules without prebuilt binaries (e.g. bufferutil on arm64 musl)
+# Toolchain for native modules without prebuilt binaries
 RUN apk add --no-cache python3 make g++
 
 # Install dependencies (dev deps are needed for the build)
@@ -18,9 +20,21 @@ RUN npm ci
 # Copy source files
 COPY . .
 
-# Build the application, then drop dev-only packages from the runtime image
-# The runtime image installs zig from the system packages, so drop the bundled copy (~375 MB)
-RUN npm run build && npm prune --omit=dev && rm -rf node_modules/@zigc
+RUN npm run build
+
+# Stage 1b: Runtime dependencies for the target platform (native modules are built for it here)
+FROM node:24-alpine AS deps
+
+WORKDIR /app
+
+# Toolchain for native modules without prebuilt binaries (e.g. bufferutil on arm64 musl)
+RUN apk add --no-cache python3 make g++
+
+COPY package*.json ./
+
+# Production dependencies only. The runtime image installs zig from the system packages,
+# so drop the bundled copy (~375 MB)
+RUN npm ci --omit=dev && rm -rf node_modules/@zigc
 
 # Stage 2: Production image
 FROM node:24-alpine AS runner
@@ -36,7 +50,7 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/server.js ./
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=deps /app/node_modules ./node_modules
 
 # Create temp directory for compilation output, owned by the unprivileged user the server runs as
 RUN mkdir -p temp && chown -R node:node temp
