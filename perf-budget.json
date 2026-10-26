@@ -1,0 +1,28 @@
+{
+  "headroom": {
+    "size": 0.05,
+    "time": 0.5
+  },
+  "baseline": {
+    "routes": [
+      {
+        "path": "/",
+        "jsBytes": 1310898,
+        "jsRequests": 36
+      },
+      {
+        "path": "/landing",
+        "jsBytes": 296673,
+        "jsRequests": 20
+      },
+      {
+        "path": "/docs",
+        "jsBytes": 292582,
+        "jsRequests": 20
+      }
+    ],
+    "editorReadyMs": 889,
+    "keystrokeP95Ms": 32,
+    "heapMB": 18.5
+  }
+}

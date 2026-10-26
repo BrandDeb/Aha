@@ -92,7 +92,7 @@ Browser (Next.js client, React 19)            Server (Next.js routes + server.js
 
 | Workflow | What it checks |
 |---|---|
-| `ci.yml` | Lint, typecheck, production build, unit tests, a scriptc native build, and `npm audit` |
+| `ci.yml` | Lint, typecheck, production build, unit tests, a scriptc native build, `npm audit`, and the performance budget |
 | `docker-build.yml` | The Docker image for amd64 and arm64 (pushed to GHCR from `main`) |
 | `desktop.yml` | Desktop apps for macOS (Apple silicon) and Windows; publishes the downloads from `main` and on `v*` tags |
 | `scriptc.yml` | Every CLI template compiles to native and WebAssembly on Linux and macOS |
@@ -110,9 +110,8 @@ Browser (Next.js client, React 19)            Server (Next.js routes + server.js
 - **Platform.** Desktop apps, Docker, self-healing and self-updating, the docs site, the pricing page.
 
 **Next** (specs in ROADMAP.md):
-1. A performance budget in CI.
-2. VS Code-style extensions.
-3. Watchers, round two: webhooks and running with the window closed.
+1. VS Code-style extensions.
+2. Watchers, round two: webhooks and running with the window closed.
 
 ### Waiting on the owner
 

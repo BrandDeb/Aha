@@ -89,6 +89,9 @@ user can answer a question in the channel, and the history is searchable.
 
 ### 3. Performance budget in CI
 
+> **Shipped:** `npm run perf` and the *Performance budget* CI job (sizes +5%, timings +50% over `perf-budget.json`).
+> A deliberate 150 KB regression on `/docs` fails it. Not measured yet: lazy chunks on first paint as a separate number.
+
 **Why.** "Lightweight and fast" must be measured or it decays.
 
 **What.** A CI job that builds the app and fails when the budget is exceeded: first-load JS for `/` and `/docs`, the

@@ -117,7 +117,7 @@ and would undo the "lightweight" goal. The plan instead:
 |---|---|
 | Measured cold start, bundle split, lazy panels, Monaco on demand | Done |
 | Everything heavy is loaded only when used (preview bundler, compilers, solc, extensions) | Ongoing rule |
-| Budget per release: first load JS, time to interactive, memory with 20 tabs, keystroke latency | Next: CI check with thresholds |
+| Performance budget: JavaScript per page, editor ready, keystroke latency and memory with 20 files, checked in CI | Done |
 | Web worker for language services and search; virtualised file tree and long lists | Next |
 | Startup trace and a perf panel in Settings → About | Later |
 
