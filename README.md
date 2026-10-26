@@ -27,7 +27,8 @@ now runs 70+ languages, web apps with live preview, Python with uv, and Solidity
   wallet, call every function from a form.
 - **Ships:** CI/CD pipelines in the studio, native Windows and macOS apps, and the docs at `/docs`.
 
-Where it is going: [docs/ROADMAP.md](docs/ROADMAP.md) (specs for what comes next) and
+New to the repo? Start with [docs/OVERVIEW.md](docs/OVERVIEW.md) (how it fits together, how we work, what's
+waiting on whom). Where it is going: [docs/ROADMAP.md](docs/ROADMAP.md) (specs for what comes next) and
 [docs/BACKLOG.md](docs/BACKLOG.md) (everything, with status).
 
 ---
