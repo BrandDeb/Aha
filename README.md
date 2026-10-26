@@ -1,8 +1,7 @@
 # Aha!
 
-An editor where you and an AI agent work in the same project. The agent works on a private copy and hands back
-proposals: a diff, with the build and test results that show it works. Nothing changes in your files until you
-accept it.
+**The AI IDE that proves its work.** Cursor's agent, Zed's speed, Remix's web3 tools and VS Code's reach in one
+editor: every AI change arrives as a reviewable proposal that's already been built, run and tested. 40+ languages.
 
 [![CI](https://github.com/BrandDeb/Aha/actions/workflows/ci.yml/badge.svg)](https://github.com/BrandDeb/Aha/actions/workflows/ci.yml)
 [![Desktop apps](https://github.com/BrandDeb/Aha/actions/workflows/desktop.yml/badge.svg)](https://github.com/BrandDeb/Aha/actions/workflows/desktop.yml)

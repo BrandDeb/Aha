@@ -1,7 +1,7 @@
 {
   "name": "aha",
   "version": "1.0.0",
-  "description": "An editor where you and an AI agent work in the same project",
+  "description": "The AI IDE that proves its work",
   "private": true,
   "scripts": {
     "dev": "node scripts/supervise.js",
