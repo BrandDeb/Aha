@@ -3,7 +3,7 @@
  * installs next to it (~400 MB with its standard library). The desktop app
  * leaves it out to stay small, and fetches the very same packages the first
  * time a WASM build needs them: from the npm registry, checked against the
- * registry's sha512 integrity, unpacked under ~/.nanocli/zig/<version> in the
+ * registry's sha512 integrity, unpacked under ~/.aha/zig/<version> in the
  * node_modules layout, where lib/zig.ts finds them. Server only.
  */
 
@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, promises as fs, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import { NANOCLI_DIR } from './connectors/env.ts';
+import { AHA_DIR } from './connectors/env.ts';
 import { untar } from './uv-install.ts';
 
 const REGISTRY = 'https://registry.npmjs.org';
@@ -28,7 +28,7 @@ export function zigVersion(root: string = process.cwd()): string | null {
 }
 
 /** Where an on-demand zig lives: a folder laid out like node_modules */
-export const zigHome = (version: string) => path.join(NANOCLI_DIR, 'zig', version);
+export const zigHome = (version: string) => path.join(AHA_DIR, 'zig', version);
 
 export const zigPackage = (platform = process.platform, arch = process.arch) => `@zigc/${platform}-${arch}`;
 

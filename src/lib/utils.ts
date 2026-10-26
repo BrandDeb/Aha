@@ -1,5 +1,5 @@
 /**
- * Nano CLI Studio - Utility Functions
+ * Aha! Studio - Utility Functions
  * 
  * Shared utility functions for edge and client code
  */

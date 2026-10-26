@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 // The store reads the studio home when it loads
-process.env.NANOCLI_HOME = mkdtempSync(path.join(tmpdir(), 'nanocli-skills-home-'));
+process.env.AHA_HOME = mkdtempSync(path.join(tmpdir(), 'aha-skills-home-'));
 const { formatSkillMd, isSkillName, parseSkillMd, projectSkills, skillsPrompt, skillTools, toSkillName } = await import('../src/lib/skills/format.ts');
 const { BUILTIN_SKILLS } = await import('../src/lib/skills/builtin.ts');
 const { discoverSkills, fetchSkillFolder, listRepo, parseRepoSource } = await import('../src/lib/skills/github.ts');
@@ -194,7 +194,7 @@ test('store: built-ins listed, installed skills written whole, turned off, remov
   assert.equal(await store.readSkillFile('pdf', 'reference/forms.md'), 'forms');
 
   // A symlink planted in a skill folder can't be used to read outside it
-  const outside = path.join(process.env.NANOCLI_HOME!, 'secret.txt');
+  const outside = path.join(process.env.AHA_HOME!, 'secret.txt');
   writeFileSync(outside, 'secret');
   symlinkSync(outside, path.join(store.skillsDir(), 'pdf', 'leak.md'));
   assert.equal(await store.readSkillFile('pdf', 'leak.md'), null);

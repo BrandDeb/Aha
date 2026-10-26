@@ -2,7 +2,7 @@
  * Toolchains the studio installs and keeps current, through mise (mise.jdx.dev).
  *
  * - mise itself is downloaded from its official mirror and checked against the
- *   release's SHA-256 list, into ~/.nanocli/mise. It is isolated from any mise
+ *   release's SHA-256 list, into ~/.aha/mise. It is isolated from any mise
  *   you use yourself: its own data, config, cache and state folders.
  * - A language's toolchain is installed on first use (or with one click) and
  *   pinned to its major version line ("go = 1", "zig = 0.16"), so updates
@@ -21,8 +21,8 @@ import { gunzipSync } from 'node:zlib';
 import { capture, runStep } from './proc.ts';
 import { untar } from './uv-install.ts';
 
-const NANOCLI_DIR = process.env.NANOCLI_HOME || path.join(os.homedir(), '.nanocli');
-export const MISE_HOME = path.join(NANOCLI_DIR, 'mise');
+const AHA_DIR = process.env.AHA_HOME || path.join(os.homedir(), '.aha');
+export const MISE_HOME = path.join(AHA_DIR, 'mise');
 const MIRROR = 'https://mise.jdx.dev';
 const INSTALL_MS = 30 * 60_000;
 const UPDATE_EVERY_MS = 12 * 60 * 60_000;
@@ -184,7 +184,7 @@ export async function installMise(out: Out, wanted?: string): Promise<string> {
 async function ensureMise(out: Out): Promise<void> {
   if (!(await miseVersion())) await installMise(out);
   await fs.mkdir(path.dirname(CONFIG()), { recursive: true });
-  if (!fsSync.existsSync(CONFIG())) await fs.writeFile(CONFIG(), '# Toolchains installed by NanoCLI Studio\n[tools]\n');
+  if (!fsSync.existsSync(CONFIG())) await fs.writeFile(CONFIG(), '# Toolchains installed by Aha!\n[tools]\n');
 }
 
 /** Run mise, streaming its output; resolves with the exit code */
@@ -304,7 +304,7 @@ export interface ToolchainState {
 }
 
 async function readState(): Promise<ToolchainState> {
-  const defaults: ToolchainState = { autoUpdate: process.env.NANOCLI_TOOLCHAIN_AUTO_UPDATE !== '0', autoInstall: process.env.NANOCLI_TOOLCHAIN_AUTO_INSTALL !== '0' };
+  const defaults: ToolchainState = { autoUpdate: process.env.AHA_TOOLCHAIN_AUTO_UPDATE !== '0', autoInstall: process.env.AHA_TOOLCHAIN_AUTO_INSTALL !== '0' };
   try {
     return { ...defaults, ...JSON.parse(await fs.readFile(STATE(), 'utf8')) };
   } catch {
@@ -432,16 +432,16 @@ export async function upgradeMajor(tool: string, out: Out): Promise<boolean> {
 }
 
 // Check for updates soon after start and every 12 hours; apply them when auto-update is on
-const timers = globalThis as { __nanocliToolchainTimer?: NodeJS.Timeout };
+const timers = globalThis as { __ahaToolchainTimer?: NodeJS.Timeout };
 export function scheduleToolchainUpdates(): void {
-  if (timers.__nanocliToolchainTimer || process.env.NODE_ENV === 'test') return;
+  if (timers.__ahaToolchainTimer || process.env.NODE_ENV === 'test') return;
   const tick = async () => {
     const state = await readState();
     if (!state.autoUpdate || !fsSync.existsSync(miseBin())) return;
     if (state.lastCheck && Date.now() - state.lastCheck < UPDATE_EVERY_MS) return;
     await updateAll().catch((error) => console.error('Toolchain update failed:', error));
   };
-  timers.__nanocliToolchainTimer = setInterval(() => void tick(), 60 * 60_000);
-  timers.__nanocliToolchainTimer.unref();
+  timers.__ahaToolchainTimer = setInterval(() => void tick(), 60 * 60_000);
+  timers.__ahaToolchainTimer.unref();
   setTimeout(() => void tick(), 30_000).unref();
 }

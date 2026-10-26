@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       if (!Object.keys(snap.files).length) return json({ error: 'That repository has no text files to remix.' }, 422);
       return json({ kind: 'repo', name: remixName(source), files: snap.files, entry: guessEntry(snap.files), license: snap.license, skipped: snap.skipped.length, ref: snap.ref, source });
     }
-    const page = await fetchPublic(source.url, { maxBytes: 1024 * 1024, timeoutMs: 15_000, headers: { 'User-Agent': 'NanoCLI-Studio-Remix/1.0', Accept: 'text/html' } });
+    const page = await fetchPublic(source.url, { maxBytes: 1024 * 1024, timeoutMs: 15_000, headers: { 'User-Agent': 'Aha-Remix/1.0', Accept: 'text/html' } });
     if (page.status >= 400) return json({ error: `The site answered ${page.status}.` }, 502);
     if (!/html/i.test(String(page.headers['content-type'] ?? ''))) return json({ error: 'That address is not a web page.' }, 422);
     const outline = outlineOf(page.body.toString('utf8'), page.url);

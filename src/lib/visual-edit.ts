@@ -218,14 +218,14 @@ export const PICKER_PRELUDE = `(function () {
     var el = e.target, chain = [], p = el.parentElement;
     while (p && chain.length < 6) { var s = p.getAttribute('${SRC_ATTR}'); if (s && chain.indexOf(s) < 0) chain.push(s); p = p.parentElement; }
     var own = el.getAttribute('${SRC_ATTR}');
-    parent.postMessage({ source: 'nanocli-app', type: 'picked', element: {
+    parent.postMessage({ source: 'aha-app', type: 'picked', element: {
       src: own || srcOf(el), tag: el.tagName.toLowerCase(), text: String(el.innerText || el.textContent || '').trim().slice(0, 300),
       classes: String(el.getAttribute('class') || ''), html: el.outerHTML.slice(0, 800), chain: chain
     } }, '*');
     set(false);
   }, true);
-  addEventListener('keydown', function (e) { if (on && e.key === 'Escape') { set(false); parent.postMessage({ source: 'nanocli-app', type: 'pick-cancelled' }, '*'); } }, true);
-  addEventListener('message', function (e) { if (e.source === parent && e.data && e.data.source === 'nanocli-preview' && e.data.type === 'pick') set(!!e.data.on); });
+  addEventListener('keydown', function (e) { if (on && e.key === 'Escape') { set(false); parent.postMessage({ source: 'aha-app', type: 'pick-cancelled' }, '*'); } }, true);
+  addEventListener('message', function (e) { if (e.source === parent && e.data && e.data.source === 'aha-preview' && e.data.type === 'pick') set(!!e.data.on); });
 })();`;
 
 /**

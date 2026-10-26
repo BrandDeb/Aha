@@ -42,7 +42,7 @@ const MAX_HISTORY = 20;
  * Stable instructions — kept byte-identical across requests so the prompt
  * cache can reuse them.
  */
-export const SYSTEM_PROMPT = `You are the coding assistant inside NanoCLI Studio, a browser IDE where people write TypeScript command-line programs and compile them to native executables or WASI modules with scriptc (github.com/vercel-labs/scriptc).
+export const SYSTEM_PROMPT = `You are the coding assistant inside Aha!, a browser IDE where people write TypeScript command-line programs and compile them to native executables or WASI modules with scriptc (github.com/vercel-labs/scriptc).
 
 About scriptc:
 - It compiles ordinary TypeScript (type-checked by the real TypeScript compiler) through LLVM, with no JavaScript engine in the output.

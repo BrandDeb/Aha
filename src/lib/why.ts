@@ -1,7 +1,7 @@
 /**
  * Why-history: every line an accepted proposal wrote remembers why it is
  * there: the goal it served, who asked (you, the debugger, the worker), and
- * the evidence it shipped with. It lives in the project (.nanocli/why.json),
+ * the evidence it shipped with. It lives in the project (.aha/why.json),
  * so it travels with the code and outlives the proposal. Lines are matched by
  * their text, not their number, so the reason stays attached while the code
  * around it moves. Pure.
@@ -9,7 +9,7 @@
 
 import { changedLines } from './live/coverage.ts';
 
-export const WHY_FILE = '.nanocli/why.json';
+export const WHY_FILE = '.aha/why.json';
 const MAX_ENTRIES = 300;
 const MAX_LINES_PER_FILE = 400;
 
@@ -62,7 +62,7 @@ export function parseWhy(text: string | undefined): WhyEntry[] {
 /** The why file with one more entry, newest first; oldest ones drop off past the limit */
 export function recordWhy(text: string | undefined, entry: WhyEntry): string {
   const entries = [entry, ...parseWhy(text).filter((e) => e.id !== entry.id)].slice(0, MAX_ENTRIES);
-  return `${JSON.stringify({ about: 'Why each line written by an accepted proposal is there (NanoCLI Studio). Safe to commit.', entries }, null, 1)}\n`;
+  return `${JSON.stringify({ about: 'Why each line written by an accepted proposal is there (Aha!). Safe to commit.', entries }, null, 1)}\n`;
 }
 
 /** For one file as it is now: which entry explains each line (the newest one that wrote it) */

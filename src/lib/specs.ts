@@ -40,7 +40,7 @@ export interface Spec {
 }
 
 const LANG_OF = (path: string): SpecLang | null => (/\.(ts|tsx|mts|cts)$/.test(path) ? 'ts' : /\.(js|jsx|mjs|cjs)$/.test(path) ? 'js' : /\.py$/.test(path) ? 'py' : null);
-const SKIP = /(^|\/)(node_modules|dist|build|\.venv|venv|\.nanocli)\/|\.d\.ts$|(^|\/)(tests?|__tests__)\/|\.(test|spec)\.\w+$|(^|\/)test_\w+\.py$/;
+const SKIP = /(^|\/)(node_modules|dist|build|\.venv|venv|\.aha)\/|\.d\.ts$|(^|\/)(tests?|__tests__)\/|\.(test|spec)\.\w+$|(^|\/)test_\w+\.py$/;
 
 /** Split "a: number, b: Map<string, number>" at top-level commas */
 function splitParams(text: string): string[] {
@@ -318,7 +318,7 @@ export function propertyTest(spec: Spec, files: Record<string, string>): { path:
     const content = `"""Property: ${spec.rule.replace(/"""/g, "'''")}
 
 Hypothesis tries hundreds of random inputs and, when one breaks the rule, shrinks it to the smallest example.
-Written by NanoCLI Studio from the spec; the contract "${spec.rule.replace(/"/g, "'")}" runs it.
+Written by Aha! from the spec; the contract "${spec.rule.replace(/"/g, "'")}" runs it.
 """
 import os
 import sys
@@ -344,7 +344,7 @@ ${b.body}
   const imports = partnerFrom && partnerFrom !== from ? `import { ${spec.fn.name} } from '${from}';\nimport { ${spec.partner!.name} } from '${partnerFrom}';` : `import { ${[spec.fn.name, spec.partner?.name].filter(Boolean).join(', ')} } from '${from}';`;
   const content = `// Property: ${spec.rule.replace(/\n/g, ' ')}
 // fast-check tries hundreds of random inputs and, when one breaks the rule, shrinks it to the smallest example.
-// Written by NanoCLI Studio from the spec; the contract "${spec.rule.replace(/"/g, "'")}" runs it.
+// Written by Aha! from the spec; the contract "${spec.rule.replace(/"/g, "'")}" runs it.
 import ${plan.runner === 'vitest' ? "{ test } from 'vitest'" : "{ test } from 'node:test'"};
 import assert from 'node:assert/strict';
 import fc from 'fast-check';

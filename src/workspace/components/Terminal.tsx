@@ -83,7 +83,7 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
   const { project, git, dispatch } = useWorkspace();
   const actions = useActions();
   const [lines, setLines] = useState<Line[]>([
-    { id: 0, kind: 'sys', text: 'NanoCLI shell — type help. `run` compiles your project to WASM and executes it in this tab.' },
+    { id: 0, kind: 'sys', text: 'Aha! shell — type help. `run` compiles your project to WASM and executes it in this tab.' },
   ]);
   const [input, setInput] = useState('');
   const [cwd, setCwd] = useState('');
@@ -108,7 +108,7 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
     setLines((prev) => [...prev.slice(-1500), ...text.split('\n').map((t) => ({ id: idRef.current++, kind, text: t }))]);
   }, []);
 
-  const prompt = `${user ?? 'you'}@nanocli:~${cwd ? `/${cwd}` : ''}$`;
+  const prompt = `${user ?? 'you'}@aha:~${cwd ? `/${cwd}` : ''}$`;
 
   const execute = useCallback(async (raw: string) => {
     const p = projectRef.current;

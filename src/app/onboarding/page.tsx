@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * NanoCLI Studio - Onboarding
+ * Aha! - Onboarding
  * A three-step tour that ends in the editor with a template loaded.
  */
 
@@ -50,7 +50,7 @@ export default function OnboardingPage() {
 
         {step === 0 && (
           <section className="animate-fade-in">
-            <h1 className="text-4xl font-semibold tracking-tight">Welcome to NanoCLI Studio</h1>
+            <h1 className="text-4xl font-semibold tracking-tight">Welcome to Aha!</h1>
             <p className="mt-4 text-lg leading-relaxed text-gray-400">
               Write TypeScript here and the server compiles it with{' '}
               <a href="https://scriptc.dev" className="text-gray-100 underline underline-offset-4">scriptc</a>{' '}

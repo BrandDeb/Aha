@@ -16,9 +16,9 @@ import { capture, collectFiles, createJobPool, createKeyedLock, diffFiles, isSaf
 import { applyManaged, getToolchainState, installFor, MANAGED, refreshBinPaths } from './toolchains.ts';
 import { bundledZigDir, withBundledZig } from './zig.ts';
 
-export const NANOCLI_DIR = process.env.NANOCLI_HOME || path.join(os.homedir(), '.nanocli');
-export const RUN_PROJECTS = path.join(NANOCLI_DIR, 'run');
-const CACHE = path.join(NANOCLI_DIR, 'cache');
+export const AHA_DIR = process.env.AHA_HOME || path.join(os.homedir(), '.aha');
+export const RUN_PROJECTS = path.join(AHA_DIR, 'run');
+const CACHE = path.join(AHA_DIR, 'cache');
 
 export const MAX_RUN_FILES = 300;
 const MAX_RUN_BYTES = 8 * 1024 * 1024;
@@ -27,14 +27,14 @@ const MAX_RETURNED_FILE_BYTES = 512 * 1024;
 const MAX_RETURNED_TOTAL_BYTES = 4 * 1024 * 1024;
 const MAX_STDIN = 100 * 1024;
 /** Read each run, so a test (or an operator) can shorten the limits without restarting */
-const timeoutScale = () => Number(process.env.NANOCLI_RUN_TIMEOUT_SCALE) || 1;
-const pool = createJobPool(Number(process.env.NANOCLI_RUN_JOBS) || 3, 12, 'The server is busy running other programs. Try again in a moment.');
+const timeoutScale = () => Number(process.env.AHA_RUN_TIMEOUT_SCALE) || 1;
+const pool = createJobPool(Number(process.env.AHA_RUN_JOBS) || 3, 12, 'The server is busy running other programs. Try again in a moment.');
 const lock = createKeyedLock();
 
-/** On by default when the studio listens on this machine only; NANOCLI_RUN=0 turns it off, =1 forces it on */
+/** On by default when the studio listens on this machine only; AHA_RUN=0 turns it off, =1 forces it on */
 export function isRunEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  if (env.NANOCLI_RUN === '0') return false;
-  if (env.NANOCLI_RUN === '1') return true;
+  if (env.AHA_RUN === '0') return false;
+  if (env.AHA_RUN === '1') return true;
   return listensOnLoopbackOnly(env);
 }
 
@@ -205,7 +205,7 @@ async function probeLanguage(language: Language): Promise<LanguageStatus> {
     install: language.install,
     note: language.note,
     installable: managed ? { size: managed.size } : undefined,
-    managed: tool ? tool.file.startsWith(path.join(NANOCLI_DIR, 'mise') + path.sep) : undefined,
+    managed: tool ? tool.file.startsWith(path.join(AHA_DIR, 'mise') + path.sep) : undefined,
   };
   statusCache.set(language.id, { at: Date.now(), status });
   return status;

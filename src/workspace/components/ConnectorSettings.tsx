@@ -128,7 +128,7 @@ export function ConnectorSettings() {
         The agent asks before using one, unless you mark its read-only tools as trusted.
       </p>
 
-      {status?.mode === 'off' && <p className="rounded-lg border border-border bg-white/[0.03] p-3 text-xs text-gray-400">Connectors are turned off on this server (NANOCLI_CONNECTORS=0).</p>}
+      {status?.mode === 'off' && <p className="rounded-lg border border-border bg-white/[0.03] p-3 text-xs text-gray-400">Connectors are turned off on this server (AHA_CONNECTORS=0).</p>}
       {status?.mode === 'hosted' && (
         <p className="rounded-lg border border-border bg-white/[0.03] p-3 text-xs text-gray-400">
           This studio is shared, so connectors that run programs or read files on the server (MCP over a local process, SQLite, custom commands) are off.

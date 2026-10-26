@@ -80,7 +80,7 @@ const readme = (name: string, run: string, edit: string) => `# ${name}
 
 A small full app: a page at \`/\` and a JSON API at \`/api/todos\` (\`GET\` lists, \`POST {"title": "…"}\` adds).
 
-- **Run**: press Run in NanoCLI Studio; the preview opens with the app. Or: \`${run}\`
+- **Run**: press Run in Aha!; the preview opens with the app. Or: \`${run}\`
 - **Change it**: edit \`${edit}\` (the server) or \`index.html\` (the page), or ask the agent ("store todos in SQLite", "add a done checkbox").
 `;
 
@@ -367,7 +367,7 @@ gem 'puma', '~> 6.4'
     code: `<?php
 // Every request comes here (PHP's built-in server); edits show on the next request.
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$store = sys_get_temp_dir() . '/nanocli-todos-' . md5(__DIR__) . '.json';
+$store = sys_get_temp_dir() . '/aha-todos-' . md5(__DIR__) . '.json';
 $todos = file_exists($store) ? json_decode(file_get_contents($store), true) : [['id' => 1, 'title' => 'Try the live preview']];
 
 function json_out($value, int $status = 200): void {

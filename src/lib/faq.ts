@@ -12,9 +12,9 @@ export type Category = (typeof CATEGORIES)[number];
 
 export const FAQS: FAQItem[] = [
   {
-    id: 'what-is-nanocli',
+    id: 'what-is-aha',
     category: 'General',
-    question: 'What is NanoCLI Studio?',
+    question: 'What is Aha!?',
     answer: 'An editor and an AI teammate in one workspace. You write code in 40+ languages and runtimes (smart contracts included) with toolchains installed for you; the agent and the worker make changes on a private copy and hand them back as proposals with the diff and evidence that they build and run. TypeScript can also be compiled by scriptc into a small native executable.',
   },
   {
@@ -147,7 +147,7 @@ export const FAQS: FAQItem[] = [
     id: 'python-safety',
     category: 'Security',
     question: 'Is it safe that Python runs on the server?',
-    answer: 'Running Python means running your code on the machine that hosts the studio. That is what you want on your own computer, and the studio listens only on 127.0.0.1 by default so nothing else on your network can reach it. Python commands also require a known Host header (localhost, your NEXT_PUBLIC_BASE_URL or ALLOWED_HOSTS), same-origin requests, rate limits, timeouts and output caps, and the program never sees the server\'s own secrets, only the variables you set. It is not a sandbox: on a shared or public server set NANOCLI_PYTHON=0, or run the studio in a container. The Docker image ships with Python off.',
+    answer: 'Running Python means running your code on the machine that hosts the studio. That is what you want on your own computer, and the studio listens only on 127.0.0.1 by default so nothing else on your network can reach it. Python commands also require a known Host header (localhost, your NEXT_PUBLIC_BASE_URL or ALLOWED_HOSTS), same-origin requests, rate limits, timeouts and output caps, and the program never sees the server\'s own secrets, only the variables you set. It is not a sandbox: on a shared or public server set AHA_PYTHON=0, or run the studio in a container. The Docker image ships with Python off.',
   },
   {
     id: 'github-scope',
@@ -170,8 +170,8 @@ export const FAQS: FAQItem[] = [
   {
     id: 'license',
     category: 'General',
-    question: 'Can I use or redistribute NanoCLI Studio’s source?',
-    answer: 'No. NanoCLI Studio is proprietary software — copyright BrandDeb, all rights reserved. Using, copying, hosting or modifying it requires a written agreement. Programs you compile with it are yours.',
+    question: 'Can I use or redistribute Aha!’s source?',
+    answer: 'No. Aha! is proprietary software — copyright BrandDeb, all rights reserved. Using, copying, hosting or modifying it requires a written agreement. Programs you compile with it are yours.',
   },
   {
     id: 'self-host',

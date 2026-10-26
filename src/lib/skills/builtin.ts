@@ -10,7 +10,7 @@ type Folder = Record<string, string>;
 
 const skill = (name: string, description: string, body: string, extra: Folder = {}): [string, Folder] => [
   name,
-  { 'SKILL.md': `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\nlicense: Proprietary (NanoCLI Studio)\n---\n\n${body.trim()}\n`, ...extra },
+  { 'SKILL.md': `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\nlicense: Proprietary (Aha!)\n---\n\n${body.trim()}\n`, ...extra },
 ];
 
 export const BUILTIN_SKILLS: Record<string, Folder> = Object.fromEntries([

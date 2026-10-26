@@ -8,12 +8,12 @@
  *   require  a pattern that must appear in every one of them (a licence header, an export)
  *   command  a command that must pass (exit 0), and optionally print something
  *
- * They live in the project at .nanocli/contracts.json, so they travel with it,
+ * They live in the project at .aha/contracts.json, so they travel with it,
  * get reviewed like code, and the agent can't quietly change them: a proposal
  * that does is flagged. Pure: parsing, the pattern checks, and their reports.
  */
 
-export const CONTRACTS_FILE = '.nanocli/contracts.json';
+export const CONTRACTS_FILE = '.aha/contracts.json';
 
 export type ContractKind = 'forbid' | 'require' | 'command';
 
@@ -48,7 +48,7 @@ export interface ContractResult {
 
 const KINDS: ContractKind[] = ['forbid', 'require', 'command'];
 const CODE = /\.(?:[cm]?[jt]sx?|py|go|rs|java|kt|cs|rb|php|swift|dart|c|cc|cpp|h|hpp|zig|ex|exs|lua|sol|vue|svelte|astro)$/i;
-const IGNORED = /(^|\/)(node_modules|dist|build|out|target|\.next|vendor|\.venv|\.nanocli)\//;
+const IGNORED = /(^|\/)(node_modules|dist|build|out|target|\.next|vendor|\.venv|\.aha)\//;
 
 /** A glob (`*` within a folder, `**` across folders, `{a,b}`) as a regular expression over project paths */
 export function globToRegExp(glob: string): RegExp {
@@ -89,7 +89,7 @@ export function filesFor(contract: Contract, files: Record<string, string>): str
 
 const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'rule';
 
-/** Read .nanocli/contracts.json: `{ "contracts": [...] }` or a bare list */
+/** Read .aha/contracts.json: `{ "contracts": [...] }` or a bare list */
 export function parseContracts(text: string): { contracts: Contract[] } | { error: string } {
   let data: unknown;
   try {

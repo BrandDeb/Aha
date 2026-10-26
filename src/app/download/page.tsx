@@ -6,7 +6,7 @@ import { pageMeta } from '@/lib/site';
 
 export const metadata: Metadata = pageMeta({
   title: 'Download',
-  description: 'NanoCLI Studio for macOS (Apple silicon) and Windows, or run it from source on Linux. The same studio as the browser version, as a native app.',
+  description: 'Aha! for macOS (Apple silicon) and Windows, or run it from source on Linux. The same studio as the browser version, as a native app.',
   path: '/download',
 });
 
@@ -17,7 +17,7 @@ export default function DownloadPage() {
         <Link href="/" className="btn btn-primary btn-sm">Open the studio</Link>
       </SiteHeader>
       <main id="main" className="mx-auto max-w-6xl px-4 py-16" aria-labelledby="download-title">
-        <Downloads heading="NanoCLI Studio for your desktop." />
+        <Downloads heading="Aha! for your desktop." />
       </main>
       <SiteFooter />
     </div>

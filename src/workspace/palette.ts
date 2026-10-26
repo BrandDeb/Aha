@@ -2,7 +2,7 @@
 
 /** What an empty palette offers first: the things people do most */
 export const SUGGESTED = ['file.new-project', 'agent.ask', 'build.run', 'panel.optimize', 'panel.agent', 'file.import-export', 'view.terminal', 'prefs.settings'];
-const RECENT_KEY = 'nanocli:recent-commands';
+const RECENT_KEY = 'aha:recent-commands';
 export const readRecent = (): string[] => {
   try {
     return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');

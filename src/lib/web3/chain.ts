@@ -43,7 +43,7 @@ const ONE_ETHER = 10n ** 18n;
 export const START_BALANCE = 100n * ONE_ETHER;
 
 /** Ten stable test addresses (derived, so they're the same every session) */
-export const ACCOUNTS: string[] = Array.from({ length: 10 }, (_, i) => `0x${keccak256(toHex(`nanocli-test-account-${i}`)).slice(-40)}`);
+export const ACCOUNTS: string[] = Array.from({ length: 10 }, (_, i) => `0x${keccak256(toHex(`aha-test-account-${i}`)).slice(-40)}`);
 
 const abiOf = (abi: AbiItem[]) => abi as unknown as Abi;
 

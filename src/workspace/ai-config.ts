@@ -9,7 +9,7 @@
 import { useSyncExternalStore } from 'react';
 import { EMPTY_AI_CONFIG, type AiConfig } from '@/lib/ai-providers';
 
-const KEY = 'nanocli:ai';
+const KEY = 'aha:ai';
 const listeners = new Set<() => void>();
 let cached: AiConfig | null = null;
 

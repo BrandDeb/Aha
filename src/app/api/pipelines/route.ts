@@ -7,7 +7,7 @@ import { clientKey, createRateLimiter } from '@/lib/rate-limit';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const limiter = createRateLimiter(Number(process.env.NANOCLI_PIPELINE_RUNS_PER_10_MIN) || 60, 10 * 60 * 1000);
+const limiter = createRateLimiter(Number(process.env.AHA_PIPELINE_RUNS_PER_10_MIN) || 60, 10 * 60 * 1000);
 
 /** Whether this server runs pipelines locally */
 export async function GET() {
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Pipelines only run for localhost or the site in NEXT_PUBLIC_BASE_URL (add other names to ALLOWED_HOSTS).' }, { status: 403 });
   }
   if (!isPipelineRunEnabled()) {
-    return NextResponse.json({ error: 'Running pipelines is off on this server: it only runs commands when it listens on your own machine (or NANOCLI_RUN=1).' }, { status: 503 });
+    return NextResponse.json({ error: 'Running pipelines is off on this server: it only runs commands when it listens on your own machine (or AHA_RUN=1).' }, { status: 503 });
   }
   const wait = limiter.check(clientKey(request.headers));
   if (wait) return NextResponse.json({ error: `Too many pipeline runs. Try again in ${Math.ceil(wait / 60)} min.` }, { status: 429, headers: { 'Retry-After': String(wait) } });

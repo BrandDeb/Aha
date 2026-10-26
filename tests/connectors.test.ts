@@ -8,8 +8,8 @@ import zlib from 'node:zlib';
 import type { AddressInfo } from 'node:net';
 
 // The connector directories come from the environment at import time
-const home = fs.mkdtempSync(path.join(os.tmpdir(), 'nanocli-conn-'));
-process.env.NANOCLI_HOME = home;
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'aha-conn-'));
+process.env.AHA_HOME = home;
 after(() => fs.rmSync(home, { recursive: true, force: true }));
 
 const { cleanSchema, parseConnector, slugify } = await import('../src/lib/connectors/types.ts');
@@ -515,8 +515,8 @@ test('modes: local by default on loopback, hosted when exposed, off on request',
   assert.equal(connectorsMode({ HOST: '::1' }), 'local');
   assert.equal(connectorsMode({ HOST: '0.0.0.0' }), 'hosted');
   assert.equal(connectorsMode({ HOST: '192.168.1.5' }), 'hosted');
-  assert.equal(connectorsMode({ HOST: '0.0.0.0', NANOCLI_CONNECTORS: '1' }), 'local');
-  assert.equal(connectorsMode({ NANOCLI_CONNECTORS: '0' }), 'off');
+  assert.equal(connectorsMode({ HOST: '0.0.0.0', AHA_CONNECTORS: '1' }), 'local');
+  assert.equal(connectorsMode({ AHA_CONNECTORS: '0' }), 'off');
   assert.equal(modeBlocks('mcp-stdio', 'local'), null);
   assert.match(modeBlocks('mcp-stdio', 'hosted')!, /your own machine/);
   assert.match(modeBlocks('sqlite', 'hosted')!, /your own machine/);
@@ -568,12 +568,12 @@ test('manager: a connector that dies mid-session is restarted on the next call',
 });
 
 // ---------------------------------------------------------------------------
-// PostgreSQL against a real server (embedded, from PyPI): NANOCLI_TEST_NETWORK=1 npm test
+// PostgreSQL against a real server (embedded, from PyPI): AHA_TEST_NETWORK=1 npm test
 // ---------------------------------------------------------------------------
 
-const wantsNetwork = process.env.NANOCLI_TEST_NETWORK === '1';
+const wantsNetwork = process.env.AHA_TEST_NETWORK === '1';
 
-test('PostgreSQL: schema tools, queries, limits, and writes refused', { skip: wantsNetwork ? false : 'set NANOCLI_TEST_NETWORK=1 to run against an embedded PostgreSQL', timeout: 240_000 }, async () => {
+test('PostgreSQL: schema tools, queries, limits, and writes refused', { skip: wantsNetwork ? false : 'set AHA_TEST_NETWORK=1 to run against an embedded PostgreSQL', timeout: 240_000 }, async () => {
   const { spawn } = await import('node:child_process');
   const server = spawn('uv', ['run', '--no-project', '--with', 'pgserver', 'python', path.join(import.meta.dirname, 'fixtures', 'pg-server.py'), path.join(home, 'pgdata')], { stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
@@ -603,7 +603,7 @@ test('PostgreSQL: schema tools, queries, limits, and writes refused', { skip: wa
   }
 });
 
-test('MCP: the studio’s own Python MCP template works as a connector (real SDK, real uv)', { skip: wantsNetwork ? false : 'set NANOCLI_TEST_NETWORK=1 to install the MCP SDK from PyPI', timeout: 300_000 }, async () => {
+test('MCP: the studio’s own Python MCP template works as a connector (real SDK, real uv)', { skip: wantsNetwork ? false : 'set AHA_TEST_NETWORK=1 to install the MCP SDK from PyPI', timeout: 300_000 }, async () => {
   const { execFileSync } = await import('node:child_process');
   const { TEMPLATES, templateFiles } = await import('../src/lib/templates.ts');
   const project = path.join(home, 'py-mcp-project');

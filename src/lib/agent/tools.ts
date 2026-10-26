@@ -329,7 +329,7 @@ export function workspaceTools(host: AgentHost): Tool[] {
     const commands = contracts.filter((c) => c.kind === 'command');
     tools.push({
       name: 'check_contracts',
-      description: `Check the project's contracts (the rules in .nanocli/contracts.json that must stay true) against your pending edits. Returns each rule with ✓ or ✕ and, for a broken one, where and why. Run it before you finish.${commands.length ? ' Command contracts run on this machine, so the user is asked first.' : ''}`,
+      description: `Check the project's contracts (the rules in .aha/contracts.json that must stay true) against your pending edits. Returns each rule with ✓ or ✕ and, for a broken one, where and why. Run it before you finish.${commands.length ? ' Command contracts run on this machine, so the user is asked first.' : ''}`,
       risk: commands.length ? 'exec' : 'read',
       verify: true,
       parameters: { type: 'object', properties: {} },

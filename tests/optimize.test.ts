@@ -53,7 +53,7 @@ test('optimize: knows a Vite SPA shell is empty without JavaScript, and Next.js 
 test('site: llms.txt, structured data and the sitemap describe the real site', () => {
   const docs = docsFromReadme(README);
   const txt = llmsTxt('https://nano.example', docs, FAQS, PLANS);
-  assert.match(txt, /^# NanoCLI Studio\n\n> /);
+  assert.match(txt, /^# Aha!\n\n> /);
   assert.match(txt, /\n## Pages\n/);
   assert.match(txt, /- \[Live values\]\(https:\/\/nano\.example\/docs\/live-values\): /);
   const full = llmsTxt('https://nano.example', docs, FAQS, PLANS, true);

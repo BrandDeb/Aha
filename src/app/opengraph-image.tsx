@@ -12,7 +12,7 @@ export default function Image() {
       <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 72, background: 'radial-gradient(circle at 80% 10%, #1e3a8a 0%, #000 55%)', color: '#f3f4f6', fontFamily: 'sans-serif' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, fontSize: 34, letterSpacing: 6, color: '#9ca3af' }}>
           <div style={{ display: 'flex', width: 56, height: 56, borderRadius: 14, background: '#111827', border: '2px solid #3b82f6', alignItems: 'center', justifyContent: 'center', color: '#3b82f6', fontSize: 30 }}>{'>_'}</div>
-          NANOCLI STUDIO
+          AHA!
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           <div style={{ fontSize: 76, fontWeight: 700, lineHeight: 1.05, letterSpacing: -2 }}>{SITE.tagline}</div>

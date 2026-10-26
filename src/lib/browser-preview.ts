@@ -187,7 +187,7 @@ interface EsbuildApi {
  * frame and report back (build time, errors, the app's console). Runs only inside the preview frame.
  */
 export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: string; wasmUrl: string; picker?: string }): Promise<void> {
-  const post = (message: Record<string, unknown>) => parent.postMessage({ source: 'nanocli-preview', ...message }, '*');
+  const post = (message: Record<string, unknown>) => parent.postMessage({ source: 'aha-preview', ...message }, '*');
   const app = document.getElementById('app') as HTMLIFrameElement;
   let esbuild: EsbuildApi;
   try {
@@ -273,7 +273,7 @@ export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: s
   var send = function (level, args) {
     try {
       var text = Array.prototype.map.call(args, function (a) { if (typeof a === 'string') return a; try { return JSON.stringify(a); } catch (e) { return String(a); } }).join(' ');
-      parent.postMessage({ source: 'nanocli-app', type: 'console', level: level, text: text.slice(0, 4000) }, '*');
+      parent.postMessage({ source: 'aha-app', type: 'console', level: level, text: text.slice(0, 4000) }, '*');
     } catch (e) {}
   };
   ['log', 'info', 'warn', 'error'].forEach(function (level) {
@@ -319,7 +319,7 @@ export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: s
     const stamp = (support.flavour === 'react' || support.flavour === 'preact') && (jsxImportSource === 'react' || jsxImportSource === 'preact');
 
     const plugin = {
-      name: 'nanocli-project',
+      name: 'aha-project',
       setup(b: { onResolve: (o: unknown, f: (a: { path: string; importer: string; kind: string }) => unknown) => void; onLoad: (o: unknown, f: (a: { path: string }) => unknown) => void }) {
         b.onResolve({ filter: /.*/ }, (args) => {
           if (args.kind === 'entry-point') return { path: args.path, namespace: 'project' };
@@ -430,7 +430,7 @@ export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: s
 
   // Click-to-edit: whether the app's page is picking an element; a rebuild mid-pick keeps picking
   let picking = false;
-  const sendPick = () => app.contentWindow?.postMessage({ source: 'nanocli-preview', type: 'pick', on: picking }, '*');
+  const sendPick = () => app.contentWindow?.postMessage({ source: 'aha-preview', type: 'pick', on: picking }, '*');
   app.addEventListener('load', () => {
     if (picking) sendPick();
   });
@@ -439,7 +439,7 @@ export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: s
     // The app's console and picks, relayed to the studio
     if (event.source === app.contentWindow) {
       const data = event.data as { source?: string; type?: string; level?: unknown; text?: unknown; element?: Record<string, unknown> } | null;
-      if (data?.source !== 'nanocli-app') return;
+      if (data?.source !== 'aha-app') return;
       if (data.type === 'console') post({ type: 'console', level: String(data.level), text: String(data.text).slice(0, 4000) });
       else if (data.type === 'picked' && data.element && typeof data.element === 'object') {
         picking = false;

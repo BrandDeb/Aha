@@ -1,4 +1,4 @@
-# NanoCLI Studio Dockerfile
+# Aha! Dockerfile
 # Multi-stage build for production deployment
 
 # Stage 1: Build the Next.js application, on the build machine's own architecture.
@@ -61,13 +61,13 @@ ENV PORT=3000
 # Inside a container the server must listen on all interfaces; publish the port deliberately
 ENV HOST=0.0.0.0
 # Python (uv) runs users' programs, so it is off in the image until the operator turns it on
-# (NANOCLI_PYTHON=1) and provides a glibc Python environment and isolation
-ENV NANOCLI_PYTHON=0
+# (AHA_PYTHON=1) and provides a glibc Python environment and isolation
+ENV AHA_PYTHON=0
 # The same goes for the other runners, web dev servers, local connectors and self-update: a container
 # listening on all interfaces must not run visitors' code (they are off for HOST=0.0.0.0 anyway; this is explicit)
-ENV NANOCLI_RUN=0
-ENV NANOCLI_DEV=0
-ENV NANOCLI_CONNECTORS=0
+ENV AHA_RUN=0
+ENV AHA_DEV=0
+ENV AHA_CONNECTORS=0
 ENV NEXT_PUBLIC_BASE_URL=http://localhost:3000
 
 # Expose port

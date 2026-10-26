@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 // Live mode runs on every pause in typing: a generous limit, still per client
-const limiter = createRateLimiter(Number(process.env.NANOCLI_LIVE_RUNS_PER_10_MIN) || 600, 10 * 60 * 1000);
+const limiter = createRateLimiter(Number(process.env.AHA_LIVE_RUNS_PER_10_MIN) || 600, 10 * 60 * 1000);
 
 /** Whether this server runs programs for live values */
 export async function GET() {
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   if (!isTrustedHost(request.headers.get('host'), getBaseUrl(), process.env.ALLOWED_HOSTS)) {
     return NextResponse.json({ error: 'Programs are only run for localhost or the site in NEXT_PUBLIC_BASE_URL (add other names to ALLOWED_HOSTS).' }, { status: 403 });
   }
-  if (!isRunEnabled()) return NextResponse.json({ error: 'Live values run your program on this server, which only happens when it listens on your own machine (or NANOCLI_RUN=1).' }, { status: 503 });
+  if (!isRunEnabled()) return NextResponse.json({ error: 'Live values run your program on this server, which only happens when it listens on your own machine (or AHA_RUN=1).' }, { status: 503 });
   const wait = limiter.check(clientKey(request.headers));
   if (wait) return NextResponse.json({ error: `Too many runs. Try again in ${Math.ceil(wait / 60)} min.` }, { status: 429 });
   const body = await request.json().catch(() => null);

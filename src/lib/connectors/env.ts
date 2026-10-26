@@ -1,8 +1,8 @@
 import os from 'node:os';
 import path from 'node:path';
 
-export const NANOCLI_DIR = process.env.NANOCLI_HOME || path.join(os.homedir(), '.nanocli');
-export const CONNECTOR_DIR = path.join(NANOCLI_DIR, 'connectors');
+export const AHA_DIR = process.env.AHA_HOME || path.join(os.homedir(), '.aha');
+export const CONNECTOR_DIR = path.join(AHA_DIR, 'connectors');
 export const CONNECTOR_HOME = path.join(CONNECTOR_DIR, 'home');
 export const CONNECTOR_WORK = path.join(CONNECTOR_DIR, 'work');
 
@@ -23,7 +23,7 @@ export function connectorEnv(host: NodeJS.ProcessEnv, user: Record<string, strin
     HOME: CONNECTOR_HOME,
     USERPROFILE: CONNECTOR_HOME,
     XDG_CACHE_HOME: path.join(CONNECTOR_DIR, 'cache'),
-    UV_CACHE_DIR: path.join(NANOCLI_DIR, 'cache', 'uv'), // the same cache the Python runner uses
+    UV_CACHE_DIR: path.join(AHA_DIR, 'cache', 'uv'), // the same cache the Python runner uses
     NO_COLOR: '1',
     ...user,
   };

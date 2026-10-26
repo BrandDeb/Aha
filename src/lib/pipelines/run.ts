@@ -87,10 +87,10 @@ export interface PipelineResult {
   error?: string;
 }
 
-const pool = createJobPool(Number(process.env.NANOCLI_PIPELINE_JOBS) || 2, 6, 'The server is busy running other pipelines. Try again in a moment.');
+const pool = createJobPool(Number(process.env.AHA_PIPELINE_JOBS) || 2, 6, 'The server is busy running other pipelines. Try again in a moment.');
 const lock = createKeyedLock();
 /** Folders kept between local CI runs (dependencies, build caches) and never synced from the browser */
-const KEEP = new Set(['node_modules', 'target', '.home', '.venv', 'vendor', 'deps', '_build', '.gradle', 'obj', 'bin', 'dist', 'build', '.next', '__pycache__', '.dart_tool', 'out', 'cache', '.nanocli-ci']);
+const KEEP = new Set(['node_modules', 'target', '.home', '.venv', 'vendor', 'deps', '_build', '.gradle', 'obj', 'bin', 'dist', 'build', '.next', '__pycache__', '.dart_tool', 'out', 'cache', '.aha-ci']);
 
 /** The binary each setup action stands for */
 const TOOL_BIN: Record<string, string[]> = {
@@ -228,7 +228,7 @@ export async function runPipeline(request: PipelineRunRequest, hooks: { onEvent:
       const dir = path.join(RUN_PROJECTS, `${request.projectId}-ci`);
       await writeProject(dir, request.files, { keep: KEEP });
       await refreshBinPaths();
-      const ciDir = path.join(dir, '.nanocli-ci');
+      const ciDir = path.join(dir, '.aha-ci');
       await fs.mkdir(path.join(dir, '.home', 'tmp'), { recursive: true });
       await fs.mkdir(ciDir, { recursive: true });
 
@@ -274,7 +274,7 @@ async function runJob(job: PipelineJob, ctx: JobContext): Promise<JobReport> {
   const outputs: Record<string, Record<string, string>> = {};
   const outcomes: Record<string, string> = {};
   let env: Record<string, string> = runEnv(process.env, ctx.dir, {});
-  const local = { CI: 'true', NANOCLI_CI: '1', ...(ctx.provider === 'github' ? { GITHUB_ACTIONS: 'true', GITHUB_WORKSPACE: ctx.dir, RUNNER_OS: OS_NAME, RUNNER_TEMP: path.join(ctx.dir, '.home', 'tmp') } : { ...GITLAB_LOCAL, CI_PROJECT_DIR: ctx.dir }) };
+  const local = { CI: 'true', AHA_CI: '1', ...(ctx.provider === 'github' ? { GITHUB_ACTIONS: 'true', GITHUB_WORKSPACE: ctx.dir, RUNNER_OS: OS_NAME, RUNNER_TEMP: path.join(ctx.dir, '.home', 'tmp') } : { ...GITLAB_LOCAL, CI_PROJECT_DIR: ctx.dir }) };
   const jobEnv: Record<string, string> = { ...local };
   const resolver = () => githubResolver({ workspace: ctx.dir, env: { ...jobEnv }, matrix: job.matrix, outputs, outcomes, missingSecrets });
   for (const [k, v] of Object.entries(job.env)) jobEnv[k] = ctx.provider === 'github' ? expand(v, resolver()) : v;

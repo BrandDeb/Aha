@@ -1,5 +1,5 @@
 /**
- * Nano CLI Studio - Edge Entry Point
+ * Aha! Studio - Edge Entry Point
  * 
  * This is the main entry point for scriptc-compiled edge functions.
  * Compiles to WASM for deployment to Cloudflare Workers, Vercel Edge, etc.

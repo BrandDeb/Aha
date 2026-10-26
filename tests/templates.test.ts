@@ -18,7 +18,7 @@ function scriptcAvailable(): boolean {
 }
 
 const skip = scriptcAvailable() ? false : 'scriptc is not installed';
-const dir = mkdtempSync(path.join(tmpdir(), 'nanocli-templates-'));
+const dir = mkdtempSync(path.join(tmpdir(), 'aha-templates-'));
 process.on('exit', () => rmSync(dir, { recursive: true, force: true }));
 
 function build(name: string, code: string): string {

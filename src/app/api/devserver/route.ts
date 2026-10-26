@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** Starting a server installs packages and runs code; syncs are cheap and frequent */
-const starts = createRateLimiter(Number(process.env.NANOCLI_DEV_STARTS_PER_10_MIN) || 40, 10 * 60 * 1000);
+const starts = createRateLimiter(Number(process.env.AHA_DEV_STARTS_PER_10_MIN) || 40, 10 * 60 * 1000);
 const syncs = createRateLimiter(3000, 10 * 60 * 1000);
 
 const trusted = (request: NextRequest) => isTrustedHost(request.headers.get('host'), getBaseUrl(), process.env.ALLOWED_HOSTS);
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Dev servers only run for localhost or the site in NEXT_PUBLIC_BASE_URL (add other names to ALLOWED_HOSTS).' }, { status: 403 });
   }
   if (!isDevEnabled()) {
-    return NextResponse.json({ error: 'Dev servers are off on this server: they only run when the studio listens on your own machine (or NANOCLI_DEV=1).' }, { status: 503 });
+    return NextResponse.json({ error: 'Dev servers are off on this server: they only run when the studio listens on your own machine (or AHA_DEV=1).' }, { status: 503 });
   }
   if (Number(request.headers.get('content-length')) > 14 * 1024 * 1024) return NextResponse.json({ error: 'Request is too large' }, { status: 413 });
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;

@@ -25,7 +25,7 @@ interface BuildPanelProps {
 const noSubscribe = () => () => {};
 const readBuiltOnce = () => {
   try {
-    return localStorage.getItem('nanocli:built-once') === '1';
+    return localStorage.getItem('aha:built-once') === '1';
   } catch {
     return false;
   }
@@ -38,7 +38,7 @@ export function BuildPanel({ result, building, coverage, analyzing, onCoverage, 
   useEffect(() => {
     if (!result && !lastRun) return;
     try {
-      localStorage.setItem('nanocli:built-once', '1');
+      localStorage.setItem('aha:built-once', '1');
     } catch {
       // storage blocked: the guide shows again
     }

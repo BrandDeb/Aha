@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * NanoCLI Studio - FAQ
+ * Aha! - FAQ
  * Searchable, filterable answers. Keep these accurate to what the code does.
  */
 
@@ -32,7 +32,7 @@ export default function FAQPage() {
         <div className="eyebrow">Help</div>
         <h1 className="mt-3 text-4xl font-semibold tracking-tight">Frequently asked questions</h1>
         <p className="mt-3 text-gray-400">
-          How NanoCLI Studio and scriptc work, what they support today, and how to run your own.
+          How Aha! and scriptc work, what they support today, and how to run your own.
         </p>
 
         <div className="mt-8 flex flex-col gap-3">

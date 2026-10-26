@@ -8,6 +8,11 @@ const monacoVersion = JSON.parse(readFileSync("node_modules/monaco-editor/packag
 const esbuildVersion = JSON.parse(readFileSync("node_modules/esbuild-wasm/package.json", "utf8")).version as string;
 const dev = process.env.NODE_ENV !== "production";
 
+// Renamed from NanoCLI Studio: old NANOCLI_* settings still work, as AHA_* (also done by server.js)
+for (const [key, value] of Object.entries(process.env)) {
+  if (key.startsWith("NANOCLI_") && process.env[`AHA_${key.slice(8)}`] === undefined) process.env[`AHA_${key.slice(8)}`] = value;
+}
+
 /**
  * Content-Security-Policy. Scripts only from this server (inline ones are Next's bootstrap and the
  * pre-paint theme script); WebAssembly for the in-browser runner. Model calls go straight from the

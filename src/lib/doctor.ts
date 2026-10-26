@@ -10,7 +10,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { cleanupOldTempFiles, compileTypeScript, TEMP_DIR } from './compiler.ts';
 import { connectorsMode } from './connectors/manager.ts';
-import { NANOCLI_DIR } from './connectors/env.ts';
+import { AHA_DIR } from './connectors/env.ts';
 import { childEnv, cleanupPythonProjects, getPythonStatus, installManagedUv, isPythonEnabled, PY_PROJECTS, resolveUv } from './python.ts';
 import { bundledZigDir, withBundledZig } from './zig.ts';
 
@@ -111,7 +111,7 @@ export async function runDoctor(): Promise<DoctorReport> {
 
   // uv and Python
   if (!isPythonEnabled()) {
-    add({ id: 'uv', label: 'uv (Python)', status: 'ok', detail: 'Python support is turned off (NANOCLI_PYTHON=0).' });
+    add({ id: 'uv', label: 'uv (Python)', status: 'ok', detail: 'Python support is turned off (AHA_PYTHON=0).' });
   } else {
     const uv = await resolveUv();
     if (uv) {
@@ -133,7 +133,7 @@ export async function runDoctor(): Promise<DoctorReport> {
   });
 
   // Disk the studio uses
-  const [envs, caches, temp] = await Promise.all([folderSize(PY_PROJECTS), folderSize(path.join(NANOCLI_DIR, 'cache')), folderSize(TEMP_DIR)]);
+  const [envs, caches, temp] = await Promise.all([folderSize(PY_PROJECTS), folderSize(path.join(AHA_DIR, 'cache')), folderSize(TEMP_DIR)]);
   add(
     envs > 2 * 1024 ** 3
       ? { id: 'python-envs', label: 'Python environments', status: 'warn', detail: `${formatBytes(envs)} used. They are rebuilt on demand, and your files live in the browser.`, fix: { id: 'remove-python-envs', label: 'Remove environments' } }
@@ -169,8 +169,8 @@ export async function runDoctor(): Promise<DoctorReport> {
       platform: `${process.platform} ${process.arch}`,
       uptimeSeconds: Math.round(process.uptime()),
       memoryMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
-      supervised: process.env.NANOCLI_SUPERVISED === '1',
-      home: NANOCLI_DIR,
+      supervised: process.env.AHA_SUPERVISED === '1',
+      home: AHA_DIR,
     },
   };
 }
@@ -185,7 +185,7 @@ export async function applyFix(id: string, onProgress: (message: string) => void
     case 'prune-uv-cache': {
       const uv = await resolveUv();
       if (!uv) return { ok: false, message: 'uv isn’t installed, so there is no cache to prune.' };
-      await execFileAsync(uv.bin, ['cache', 'prune'], { timeout: 120_000, windowsHide: true, env: childEnv(process.env, NANOCLI_DIR, {}) as NodeJS.ProcessEnv });
+      await execFileAsync(uv.bin, ['cache', 'prune'], { timeout: 120_000, windowsHide: true, env: childEnv(process.env, AHA_DIR, {}) as NodeJS.ProcessEnv });
       return { ok: true, message: 'Removed cache entries that are no longer needed.' };
     }
     case 'remove-python-envs':

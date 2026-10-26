@@ -1,4 +1,4 @@
-# NanoCLI Studio backlog
+# Aha! backlog
 
 > The order and the specs for what comes next are in [ROADMAP.md](ROADMAP.md).
 
@@ -126,7 +126,7 @@ and would undo the "lightweight" goal. The plan instead:
 | Item | Why |
 |---|---|
 | Google sign-in | needs a domain |
-| GitHub OAuth app (`NANOCLI_GITHUB_CLIENT_ID`) | GitHub sign-in in production |
+| GitHub OAuth app (`AHA_GITHUB_CLIENT_ID`) | GitHub sign-in in production |
 | `NEXT_PUBLIC_SITE_URL` | canonical URLs, sitemap, OG images |
 | Tauri updater signing key | signed desktop updates |
 | Testing the macOS app on a real Mac | |

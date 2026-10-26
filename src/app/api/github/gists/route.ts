@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Project is too large for a gist' }, { status: 413 });
   }
   try {
-    const description = typeof body.description === 'string' ? body.description.slice(0, 200) : 'NanoCLI project';
+    const description = typeof body.description === 'string' ? body.description.slice(0, 200) : 'Aha! project';
     return NextResponse.json(await createGist(token, description, files as Record<string, string>));
   } catch (error) {
     return githubErrorResponse(error, 'Failed to create gist (sign in again to grant gist access)');

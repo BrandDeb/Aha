@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as { action?: unknown } | null;
 
   if (body?.action === 'restart') {
-    if (process.env.NANOCLI_SUPERVISED !== '1') {
+    if (process.env.AHA_SUPERVISED !== '1') {
       return NextResponse.json({ ok: false, error: 'This server wasn’t started with npm run dev / npm start, so it can’t restart itself. Stop it and start it again.' }, { status: 409 });
     }
     setTimeout(() => process.exit(RESTART_CODE), 300);

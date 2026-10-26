@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "NanoCLI Studio: dev server",
+      "name": "Aha!: dev server",
       "type": "node",
       "request": "launch",
       "program": "${workspaceFolder}/server.js",

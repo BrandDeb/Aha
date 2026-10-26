@@ -1,5 +1,5 @@
 /**
- * Installed skills on this machine: ~/.nanocli/skills/<name>/ (one folder per
+ * Installed skills on this machine: ~/.aha/skills/<name>/ (one folder per
  * skill, as in the Agent Skills format), plus skills.json for which are turned
  * off and where installed ones came from. Built-in skills are read from code
  * and can be turned off but not removed. Server only.
@@ -7,7 +7,7 @@
 
 import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
-import { NANOCLI_DIR } from '../connectors/env.ts';
+import { AHA_DIR } from '../connectors/env.ts';
 import { BUILTIN_SKILLS } from './builtin.ts';
 import { isSkillFilePath, isSkillName, LIMITS, parseSkillMd, type SkillDoc, type SkillMeta } from './format.ts';
 
@@ -27,8 +27,8 @@ interface State {
   sources: Record<string, SkillSource>;
 }
 
-export const skillsDir = () => path.join(NANOCLI_DIR, 'skills');
-const statePath = () => path.join(NANOCLI_DIR, 'skills.json');
+export const skillsDir = () => path.join(AHA_DIR, 'skills');
+const statePath = () => path.join(AHA_DIR, 'skills.json');
 
 async function readState(): Promise<State> {
   try {
@@ -40,7 +40,7 @@ async function readState(): Promise<State> {
 }
 
 async function writeState(state: State): Promise<void> {
-  await fs.mkdir(NANOCLI_DIR, { recursive: true });
+  await fs.mkdir(AHA_DIR, { recursive: true });
   await fs.writeFile(statePath(), JSON.stringify(state, null, 2));
 }
 

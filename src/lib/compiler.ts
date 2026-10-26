@@ -100,7 +100,7 @@ interface ExecError extends Error {
 }
 
 // The desktop app points this at its cache folder: the install folder is read-only there
-export const TEMP_DIR = process.env.NANOCLI_TEMP_DIR ? path.resolve(/* turbopackIgnore: true */ process.env.NANOCLI_TEMP_DIR) : path.join(process.cwd(), 'temp');
+export const TEMP_DIR = process.env.AHA_TEMP_DIR ? path.resolve(/* turbopackIgnore: true */ process.env.AHA_TEMP_DIR) : path.join(process.cwd(), 'temp');
 
 /** Maximum accepted source size (bytes) */
 export const MAX_CODE_SIZE = 512 * 1024;
@@ -219,7 +219,7 @@ export function isValidProjectPath(filePath: string): boolean {
   return filePath.length <= 200 &&
     (/^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*\/)*[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(filePath) ||
       // The studio's own folder (a field kit's manifest), one level deep
-      /^\.nanocli\/[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(filePath));
+      /^\.aha\/[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(filePath));
 }
 
 function parseProject(rawFiles: unknown, rawEntry: unknown): { files: Record<string, string>; entry: string } | { error: string } {

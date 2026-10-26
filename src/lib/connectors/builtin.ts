@@ -140,7 +140,7 @@ const REPO = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
 
 export function githubImpl(c: GithubConnector): Impl {
   const api = async (endpoint: string, token: string | undefined) => {
-    const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'NanoCLI-Studio' };
+    const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'Aha!-Studio' };
     if (token) headers.Authorization = `Bearer ${token}`;
     const response = await fetch(`https://api.github.com${endpoint}`, { headers, cache: 'no-store', signal: AbortSignal.timeout(15_000) });
     if (response.status === 401) throw new Error('GitHub rejected the token. Sign in again or update the token in the connector.');
@@ -273,7 +273,7 @@ export function sqliteImpl(c: SqliteConnector): Impl {
 export function postgresImpl(c: PostgresConnector): Impl {
   const run = async (sql: string, limit: number, params: unknown[] = []): Promise<ConnectorCallResult> => {
     const { Client } = await import('pg');
-    const client = new Client({ connectionString: c.url, connectionTimeoutMillis: 8000, statement_timeout: 15_000, query_timeout: 20_000, application_name: 'nanocli-studio' });
+    const client = new Client({ connectionString: c.url, connectionTimeoutMillis: 8000, statement_timeout: 15_000, query_timeout: 20_000, application_name: 'aha' });
     client.on('error', () => {});
     try {
       await client.connect();

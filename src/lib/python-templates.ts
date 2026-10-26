@@ -303,9 +303,9 @@ A program is built from an entry file, and relative imports between files work. 
 
 The wasm32-wasi target produces a portable module, but WebAssembly in the browser has no network sockets, so programs using http or fetch need the native target.
 `,
-  'docs/studio.md': String.raw`# NanoCLI Studio
+  'docs/studio.md': String.raw`# Aha!
 
-NanoCLI Studio is a browser workspace for building command-line tools. It has a file explorer, a Monaco editor, a terminal and an assistant that can use free models or your own key.
+Aha! is a browser workspace for building command-line tools. It has a file explorer, a Monaco editor, a terminal and an assistant that can use free models or your own key.
 
 The terminal can run TypeScript as WebAssembly in the tab and Python through uv on the machine running the studio. Output menus let you inspect LLVM IR, assembly and WebAssembly text.
 
@@ -470,7 +470,7 @@ import sys
 
 from mcp.server.fastmcp import FastMCP
 
-mcp = FastMCP("nanocli-demo")
+mcp = FastMCP("aha-demo")
 
 
 @mcp.tool()

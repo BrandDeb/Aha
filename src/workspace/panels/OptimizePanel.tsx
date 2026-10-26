@@ -7,7 +7,7 @@ import { useProposals } from '../proposals';
 import { useWorkspace } from '../store';
 import { useToast } from '../toasts';
 
-const SITE_KEY = 'nanocli:site-url';
+const SITE_KEY = 'aha:site-url';
 const readSite = () => {
   try {
     return localStorage.getItem(SITE_KEY) || 'https://example.com';

@@ -4,7 +4,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * NanoCLI — dark editor, one accent.
+ * Aha! — dark editor, one accent.
  *
  * Solid panels with hairline borders on a near-black canvas, high-contrast
  * text and a single electric-green accent for actions and status. Light mode

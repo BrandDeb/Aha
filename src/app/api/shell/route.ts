@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** Each request starts processes; cap them per client */
-const limiter = createRateLimiter(Number(process.env.NANOCLI_SHELL_REQUESTS_PER_10_MIN) || 300, 10 * 60 * 1000);
+const limiter = createRateLimiter(Number(process.env.AHA_SHELL_REQUESTS_PER_10_MIN) || 300, 10 * 60 * 1000);
 
 /** Whether this server runs terminal commands */
 export async function GET() {
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Programs are only run for localhost or the site in NEXT_PUBLIC_BASE_URL (add other names to ALLOWED_HOSTS).' }, { status: 403 });
   }
   if (!isRunEnabled()) {
-    return NextResponse.json({ error: 'The terminal only runs real commands when the studio listens on your own machine (or NANOCLI_RUN=1).' }, { status: 503 });
+    return NextResponse.json({ error: 'The terminal only runs real commands when the studio listens on your own machine (or AHA_RUN=1).' }, { status: 503 });
   }
   const wait = limiter.check(clientKey(request.headers));
   if (wait) return NextResponse.json({ error: `Too many commands. Try again in ${Math.ceil(wait / 60)} min.` }, { status: 429, headers: { 'Retry-After': String(wait) } });

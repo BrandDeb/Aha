@@ -1,14 +1,28 @@
 /**
- * NanoCLI Studio - WebSocket Server
+ * Aha! - WebSocket Server
  * 
  * This server handles WebSocket connections for real-time collaboration
  * and provides a fallback for environments that don't support WebSocket upgrades
  * in Next.js API routes.
  */
 
+// Renamed from NanoCLI Studio: old NANOCLI_* settings still work (as AHA_*), and ~/.nanocli moves to ~/.aha once
+for (const [key, value] of Object.entries(process.env)) {
+  if (key.startsWith('NANOCLI_') && process.env[`AHA_${key.slice(8)}`] === undefined) process.env[`AHA_${key.slice(8)}`] = value;
+}
+try {
+  const os = require('node:os');
+  const { existsSync, renameSync } = require('node:fs');
+  const legacy = require('node:path').join(os.homedir(), '.nanocli');
+  const home = require('node:path').join(os.homedir(), '.aha');
+  if (!process.env.AHA_HOME && existsSync(legacy) && !existsSync(home)) renameSync(legacy, home);
+} catch {
+  // read-only home, or another process moved it first: the new folder starts empty
+}
+
 // Node (22+) keeps compiled code between starts: the server starts about a quarter faster after the first time
 try {
-  const home = process.env.NANOCLI_HOME || require('node:path').join(require('node:os').homedir(), '.nanocli');
+  const home = process.env.AHA_HOME || require('node:path').join(require('node:os').homedir(), '.aha');
   require('node:module').enableCompileCache?.(process.env.NODE_COMPILE_CACHE || require('node:path').join(home, 'cache', 'node-compile'));
 } catch {
   // an older Node, or a read-only home: start without it
@@ -142,7 +156,7 @@ function serveBrotli(req, res) {
 const PASSIVE = /^\/(?:_next\/|monaco\/|esbuild\/|favicon|api\/health)/;
 
 const server = http.createServer((req, res) => {
-  if (!PASSIVE.test(req.url || '/')) globalThis.__nanocliLastActivity = Date.now();
+  if (!PASSIVE.test(req.url || '/')) globalThis.__ahaLastActivity = Date.now();
   if (serveBrotli(req, res)) return;
   // Handle Next.js requests
   handle(req, res);
@@ -301,8 +315,8 @@ app.prepare().then(() => {
   server.listen(PORT, HOST, () => {
     console.log(`> Ready on http://localhost:${PORT}`);
     console.log(`> WebSocket available at ws://localhost:${PORT}${WS_PATH}`);
-    if (process.env.NANOCLI_PYTHON !== '0') {
-      console.log('> Python (uv) is enabled: programs run on this machine. Set NANOCLI_PYTHON=0 to turn it off.');
+    if (process.env.AHA_PYTHON !== '0') {
+      console.log('> Python (uv) is enabled: programs run on this machine. Set AHA_PYTHON=0 to turn it off.');
       if (!['127.0.0.1', 'localhost', '::1'].includes(HOST)) {
         console.warn(`> WARNING: listening on ${HOST} with Python enabled. Anyone who can reach this port can run code on this machine.`);
       }

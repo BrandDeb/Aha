@@ -4,14 +4,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-// Everything the runner writes goes under NANOCLI_HOME. With NANOCLI_TEST_NETWORK=1, toolchains that are
-// missing are installed by the studio itself (mise), exactly as on a first Run; NANOCLI_TEST_HOME keeps
+// Everything the runner writes goes under AHA_HOME. With AHA_TEST_NETWORK=1, toolchains that are
+// missing are installed by the studio itself (mise), exactly as on a first Run; AHA_TEST_HOME keeps
 // them between test runs. Otherwise nothing is downloaded and missing languages are skipped.
-const network = process.env.NANOCLI_TEST_NETWORK === '1';
-const home = process.env.NANOCLI_TEST_HOME || fs.mkdtempSync(path.join(os.tmpdir(), 'nanocli-run-'));
-process.env.NANOCLI_HOME = home;
-if (!network) process.env.NANOCLI_TOOLCHAIN_AUTO_INSTALL = '0';
-if (!process.env.NANOCLI_TEST_HOME) after(() => fs.rmSync(home, { recursive: true, force: true }));
+const network = process.env.AHA_TEST_NETWORK === '1';
+const home = process.env.AHA_TEST_HOME || fs.mkdtempSync(path.join(os.tmpdir(), 'aha-run-'));
+process.env.AHA_HOME = home;
+if (!network) process.env.AHA_TOOLCHAIN_AUTO_INSTALL = '0';
+if (!process.env.AHA_TEST_HOME) after(() => fs.rmSync(home, { recursive: true, force: true }));
 
 const { LANGUAGES, detectLanguage, isRunnable, monacoLanguageFor, getLanguage } = await import('../src/lib/languages.ts');
 const { LANGUAGE_STARTERS, STARTER_OUTPUT } = await import('../src/lib/language-templates.ts');
@@ -78,11 +78,11 @@ test('plans: the commands each language runs', () => {
   assert.deepEqual(plan('go', 'main.go', ['main.go', 'util.go', 'util_test.go']), ['go run main.go util.go']);
   assert.deepEqual(plan('go', 'cmd/app/main.go', ['go.mod', 'cmd/app/main.go'], { 'go.mod': 'module x\n' }), ['go run ./cmd/app']);
   assert.deepEqual(plan('go', 'main.go', ['go.mod', 'main.go'], { 'go.mod': 'module x\nrequire a/b v1.0.0\n' }), ['go mod tidy', 'go run .']);
-  assert.deepEqual(plan('rust', 'main.rs', ['main.rs'], {}, ['x']), ['rustc --edition 2021 main.rs -o .nanocli-out/main', '<program> x']);
+  assert.deepEqual(plan('rust', 'main.rs', ['main.rs'], {}, ['x']), ['rustc --edition 2021 main.rs -o .aha-out/main', '<program> x']);
   assert.deepEqual(plan('rust', 'src/main.rs', ['Cargo.toml', 'src/main.rs'], {}, ['x', 'y']), ['cargo run --quiet -- x y']);
-  assert.deepEqual(plan('c', 'main.c', ['util.c', 'main.c', 'util.h']), ['cc -O1 -o .nanocli-out/main main.c util.c -lm', '<program>']);
+  assert.deepEqual(plan('c', 'main.c', ['util.c', 'main.c', 'util.h']), ['cc -O1 -o .aha-out/main main.c util.c -lm', '<program>']);
   assert.deepEqual(plan('java', 'Main.java', ['Main.java']), ['java Main.java']);
-  assert.deepEqual(plan('java', 'app/Main.java', ['app/Main.java', 'app/Util.java'], { 'app/Main.java': 'package app;\nclass Main {}' }, ['a']), ['javac -d .nanocli-out/classes app/Main.java app/Util.java', 'java -cp .nanocli-out/classes app.Main a']);
+  assert.deepEqual(plan('java', 'app/Main.java', ['app/Main.java', 'app/Util.java'], { 'app/Main.java': 'package app;\nclass Main {}' }, ['a']), ['javac -d .aha-out/classes app/Main.java app/Util.java', 'java -cp .aha-out/classes app.Main a']);
   assert.deepEqual(plan('node', 'a.js', ['a.js', 'package.json'], { 'package.json': '{"dependencies":{"x":"1"}}' }), ['npm install --no-audit --no-fund --loglevel=error', 'node a.js']);
   assert.deepEqual(plan('node', 'a.js', ['a.js', 'package.json'], { 'package.json': '{"name":"x"}' }), ['node a.js']);
   assert.deepEqual(plan('ruby', 'a.rb', ['a.rb', 'Gemfile']), ['bundle install --quiet', 'bundle exec ruby a.rb']);
@@ -143,8 +143,8 @@ test('run is on for a loopback server, off when exposed, and the switch override
   assert.equal(poly.isRunEnabled({}), true);
   assert.equal(poly.isRunEnabled({ HOST: '127.0.0.1' }), true);
   assert.equal(poly.isRunEnabled({ HOST: '0.0.0.0' }), false);
-  assert.equal(poly.isRunEnabled({ HOST: '0.0.0.0', NANOCLI_RUN: '1' }), true);
-  assert.equal(poly.isRunEnabled({ NANOCLI_RUN: '0' }), false);
+  assert.equal(poly.isRunEnabled({ HOST: '0.0.0.0', AHA_RUN: '1' }), true);
+  assert.equal(poly.isRunEnabled({ AHA_RUN: '0' }), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -242,13 +242,13 @@ test('files the program writes come back; files it deletes are reported; binarie
 });
 
 test('a program that runs too long is stopped and said to have timed out', { skip: need('node'), timeout: 60_000 }, async () => {
-  process.env.NANOCLI_RUN_TIMEOUT_SCALE = '0.0004'; // the 5 minute limit becomes ~120 ms
+  process.env.AHA_RUN_TIMEOUT_SCALE = '0.0004'; // the 5 minute limit becomes ~120 ms
   try {
     const { result, info } = await run('node', { 'main.js': 'setInterval(() => {}, 1000)' }, 'main.js');
     assert.equal(result.timedOut, true);
     assert.match(info, /Timed out/);
   } finally {
-    delete process.env.NANOCLI_RUN_TIMEOUT_SCALE;
+    delete process.env.AHA_RUN_TIMEOUT_SCALE;
   }
 });
 
@@ -342,7 +342,7 @@ test('zig cc is a working C compiler fallback (the bundled zig)', { skip: need('
   assert.equal(execFileSync(path.join(dir, 'a.out'), { encoding: 'utf8' }).trim(), 'zig cc works');
 });
 
-test('npm packages install for a Node project (needs the network)', { skip: process.env.NANOCLI_TEST_NETWORK === '1' ? need('node') : 'set NANOCLI_TEST_NETWORK=1 to install a package from npm', timeout: 300_000 }, async () => {
+test('npm packages install for a Node project (needs the network)', { skip: process.env.AHA_TEST_NETWORK === '1' ? need('node') : 'set AHA_TEST_NETWORK=1 to install a package from npm', timeout: 300_000 }, async () => {
   const files = { 'package.json': '{"name":"t","version":"1.0.0","dependencies":{"is-odd":"3.0.1"}}', 'main.js': "const isOdd = require('is-odd'); console.log(isOdd(7));" };
   const id = projectId();
   const first = await run('node', files, 'main.js', { id });

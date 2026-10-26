@@ -1,5 +1,5 @@
 /** The program a new project starts with. Kept apart from the template catalogue so the editor doesn't load every template just to start. */
-export const DEFAULT_CODE = `// NanoCLI Studio — write TypeScript, get a native binary.
+export const DEFAULT_CODE = `// Aha! — write TypeScript, get a native binary.
 // Press Run to try it (arguments go in the field next to Run), or Build for a native binary.
 
 const args = process.argv.slice(2);

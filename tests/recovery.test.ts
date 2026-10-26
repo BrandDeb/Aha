@@ -54,13 +54,13 @@ test('crashes are counted within a ten minute window', () => {
 
 test('resetting settings leaves projects and keys alone', () => {
   const s = new MemoryStorage();
-  s.setItem('nanocli:settings', '{"appearance":{}}');
-  s.setItem('nanocli:appearance-vars', '{}');
+  s.setItem('aha:settings', '{"appearance":{}}');
+  s.setItem('aha:appearance-vars', '{}');
   s.setItem(WORKSPACE_KEY, workspace({ 'a.ts': '1' }));
-  s.setItem('nanocli:ai', '{"keys":{"groq":"k"}}');
-  s.setItem('nanocli:connectors', '[]');
+  s.setItem('aha:ai', '{"keys":{"groq":"k"}}');
+  s.setItem('aha:connectors', '[]');
   resetSettings(s);
-  assert.deepEqual([...s.data.keys()].sort(), ['nanocli:ai', 'nanocli:connectors', WORKSPACE_KEY].sort());
+  assert.deepEqual([...s.data.keys()].sort(), ['aha:ai', 'aha:connectors', WORKSPACE_KEY].sort());
 });
 
 test('export hands over the workspace, or the good copy when it is gone', () => {

@@ -14,14 +14,14 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { atLeast, dependencyKey, detectFramework, GENERATED_DIRS, INSTALL_ARGS, localUrlIn, packageManagerFor, type Framework } from './frameworks.ts';
-import { isRunEnabled, NANOCLI_DIR, runEnv, which } from './polyglot.ts';
+import { isRunEnabled, AHA_DIR, runEnv, which } from './polyglot.ts';
 import { capture, isSafeRelativePath, killTree, runStep, writeProject } from './proc.ts';
 import { detectAppServer, manifestKey, type AppServer } from './app-servers.ts';
 import { shellFor } from './pipelines/run.ts';
 import { refreshBinPaths } from './toolchains.ts';
 
-export const DEV_PROJECTS = path.join(NANOCLI_DIR, 'dev');
-export const MAX_DEV_SERVERS = Number(process.env.NANOCLI_DEV_SERVERS) || 3;
+export const DEV_PROJECTS = path.join(AHA_DIR, 'dev');
+export const MAX_DEV_SERVERS = Number(process.env.AHA_DEV_SERVERS) || 3;
 const MAX_FILES = 600;
 const MAX_BYTES = 12 * 1024 * 1024;
 const MAX_LOG_LINES = 600;
@@ -35,10 +35,10 @@ const APP_DIRS = ['vendor', 'target', '.venv', '_build', 'deps', 'obj', 'bin', '
 /** Lockfiles the install step writes: a sync must not delete them (mix refuses to run without its lock) */
 const APP_LOCKS = ['mix.lock', 'Cargo.lock', 'go.sum', 'Gemfile.lock', 'uv.lock', 'package-lock.json', 'bun.lock', 'deno.lock', 'composer.lock'];
 
-/** On wherever the language runner is (this machine only, by default); NANOCLI_DEV=0 turns it off, =1 forces it on */
+/** On wherever the language runner is (this machine only, by default); AHA_DEV=0 turns it off, =1 forces it on */
 export function isDevEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  if (env.NANOCLI_DEV === '0') return false;
-  if (env.NANOCLI_DEV === '1') return true;
+  if (env.AHA_DEV === '0') return false;
+  if (env.AHA_DEV === '1') return true;
   return isRunEnabled(env);
 }
 
@@ -83,7 +83,7 @@ export interface DevState {
 }
 
 // Route modules can be loaded more than once; the servers must not be
-const registry: Map<string, DevServer> = ((globalThis as Record<string, unknown>).__nanocliDevServers ??= new Map()) as Map<string, DevServer>;
+const registry: Map<string, DevServer> = ((globalThis as Record<string, unknown>).__ahaDevServers ??= new Map()) as Map<string, DevServer>;
 
 // ---------------------------------------------------------------------------
 // Requests
@@ -469,9 +469,9 @@ export async function syncServer(id: string, changed: Record<string, string>, re
 }
 
 // Servers nobody looks at are stopped; all of them go when the studio does
-const timers = globalThis as { __nanocliDevReaper?: NodeJS.Timeout };
-if (!timers.__nanocliDevReaper) {
-  timers.__nanocliDevReaper = setInterval(() => {
+const timers = globalThis as { __ahaDevReaper?: NodeJS.Timeout };
+if (!timers.__ahaDevReaper) {
+  timers.__ahaDevReaper = setInterval(() => {
     for (const server of registry.values()) {
       if (server.child && Date.now() - server.lastSeen > IDLE_MS) {
         stopServer(server.id);
@@ -479,7 +479,7 @@ if (!timers.__nanocliDevReaper) {
       }
     }
   }, 60_000);
-  timers.__nanocliDevReaper.unref();
+  timers.__ahaDevReaper.unref();
   process.once('exit', () => {
     for (const server of registry.values()) if (server.child) killTree(server.child);
   });

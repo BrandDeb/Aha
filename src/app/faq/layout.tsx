@@ -6,7 +6,7 @@ import { breadcrumbLd, faqLd, pageMeta, siteUrl } from '@/lib/site';
 
 export const metadata: Metadata = pageMeta({
   title: 'FAQ',
-  description: 'Answers about NanoCLI Studio: the agent and proposals, the worker, plans, languages, Python, GitHub, models and keys, self-hosting and security.',
+  description: 'Answers about Aha!: the agent and proposals, the worker, plans, languages, Python, GitHub, models and keys, self-hosting and security.',
   path: '/faq',
 });
 

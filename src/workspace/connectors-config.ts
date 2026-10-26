@@ -10,7 +10,7 @@
 import { useSyncExternalStore } from 'react';
 import { parseConnector, type Connector } from '@/lib/connectors/types';
 
-const KEY = 'nanocli:connectors';
+const KEY = 'aha:connectors';
 const listeners = new Set<() => void>();
 const EMPTY: Connector[] = [];
 let cached: Connector[] | null = null;

@@ -49,7 +49,7 @@ export function parseShellRequest(body: unknown): ShellRequest | { error: string
   return { projectId: input.projectId, files, command: input.command, cwd };
 }
 
-const pool = createJobPool(Number(process.env.NANOCLI_SHELL_JOBS) || 3, 12, 'The server is busy running other commands. Try again in a moment.');
+const pool = createJobPool(Number(process.env.AHA_SHELL_JOBS) || 3, 12, 'The server is busy running other commands. Try again in a moment.');
 const lock = createKeyedLock();
 
 export async function runShell(request: ShellRequest, hooks: { onOutput: (stream: 'stdout' | 'stderr' | 'info', text: string) => void; signal?: AbortSignal }): Promise<RunResult> {
@@ -58,10 +58,10 @@ export async function runShell(request: ShellRequest, hooks: { onOutput: (stream
     lock(request.projectId, async () => {
       const dir = path.join(RUN_PROJECTS, request.projectId);
       // Dependencies, build output and caches stay in the folder; they are never sent back as project files
-      const keep = new Set([...KEEP, ...LANGUAGES.flatMap((l) => l.buildDirs ?? []), 'dist', 'build', '.next', '.nanocli-ci']);
+      const keep = new Set([...KEEP, ...LANGUAGES.flatMap((l) => l.buildDirs ?? []), 'dist', 'build', '.next', '.aha-ci']);
       await writeProject(dir, request.files, { keep });
       await refreshBinPaths();
-      const env: Record<string, string> = { ...runEnv(process.env, dir, {}), TERM: 'dumb', NANOCLI_TERMINAL: '1' };
+      const env: Record<string, string> = { ...runEnv(process.env, dir, {}), TERM: 'dumb', AHA_TERMINAL: '1' };
       const shell = shellFor(undefined, request.command, env.PATH ?? env.Path ?? '');
       const result = (partial: Partial<RunResult>): RunResult => ({ code: null, ms: Date.now() - started, changed: {}, removed: [], skipped: [], ...partial });
       if ('error' in shell) return result({ error: shell.error });

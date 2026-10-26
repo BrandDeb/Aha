@@ -164,7 +164,7 @@ const actual = createHash('sha256').update(data).digest('hex');
 if (actual !== expected) throw new Error(`Checksum mismatch for ${archive}: expected ${expected}, got ${actual}`);
 console.log(`  SHA-256 verified (${expected.slice(0, 16)}…)`);
 
-const work = mkdtempSync(path.join(tmpdir(), 'nanocli-node-'));
+const work = mkdtempSync(path.join(tmpdir(), 'aha-node-'));
 try {
   const file = path.join(work, archive);
   writeFileSync(file, data);

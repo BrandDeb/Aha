@@ -49,7 +49,7 @@ import { describeWhy, parseWhy, whyByLine, WHY_FILE } from '@/lib/why';
 import { AWAY_MS, morningReport, type MorningReport } from '@/lib/morning';
 import { MorningReportDialog } from './components/MorningReportDialog';
 
-const SEEN_KEY = 'nanocli:last-seen';
+const SEEN_KEY = 'aha:last-seen';
 import { liveSummary } from '@/lib/live/display';
 
 // Everything beyond the editor, terminal and Build panel loads the first time it is opened, so the studio starts with
@@ -249,8 +249,8 @@ export function Workspace() {
     setLastInGroup((prev) => ({ ...prev, [groupOf(id).id]: id }));
   }, []);
   // The explorer collapses to a rail on the left, the tools to a rail on the right
-  const [showExplorer, setShowExplorer] = usePersistedFlag('nanocli:explorer-open', true);
-  const [showPanel, setShowPanel] = usePersistedFlag('nanocli:tools-open', true);
+  const [showExplorer, setShowExplorer] = usePersistedFlag('aha:explorer-open', true);
+  const [showPanel, setShowPanel] = usePersistedFlag('aha:tools-open', true);
   // Phones and tablets: the explorer, the tools and the agent bar open as full-width sheets over the editor
   const [sheet, setSheet] = useState<null | 'files' | 'tools' | 'ask'>(null);
   const mobileAskRef = useRef<HTMLInputElement | null>(null);
@@ -291,7 +291,7 @@ export function Workspace() {
   useEffect(() => {
     if (!hydrated) return;
     try {
-      const firstVisit = !localStorage.getItem('nanocli:welcomed') && !localStorage.getItem('nanocli:ai') && !localStorage.getItem('nanocli:workspace') && !window.location.search;
+      const firstVisit = !localStorage.getItem('aha:welcomed') && !localStorage.getItem('aha:ai') && !localStorage.getItem('aha:workspace') && !window.location.search;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- storage is only readable after hydration
       if (firstVisit) setDialog('welcome');
       else {
@@ -657,7 +657,7 @@ export function Workspace() {
   useEffect(() => {
     try {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- storage is only readable in the browser
-      setRunArgs(localStorage.getItem(`nanocli:run-args:${project.name}`) ?? '');
+      setRunArgs(localStorage.getItem(`aha:run-args:${project.name}`) ?? '');
     } catch {
       setRunArgs('');
     }
@@ -665,7 +665,7 @@ export function Workspace() {
   const updateRunArgs = useCallback((value: string) => {
     setRunArgs(value);
     try {
-      localStorage.setItem(`nanocli:run-args:${projectRef.current.name}`, value);
+      localStorage.setItem(`aha:run-args:${projectRef.current.name}`, value);
     } catch {
       // storage blocked: kept for this session
     }
@@ -994,8 +994,8 @@ export function Workspace() {
       <div className="flex h-dvh flex-col bg-background text-gray-100">
         {/* Top bar */}
         <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-[var(--bar)] px-3" data-zen-hide>
-          <Link href="/landing" prefetch={false} className="flex items-center gap-2 pl-1" aria-label="NanoCLI overview">
-            <span className="wordmark text-[20px] text-gray-100">NANOCLI</span>
+          <Link href="/landing" prefetch={false} className="flex items-center gap-2 pl-1" aria-label="Aha! overview">
+            <span className="wordmark text-[20px] text-gray-100">AHA!</span>
           </Link>
           <span className="h-5 w-px bg-border" aria-hidden="true" />
           <input
@@ -1514,7 +1514,7 @@ export function Workspace() {
           onClose={() => {
             setDialog(null);
             try {
-              localStorage.setItem('nanocli:welcomed', '1');
+              localStorage.setItem('aha:welcomed', '1');
             } catch {
               // storage blocked: shown again next time
             }

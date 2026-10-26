@@ -70,7 +70,7 @@ export function SettingsDialog({ commands, isMac, onClose, initialTab = 'general
     const blob = new Blob([JSON.stringify(settings.keybindings, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'nanocli-keybindings.json';
+    a.download = 'aha-keybindings.json';
     a.click();
     URL.revokeObjectURL(a.href);
   };

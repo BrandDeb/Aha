@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import yaml from 'js-yaml';
 
-process.env.NANOCLI_HOME = mkdtempSync(path.join(tmpdir(), 'nanocli-ci-'));
+process.env.AHA_HOME = mkdtempSync(path.join(tmpdir(), 'aha-ci-'));
 const { detectStacks } = await import('../src/lib/pipelines/stack.ts');
 const { deployAvailability, generatePipeline } = await import('../src/lib/pipelines/generate.ts');
 const { condition, evaluate, expand, jobOrder, parsePipeline, pipelineFiles } = await import('../src/lib/pipelines/parse.ts');

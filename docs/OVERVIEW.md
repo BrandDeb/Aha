@@ -11,11 +11,12 @@ hand, or describe what you want and let the agent do it. The agent's work comes 
 (diffs, test runs, screenshots, a risk score), and you accept or reject them like a pull request.
 
 **About the name.** The project started as *NanoCLI Studio*: write TypeScript, get a native CLI binary (through the
-`scriptc` compiler). That still works and is still in the product (the Build panel), but the product grew into a
-general editor with 20+ languages, web app previews, an agent, connectors and web3 tools. The name no longer fits and
-**a rename is pending** (we are choosing a name and a domain). Until then you will see `NanoCLI` in the UI, in
-`package.json` (`nano-cli-studio`) and in internal keys (`nanocli:*` in localStorage, `~/.nanocli/`, `.nanocli/` in
-projects). The rename will move all of these and migrate users' saved data automatically.
+`scriptc` compiler). That still works (the Build panel), but the product grew into a general editor with 20+ languages,
+web app previews, an agent, connectors and web3 tools, so it was renamed **Aha!**. Everything moved with it:
+`package.json` is `aha`, browser storage uses `aha:*`, the home folder is `~/.aha/`, projects keep their files in
+`.aha/`, and settings variables are `AHA_*`. Saved data carries over by itself on first start (`src/lib/legacy-names.ts`),
+and the old `NANOCLI_*` variables still work. The desktop app keeps its old bundle identifier (`dev.nanocli.studio`) so
+installed copies update in place.
 
 ## Run it
 
@@ -41,7 +42,7 @@ Browser (Next.js client, React 19)            Server (Next.js routes + server.js
 │  ├ panels/ (Build, Agent, Git,   │         │   solc, pipelines, doctor, update…)    │
 │  │   Python, Web3, Worker…)      │  WS     │ server.js: terminal + live channels    │
 │  ├ proposals.tsx (agent work)    │ ◀─────▶ │ src/lib/*: the logic behind each route │
-│  └ store.tsx (project state)     │         │ ~/.nanocli/: toolchains, caches        │
+│  └ store.tsx (project state)     │         │ ~/.aha/: toolchains, caches        │
 └──────────────────────────────────┘         └──────────────────────────────────────┘
         Desktop app: src-tauri/ wraps the same app and runs the server locally
 ```
@@ -121,7 +122,7 @@ These need an account, a key or a decision only the owner can provide:
 
 | Item | Needed for |
 |---|---|
-| New product name and domain | The rename (see above) |
+| Domain for Aha! (e.g. getaha.dev) | The public site address |
 | `NEXT_PUBLIC_SITE_URL` | Correct canonical URLs, sitemap and social cards for the public site |
 | Google sign-in domain | Sign in with Google |
 | GitHub OAuth client id | Sign in with GitHub (device flow) |

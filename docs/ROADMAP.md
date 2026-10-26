@@ -1,4 +1,4 @@
-# NanoCLI Studio roadmap
+# Aha! roadmap
 
 What we build next, as short specs: why it matters, what the user sees, how we build it, and when it counts as
 done. [BACKLOG.md](BACKLOG.md) lists everything with its status; this file is the order and the detail for what is
@@ -51,7 +51,7 @@ silence is visible.
   (idempotency), "is the premise still true?" checks before acting (stop when stale).
 - Runs use the existing proposal machinery with a per-watcher budget (runs per day, tokens, money); over budget →
   paused with a notice.
-- State in `.nanocli/watchers.json` (definitions, travel with the project) and the browser/desktop store (run history).
+- State in `.aha/watchers.json` (definitions, travel with the project) and the browser/desktop store (run history).
 - Desktop app and local studio keep watchers running in the background; the browser runs them while open.
 - Webhook trigger: a signed URL per watcher (HMAC secret), local studio only.
 
@@ -77,7 +77,7 @@ channel. Each proposal shows the messages it sent and received next to its evide
 - New agent tools: `post_message`, `ask_agent` (blocks with a timeout, answered by the other proposal's agent between
   its steps) and `list_agents`. Messages are typed with a small schema (decision, question, answer, handoff).
 - Access: per proposal **open / ask first / closed**; the user approves "ask first" requests.
-- History saved in `.nanocli/channels/<date>.jsonl`, searchable, so later agents learn past decisions.
+- History saved in `.aha/channels/<date>.jsonl`, searchable, so later agents learn past decisions.
 - Later: bridge a channel to an external relay (Agent Relay or MCP) so a teammate's agent can join.
 
 **Done when.** Two forked proposals coordinate an API rename through the channel in a browser test (mock model), the
@@ -147,7 +147,7 @@ names), install scripts, age and downloads, known advisories (OSV), licence. Fin
 proposal adding a typosquatted package is held with the reason shown.
 
 ### 11. Project memory and guided tour
-`.nanocli/memory.md` the agent maintains (decisions, conventions, gotchas), and a five-stop tour of any codebase for
+`.aha/memory.md` the agent maintains (decisions, conventions, gotchas), and a five-stop tour of any codebase for
 newcomers generated from the import graph and the why-history. *Done when* a new project gets a tour and the agent
 cites memory in a later proposal.
 

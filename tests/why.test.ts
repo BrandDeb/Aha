@@ -27,5 +27,5 @@ test('recorded newest first, and found again after the code moved and was re-ind
   assert.equal(whyByLine(entries, 'other.ts', moved).size, 0);
   assert.match(describeWhy(entries[1], 1000 + 3 * 3600_000), /^\*\*Why this line:\*\* Handle an empty cart\n\nyou asked the agent · accepted 3 h ago · Verified/);
   assert.deepEqual(parseWhy('not json'), []);
-  assert.equal(WHY_FILE, '.nanocli/why.json');
+  assert.equal(WHY_FILE, '.aha/why.json');
 });

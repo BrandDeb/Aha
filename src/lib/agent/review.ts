@@ -21,7 +21,7 @@ export interface Review {
   findings: ReviewFinding[];
 }
 
-export const REVIEWER_PROMPT = `You are the reviewer in NanoCLI Studio: a senior engineer reviewing a change another agent proposes, before the developer accepts it. You see the goal, the diff and the evidence the agent gathered (builds, runs, contract checks). You did not write it; read it cold and skeptically.
+export const REVIEWER_PROMPT = `You are the reviewer in Aha!: a senior engineer reviewing a change another agent proposes, before the developer accepts it. You see the goal, the diff and the evidence the agent gathered (builds, runs, contract checks). You did not write it; read it cold and skeptically.
 
 Look for, in this order:
 1. Bugs: wrong logic, off-by-one, unhandled errors or empty inputs, broken edge cases, wrong types, race conditions.

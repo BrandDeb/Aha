@@ -3,7 +3,7 @@ import { mkdir, rename, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { NextRequest, NextResponse } from 'next/server';
-import { NANOCLI_DIR } from '@/lib/connectors/env';
+import { AHA_DIR } from '@/lib/connectors/env';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,13 +11,13 @@ export const dynamic = 'force-dynamic';
 /**
  * The Solidity compiler for the browser, served from this origin (the studio's script policy only runs its own
  * scripts): the official soljson builds from binaries.soliditylang.org, downloaded once and kept in
- * ~/.nanocli/solc, so the second compile at a version works offline.
+ * ~/.aha/solc, so the second compile at a version works offline.
  *
  *   GET /api/solc            → { latest, releases: ["0.8.38", …] } (newest first)
  *   GET /api/solc?v=0.8.38   → the compiler, as JavaScript
  */
 const BASE = 'https://binaries.soliditylang.org/bin';
-const DIR = path.join(NANOCLI_DIR, 'solc');
+const DIR = path.join(AHA_DIR, 'solc');
 let list: { at: number; latest: string; releases: Record<string, string> } | null = null;
 
 async function releases() {

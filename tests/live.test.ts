@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-process.env.NANOCLI_HOME = mkdtempSync(path.join(tmpdir(), 'nanocli-live-'));
+process.env.AHA_HOME = mkdtempSync(path.join(tmpdir(), 'aha-live-'));
 const { instrument } = await import('../src/lib/live/instrument.ts');
 const { runLive, parseLiveRequest } = await import('../src/lib/live/run.ts');
 
@@ -92,7 +92,7 @@ test('live values: top-level await, ES module files, and where an error was thro
   assert.equal(err.ok, false);
   assert.equal(err.files['main.ts'].lines[2].values.threw.last, 'Error: boom');
   assert.match(err.output, /at f \(main\.ts\)/, 'the trace names the project file');
-  assert.doesNotMatch(err.output, /__h|\.nanocli-live|node:internal/);
+  assert.doesNotMatch(err.output, /__h|\.aha-live|node:internal/);
 });
 
 test('live values: Python errors land on the line that raised them', async () => {

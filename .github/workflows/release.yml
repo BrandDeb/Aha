@@ -76,7 +76,7 @@ jobs:
         with:
           upload_url: ${{ needs.create-release.outputs.release_id }}
           asset_path: dist/${{ matrix.platform }}-${{ matrix.arch }}.zip
-          asset_name: nano-cli-studio-${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip
+          asset_name: aha-${{ github.ref_name }}-${{ matrix.platform }}-${{ matrix.arch }}.zip
           asset_content_type: application/zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -125,4 +125,4 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_COLOR: good
           SLACK_TITLE: "New Release ${{ github.ref_name }}"
-          SLACK_MESSAGE: "NanoCLI Studio ${{ github.ref_name }} has been released!"
+          SLACK_MESSAGE: "Aha! ${{ github.ref_name }} has been released!"

@@ -1,12 +1,13 @@
-# NanoCLI Studio
+# Aha!
 
 > **The editor where the agent and you share one workspace.**
 
-NanoCLI Studio is a browser and desktop IDE (Next.js, Monaco, Tauri) where an AI agent works next to your code instead
+Aha! is a browser and desktop IDE (Next.js, Monaco, Tauri) where an AI agent works next to your code instead
 of in a separate tool: every change it makes arrives as a **proposal with evidence** (it built, it ran, the contracts
 hold, a second reviewer read it), and you can vibe-code a whole app from a sentence or a screenshot, or write every
 line yourself. It started as a home for [scriptc](https://scriptc.dev) (TypeScript compiled to a native binary) and
 now runs 70+ languages, web apps with live preview, Python with uv, and Solidity with Remix-style tools.
+Formerly *NanoCLI Studio*: saved settings, projects and `NANOCLI_*` variables carry over by themselves.
 
 [![CI/CD Pipeline](https://github.com/BrandDeb/Aha/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/BrandDeb/Aha/actions/workflows/ci-cd.yml)
 [![scriptc](https://github.com/BrandDeb/Aha/actions/workflows/scriptc.yml/badge.svg)](https://github.com/BrandDeb/Aha/actions/workflows/scriptc.yml)
@@ -55,7 +56,7 @@ Copy `.env.example` to `.env.local` only for GitHub sign-in or a hosted default 
    `sudo apt install clang lld`; Windows: use WSL). zig is bundled by `npm install`.
 2. **File → Open Folder…** and pick the cloned `Aha` folder; accept the recommended extensions.
 3. Open the terminal (<kbd>Ctrl</kbd>+<kbd>`</kbd>) and run `npm install`.
-4. Press <kbd>F5</kbd> (**NanoCLI Studio: dev server**) — the browser opens at http://localhost:3000 with
+4. Press <kbd>F5</kbd> (**Aha!: dev server**) — the browser opens at http://localhost:3000 with
    breakpoints working in `server.js` and the API routes. Or run the **Dev server** task
    (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>), or `npm run dev`.
 
@@ -214,7 +215,7 @@ start of the run. Results are only drawn on the code they came from: while you t
 your edits until the next run lands.
 
 Live values run your program on the server, so they work where Run does: on your own machine (or with
-`NANOCLI_RUN=1`). Your program runs on every pause, so keep it off for code that sends email or writes to a
+`AHA_RUN=1`). Your program runs on every pause, so keep it off for code that sends email or writes to a
 real database.
 
 ### Rewind
@@ -236,7 +237,7 @@ the project.
 ## Contracts
 
 A contract is a rule about your project that has to stay true, in words, with the check that proves it.
-They live in `.nanocli/contracts.json`, so they travel with the project and get reviewed like code:
+They live in `.aha/contracts.json`, so they travel with the project and get reviewed like code:
 
 ```json
 {
@@ -341,7 +342,7 @@ first, so it is one click to undo. Proposals restored from an earlier session ar
 
 Every line an accepted proposal wrote remembers why it is there. A thin accent mark sits beside those lines;
 hover the line number for the reason: the goal it served, who asked (you, the debugger or the worker), when it
-was accepted, its evidence ("Verified") and the reviewer's verdict. The history lives in `.nanocli/why.json`, so it
+was accepted, its evidence ("Verified") and the reviewer's verdict. The history lives in `.aha/why.json`, so it
 is committed with the code and travels with the repository; lines are matched by their text, so the reason
 stays attached while the code around them moves or is re-indented.
 
@@ -492,7 +493,7 @@ already fixed, or changed files that were deleted again, is a skip. It waits whi
 review, and stops at its daily budget. Every run, suggestion and hold-back goes in the **What they did** log with the
 reason, and repeats fold into one line.
 
-Watchers are saved in `.nanocli/watchers.json`, so they travel with the project and its Git history. Their log stays in
+Watchers are saved in `.aha/watchers.json`, so they travel with the project and its Git history. Their log stays in
 your browser. They run while the studio is open. Running in the background with the window closed (desktop app) and
 webhook triggers are on the [roadmap](docs/ROADMAP.md).
 
@@ -521,13 +522,13 @@ use one directly.
   lists every skill it finds with its description, and installs the ones you pick, pinned to the commit it read (for example
   `anthropics/skills`). **Update** moves a skill to the latest commit. Private repositories work when you're signed in with
   GitHub. Files are listed with the GitHub API, or with git when the API is rate-limited or blocked.
-- **Your own:** write one in **Settings → Skills** (kept for you in `~/.nanocli/skills`), or put it in the project at
+- **Your own:** write one in **Settings → Skills** (kept for you in `~/.aha/skills`), or put it in the project at
   `agent/skills/<name>/SKILL.md` so it travels with the project and with [field kits](#field-kits). The agent can write one
   for you too: ask it to "create a skill for…".
 
 Skills are instructions, not code: installing one runs nothing, text files only (no binaries), with size limits, and paths
 can't leave the skill folder. A skill can't override your request or the safety rules, and anything it asks the agent to run
-still needs your OK. Installing is available when the studio runs on your own machine (`NANOCLI_SKILLS=1` turns it on for a
+still needs your OK. Installing is available when the studio runs on your own machine (`AHA_SKILLS=1` turns it on for a
 server, `0` turns it off); built-in and project skills always work.
 
 ### Try several approaches (Harness²-style)
@@ -587,7 +588,7 @@ Safety model, since the agent reads untrusted text (web pages, issues, query res
   the address it checked, re-checks every redirect, and caps size and time.
 - Connectors that run programs or read files on the server (MCP over a local process, SQLite, custom commands) work only
   when the studio listens on your own machine (the default). If it is exposed (`HOST=0.0.0.0`, as in the Docker image)
-  they switch off by themselves; `NANOCLI_CONNECTORS=0` turns every connector off, `NANOCLI_CONNECTORS=1` forces them on.
+  they switch off by themselves; `AHA_CONNECTORS=0` turns every connector off, `AHA_CONNECTORS=1` forces them on.
 - The same origin, trusted-host and rate-limit checks as the Python route apply. Processes get an allow-listed
   environment (never the server's secrets) and a private `HOME`; idle MCP sessions are closed after five minutes.
 
@@ -601,7 +602,7 @@ has `.sol` files):
 - **Compiler in the browser.** The official compiler (the same soljson builds Remix uses) runs in a web worker at the
   newest release every file's `pragma solidity` accepts, or the one you pick; optimizer and runs, EVM version and
   via-IR are settings. It recompiles as you type. The studio downloads each version once and keeps it in
-  `~/.nanocli/solc`, so it works offline after that. Errors and warnings link to their line; **Fix with the agent**
+  `~/.aha/solc`, so it works offline after that. Errors and warnings link to their line; **Fix with the agent**
   hands them over.
 - **Imports just work.** Relative paths, `remappings.txt` and foundry.toml remappings, `lib/` and `node_modules/`,
   and npm packages (`@openzeppelin/contracts`, `forge-std`, `solmate`, `solady`, Chainlink, Uniswap) fetched from
@@ -657,7 +658,7 @@ The **Pipelines** tab sets up CI/CD for the project you have open and runs it be
   the same reproduce, fix, prove loop, and **Re-run failed**.
 
 Running pipelines locally follows the same rule as running code: only when the studio listens on your own machine (or
-`NANOCLI_RUN=1`). Signing in with GitHub now asks for the `workflow` permission, which GitHub requires for commits that
+`AHA_RUN=1`). Signing in with GitHub now asks for the `workflow` permission, which GitHub requires for commits that
 change `.github/workflows/`; sign in again if you signed in before.
 
 
@@ -694,7 +695,7 @@ the moment it opens:
   with a rejects report (Python standard library; SQLite first, their Postgres when ready)
 
 **Kit → Export kit** writes a `.nanokit.json`; **Open a kit file…** opens one. **Make this project a kit** starts the
-manifest (`.nanocli/kit.json`) for any project. Kits are treated as untrusted input. Paths are checked, and connectors
+manifest (`.aha/kit.json`) for any project. Kits are treated as untrusted input. Paths are checked, and connectors
 that would run a program show the command before you add them; once added, every call still asks you first. Exporting
 never carries secrets: environment values aren't part of a kit, `.env` files stay behind, and any file that looks like it
 holds a key (cloud, model, GitHub, Slack or Stripe keys, private keys, passwords in URLs) is left out and named.
@@ -709,10 +710,10 @@ python main.py --top 5    run a file with arguments
 uv add httpx "rich>=13"   add dependencies (creates pyproject.toml if needed); --dev for dev dependencies
 uv remove httpx           uv sync    uv lock [--upgrade]    uv tree    uv init [name]
 uv python pin 3.12        pin a Python version; uv downloads it if it isn't installed
-install-uv                download uv into ~/.nanocli/ if it isn't on your PATH
+install-uv                download uv into ~/.aha/ if it isn't on your PATH
 ```
 
-Each project gets its own folder and virtual environment under `~/.nanocli/python/` (set `NANOCLI_HOME` to
+Each project gets its own folder and virtual environment under `~/.aha/python/` (set `AHA_HOME` to
 move it), kept between runs; uv's cache is shared. The browser stays the source of truth: it sends the project's files with each command and
 gets `pyproject.toml`, `uv.lock` and any text files the program wrote back.
 
@@ -725,7 +726,7 @@ Python is on by default, but:
 - Programs run with a short allow-list of environment variables (never `ANTHROPIC_API_KEY`, the GitHub
   secrets or anything else from the server), a private `HOME`, a timeout (5 min per run, 20 min per install)
   and a 2 MB output cap; aborting kills the whole process tree.
-- It is **not a sandbox**. On a shared or public server set `NANOCLI_PYTHON=0` or run the studio in a
+- It is **not a sandbox**. On a shared or public server set `AHA_PYTHON=0` or run the studio in a
   container. The Docker image ships with Python off, and its Alpine base can't install most AI wheels
   (torch and friends need glibc), so use a Debian-based image if you enable it there.
 
@@ -742,14 +743,14 @@ guide to proportions rather than promises:
 | Code editor | ~570 KB brotli, served from this server and cached for a year (it used to come from a public CDN, which also meant no editor offline). The studio page preloads it (an HTTP `Link` header, only on the page itself, never on prefetches from other pages), so it downloads while the page hydrates: drawn **~0.6 s** after a cold load (was ~0.73 s), **~0.17–0.27 s** on later visits |
 | First paint | ~0.2 s; the page is interactive before the editor arrives |
 | Compression | Next's static chunks are served brotli-compressed (each compressed once, in the background, and kept in memory): 17% less than gzip, e.g. the product page 261 → 216 KB |
-| Server | starts serving in ~0.43 s with Node's compile cache (kept in `~/.nanocli/cache`; ~0.51 s without it), ~125 MB resident when idle |
+| Server | starts serving in ~0.43 s with Node's compile cache (kept in `~/.aha/cache`; ~0.51 s without it), ~125 MB resident when idle |
 | Builds | ~0.6 s for a small program (type-check + IR, WASM or native), two at a time by default (`MAX_CONCURRENT_BUILDS`) |
 | Disk (`node_modules`) | ~1.6 GB, of which scriptc's compiler binaries ~410 MB, the bundled zig ~410 MB (offline WASM builds), Next.js ~200 MB and the editor ~105 MB (only its 25 MB `min/` folder is ever served) |
 
 Things that keep it light: the studio makes no request to any third party (models are the only exception, and only the
 one you choose); idle MCP sessions close after five minutes; compiled temp files, uv's cache and idle Python environments
 are cleaned up (Settings → Maintenance shows and trims them); connectors, the updater and the doctor load their code only when
-used. If disk matters more than offline WASM builds, remove `@zigc/*` after install: the first WASM build then fetches the exact zig version from the npm registry (checked against its sha512) into `~/.nanocli/zig`. The desktop app does this by default and also leaves out source maps, type definitions (except scriptc's) and Next's development runtimes: 537 → 400 MB of dependencies.
+used. If disk matters more than offline WASM builds, remove `@zigc/*` after install: the first WASM build then fetches the exact zig version from the npm registry (checked against its sha512) into `~/.aha/zig`. The desktop app does this by default and also leaves out source maps, type definitions (except scriptc's) and Next's development runtimes: 537 → 400 MB of dependencies.
 
 ---
 
@@ -768,7 +769,7 @@ editor (Ctrl/⌘ + Alt + P toggles it):
 - **A path bar, reload, Full / Tablet / Phone widths, open in a new tab, and the server's log.** The status bar shows
   where it is running.
 - **Isolated.** The page runs on its own origin (`127.0.0.1` and a free port) in a sandboxed frame, so it cannot reach the
-  studio. Each project's files live in `~/.nanocli/dev/<project>`.
+  studio. Each project's files live in `~/.aha/dev/<project>`.
 
 **In browser, no install.** Vite apps (React, Preact, Vue, Svelte or plain TypeScript) can also run without any server:
 switch the Preview to **In browser** (it is the default wherever dev servers are off, such as a hosted studio).
@@ -792,10 +793,10 @@ place. **⇩** saves the built app as a single HTML page you can send to anyone:
 (packages load from esm.sh).
 
 Like **Other languages** below, this runs your project's code (and its packages' install scripts) on the machine hosting
-the studio, so it is on only when the studio listens on that machine alone. `NANOCLI_DEV=0` turns it off and `=1` forces
+the studio, so it is on only when the studio listens on that machine alone. `AHA_DEV=0` turns it off and `=1` forces
 it on. At most three dev servers run at once (the least recently viewed stops first), a server nobody has looked at for
 20 minutes stops, and they all stop with the studio. Every starter is tested for real: installed, served and edited
-(`NANOCLI_TEST_NETWORK=1 npm test`).
+(`AHA_TEST_NETWORK=1 npm test`).
 
 
 ### Full apps in every language
@@ -892,27 +893,27 @@ Vyper (ABI and bytecode), Cairo for Starknet (Scarb), and Move for Sui (build an
 - **Out of the box.** If a language isn't installed, the first **Run** installs it (or press **Install** in the Run tab), with
   [mise](https://mise.jdx.dev): about 1 MB for Lua, 75 MB for Go, a few hundred for Swift or .NET. A tool's runtime comes
   with it (Kotlin, Scala and Clojure bring Java; Elixir brings Erlang; Vyper runs through uv).
-- **Yours first.** Anything already on your `PATH` is used as is. The studio's toolchains live in `~/.nanocli/mise` with
+- **Yours first.** Anything already on your `PATH` is used as is. The studio's toolchains live in `~/.aha/mise` with
   their own data, config and caches, so they never touch your own mise, `~/.rustup` or `~/.cargo`.
 - **Patched as soon as releases ship.** Each tool is pinned to its major line (`go = "1"`, `zig = "0.16"`, `rust = "stable"`).
   The studio checks every 12 hours and applies updates within the line automatically, removes what they replaced, and keeps
   mise itself current. A new major version is shown with an **Upgrade** button and never installed on its own.
 - **Verified downloads.** mise comes from its official mirror and is checked against the release's SHA-256 list before it
   runs; mise checks the toolchains it installs.
-- Switches: `NANOCLI_TOOLCHAIN_AUTO_INSTALL=0` and `NANOCLI_TOOLCHAIN_AUTO_UPDATE=0`, or the two checkboxes in the Run tab.
+- Switches: `AHA_TOOLCHAIN_AUTO_INSTALL=0` and `AHA_TOOLCHAIN_AUTO_UPDATE=0`, or the two checkboxes in the Run tab.
 
 Which engine runs a file: `.ts` is scriptc, `.py` is uv, a `deno.json` or `bunfig.toml` moves `.ts`/`.js` to Deno or Bun, a
 `package.json` makes `.js` run on Node, and other extensions pick their language (Gleam, Cairo, Move and Solidity projects
 need their `gleam.toml`, `Scarb.toml`, `Move.toml` or `foundry.toml`). `languages` in the terminal lists what this machine
-has. Projects keep their dependencies and build output on the server between runs (`~/.nanocli/run/`), caches are shared,
+has. Projects keep their dependencies and build output on the server between runs (`~/.aha/run/`), caches are shared,
 and files a program writes come back into the explorer.
 
 Same trust model as Python: it **runs your code on the machine hosting the studio**, so it is only on when the studio
-listens on that machine alone (`NANOCLI_RUN=0` turns it off, `=1` forces it on). Programs get a short allow-list of
+listens on that machine alone (`AHA_RUN=0` turns it off, `=1` forces it on). Programs get a short allow-list of
 environment variables (never the studio's keys), a private `HOME`, a time limit per step (5 min to run, 10 to compile), a 2 MB
 output cap, and stopping a run kills the whole process tree. It is not a sandbox.
 
-**Tested for real**, with the studio installing each missing toolchain itself (`NANOCLI_TEST_NETWORK=1 npm test`): Node, Bun,
+**Tested for real**, with the studio installing each missing toolchain itself (`AHA_TEST_NETWORK=1 npm test`): Node, Bun,
 Deno, Go, Rust, C, C++, Zig, Java, Kotlin, C#, F#, Ruby, PHP, Perl, Lua, R, Julia, Swift, Dart, Elixir, Erlang, Gleam, Clojure,
 Groovy, Nim, Crystal, Odin, D, Bash, and the Solidity, Vyper and Cairo contracts. Not yet run end to end: Scala and Racket
 (their downloads failed behind the test machine's TLS proxy), Move (Sui fetches its framework from GitHub, which that machine
@@ -929,7 +930,7 @@ Sign-in (and sign-up: GitHub's page offers a free account) needs one GitHub OAut
    callback URL `http://127.0.0.1/api/github/callback`.
 2. In the new app's settings, tick **Enable Device Flow**. You don't need a client secret.
 3. Give the studio its client ID: `GITHUB_CLIENT_ID=…` for a server, and the repository variable
-   `NANOCLI_GITHUB_CLIENT_ID` (Settings → Secrets and variables → Actions → Variables) so the desktop builds include it.
+   `AHA_GITHUB_CLIENT_ID` (Settings → Secrets and variables → Actions → Variables) so the desktop builds include it.
    A client ID is public; it is not a secret.
 
 **Sign in** then shows a one-time code: open github.com/login/device, enter it, authorize, and the studio signs you in by
@@ -940,7 +941,7 @@ and never reaches the page; your avatar's menu signs out.
 
 ## Desktop app (Windows and macOS)
 
-NanoCLI Studio also ships as a native app built with [Tauri](https://tauri.app). The shell is deliberately thin (a 4.5 MB
+Aha! also ships as a native app built with [Tauri](https://tauri.app). The shell is deliberately thin (a 4.5 MB
 Rust binary): it starts the studio's server with a bundled Node.js on a free loopback port, shows a loading screen, then
 points a native window at it, using the system's own web view (WebView2 on Windows, WebKit on macOS) rather than shipping a
 browser. The page gets no native APIs and runs exactly as it does in a browser, with the same security model.
@@ -951,7 +952,7 @@ browser. The page gets no native APIs and runs exactly as it does in a browser, 
 - On macOS the server gets your login shell's `PATH`, so compilers you installed with Homebrew, rustup and the like are used.
 - Builds write to the app's cache folder (the install folder is read-only).
 - zig (needed for WebAssembly builds, ~400 MB) isn't shipped: the first WASM build fetches the exact version scriptc expects
-  from the npm registry, checked against its sha512, into `~/.nanocli/zig` (about 90 MB to download, once).
+  from the npm registry, checked against its sha512, into `~/.aha/zig` (about 90 MB to download, once).
 
 Build it yourself on the platform you're packaging for (Rust, and on Linux the WebKitGTK dev packages):
 
@@ -962,8 +963,8 @@ npx tauri build                      # installers in src-tauri/target/release/bu
 ```
 
 **Download:** the [/download](/download) page (also the Download section on the landing page) links to the latest
-installers, highlights the one for the visitor's system and shows how to install it: `NanoCLI-Studio-macOS-arm64.dmg` and
-`NanoCLI-Studio-Windows-x64-setup.exe` in the `desktop-latest` release, with `SHA256SUMS.txt`. Point it at another repository
+installers, highlights the one for the visitor's system and shows how to install it: `Aha-macOS-arm64.dmg` and
+`Aha-Windows-x64-setup.exe` in the `desktop-latest` release, with `SHA256SUMS.txt`. Point it at another repository
 with `NEXT_PUBLIC_DOWNLOADS_REPO=owner/repo`.
 
 CI (`.github/workflows/desktop.yml`) builds the macOS (Apple silicon) `.dmg` and the Windows installer on pull requests that
@@ -1030,7 +1031,7 @@ Maintenance only works when the studio listens on your own machine (the default)
 ```
 Browser ── Next.js 16 (App Router), React 19, Tailwind v4, Monaco
    │
-   ├── POST /api/python     ── src/lib/python.ts ── uv ── ~/.nanocli/python/<project>/  (streamed NDJSON)
+   ├── POST /api/python     ── src/lib/python.ts ── uv ── ~/.aha/python/<project>/  (streamed NDJSON)
    ├── POST /api/compile   ─┐
    ├── POST /api/coverage  ─┼─ src/lib/compiler.ts ── execFile(scriptc) ── temp/  (pruned hourly)
    ├── GET  /api/download  ─┘
@@ -1217,31 +1218,31 @@ AI_REQUESTS_PER_10_MIN=30   # per client (first X-Forwarded-For hop)
 # Network and Python
 HOST=127.0.0.1               # interface to listen on (0.0.0.0 only behind a proxy or in a container)
 ALLOWED_HOSTS=               # extra Host names allowed for Python commands, comma separated
-NANOCLI_PYTHON=1             # 0 turns Python (uv) off entirely
+AHA_PYTHON=1             # 0 turns Python (uv) off entirely
 UV_BIN=                      # path to a specific uv binary
-NANOCLI_HOME=                # where Python environments and caches live (default ~/.nanocli)
-NANOCLI_AUTOPILOT=1          # 0 = no background checks at all
-NANOCLI_AUTOREPAIR=1         # default for "Repair automatically" (0 = off)
-NANOCLI_AUTOUPDATE=0         # default for "Update automatically" (1 = on)
-NANOCLI_PY_TIMEOUT_MS=300000          # per program run
-NANOCLI_PY_INSTALL_TIMEOUT_MS=1200000 # per install / sync / lock
-NANOCLI_PY_JOBS=3                     # concurrent Python commands
-NANOCLI_PY_REQUESTS_PER_10_MIN=120    # per client
+AHA_HOME=                # where Python environments and caches live (default ~/.aha)
+AHA_AUTOPILOT=1          # 0 = no background checks at all
+AHA_AUTOREPAIR=1         # default for "Repair automatically" (0 = off)
+AHA_AUTOUPDATE=0         # default for "Update automatically" (1 = on)
+AHA_PY_TIMEOUT_MS=300000          # per program run
+AHA_PY_INSTALL_TIMEOUT_MS=1200000 # per install / sync / lock
+AHA_PY_JOBS=3                     # concurrent Python commands
+AHA_PY_REQUESTS_PER_10_MIN=120    # per client
 
 # Connectors (agent tools: MCP, databases, web, GitHub)
-NANOCLI_RUN=                 # 0 = don't run other languages, 1 = force on; unset = on only when HOST is loopback
-NANOCLI_RUN_JOBS=3           # concurrent runs
-NANOCLI_DEV=                 # web app dev servers: 0 = off, 1 = force on; unset = on only when HOST is loopback
-NANOCLI_DEV_SERVERS=3        # dev servers running at once
-NANOCLI_TOOLCHAIN_AUTO_INSTALL=1   # 0 = never install a missing toolchain on Run
-NANOCLI_TOOLCHAIN_AUTO_UPDATE=1    # 0 = don't apply toolchain updates on their own
+AHA_RUN=                 # 0 = don't run other languages, 1 = force on; unset = on only when HOST is loopback
+AHA_RUN_JOBS=3           # concurrent runs
+AHA_DEV=                 # web app dev servers: 0 = off, 1 = force on; unset = on only when HOST is loopback
+AHA_DEV_SERVERS=3        # dev servers running at once
+AHA_TOOLCHAIN_AUTO_INSTALL=1   # 0 = never install a missing toolchain on Run
+AHA_TOOLCHAIN_AUTO_UPDATE=1    # 0 = don't apply toolchain updates on their own
 TRUST_PROXY_HOPS=1           # reverse proxies in front of the studio (rate limits use the address the last one saw)
 COMPILE_REQUESTS_PER_10_MIN=300
-NANOCLI_RUN_REQUESTS_PER_10_MIN=150
-NANOCLI_PIPELINE_JOBS=2       # local pipeline runs at once
-NANOCLI_PIPELINE_RUNS_PER_10_MIN=60
-NANOCLI_CONNECTORS=          # 0 = off, 1 = force on; unset = on only when HOST is loopback
-NANOCLI_CONNECTOR_CALLS_PER_10_MIN=400  # per client
+AHA_RUN_REQUESTS_PER_10_MIN=150
+AHA_PIPELINE_JOBS=2       # local pipeline runs at once
+AHA_PIPELINE_RUNS_PER_10_MIN=60
+AHA_CONNECTORS=          # 0 = off, 1 = force on; unset = on only when HOST is loopback
+AHA_CONNECTOR_CALLS_PER_10_MIN=400  # per client
 
 # Compiler
 MAX_CONCURRENT_BUILDS=2
@@ -1261,7 +1262,7 @@ SCRIPTC_LINKER=          # optional: linker driver scriptc uses for executables
 | `npm run lint` | ESLint |
 | `npm run typecheck` | Generate route types and run `tsc` |
 | `npm test` | Unit + scriptc and uv integration tests (`node --test`) |
-| `NANOCLI_TEST_NETWORK=1 npm test` | Also installs real packages from PyPI and runs every Python template against fake local LLM servers |
+| `AHA_TEST_NETWORK=1 npm test` | Also installs real packages from PyPI and runs every Python template against fake local LLM servers |
 | `npm run templates:build` | Compile every template to `dist/templates/` |
 | `npm run templates:wasm` | Same, plus WASM modules (uses the bundled zig) |
 | `npm run clean` | Remove `temp/`, `.next/` and `dist/` |

@@ -3,7 +3,7 @@
 import { setEditorAccent } from '@/components/CodeEditor';
 import { cssVariables, type Appearance, type Mode } from './appearance';
 
-const VARS_KEY = 'nanocli:appearance-vars';
+const VARS_KEY = 'aha:appearance-vars';
 const TONE_VARS = ['--color-black', '--bar', '--panel', '--raised'];
 
 /**

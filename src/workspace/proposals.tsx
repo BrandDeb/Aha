@@ -119,8 +119,8 @@ export const BUDGETS: Record<AgentPrefs['budget'], { label: string; budget: Part
   long: { label: 'Long · 60 steps', budget: { maxSteps: 60, maxToolCalls: 200, maxMillis: 25 * 60_000, maxFixAttempts: 6 } },
 };
 
-const STORE_KEY = 'nanocli:proposals';
-const PREFS_KEY = 'nanocli:agent-prefs';
+const STORE_KEY = 'aha:proposals';
+const PREFS_KEY = 'aha:agent-prefs';
 const MAX_KEPT = 15;
 const DEFAULT_PREFS: AgentPrefs = { budget: 'standard', trustCommands: false, approaches: 0, autoDebug: false, review: true, autoAccept: 0 };
 

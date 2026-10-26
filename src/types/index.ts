@@ -1,5 +1,5 @@
 /**
- * Nano CLI Studio - Type Definitions
+ * Aha! Studio - Type Definitions
  * 
  * Central type definitions for the scriptc-powered edge app
  */

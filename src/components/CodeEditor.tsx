@@ -144,7 +144,7 @@ function defineThemes(monaco: Monaco) {
   const dark = { ...syntaxColors(editorAccent, 'dark'), accent: accentTokens(editorAccent, 'dark').accent };
   const light = { ...syntaxColors(editorAccent, 'light'), accent: accentTokens(editorAccent, 'light').accent };
   const strip = (hex: string) => hex.replace('#', '');
-  monaco.editor.defineTheme('nanocli-dark', {
+  monaco.editor.defineTheme('aha-dark', {
     base: 'vs-dark',
     inherit: true,
     rules: [
@@ -159,7 +159,7 @@ function defineThemes(monaco: Monaco) {
     ],
     colors: colors(true, dark.accent),
   });
-  monaco.editor.defineTheme('nanocli-light', {
+  monaco.editor.defineTheme('aha-light', {
     base: 'vs',
     inherit: true,
     rules: [
@@ -186,7 +186,7 @@ export function setEditorAccent(hex: string): void {
   editorAccent = hex;
   if (!monacoInstance) return;
   defineThemes(monacoInstance);
-  monacoInstance.editor.setTheme(document.documentElement.classList.contains('light') ? 'nanocli-light' : 'nanocli-dark');
+  monacoInstance.editor.setTheme(document.documentElement.classList.contains('light') ? 'aha-light' : 'aha-dark');
 }
 
 /**
@@ -554,7 +554,7 @@ export function CodeEditor({
       language={language}
       value={value}
       onChange={(next) => onChange(next ?? '')}
-      theme={theme === 'light' ? 'nanocli-light' : 'nanocli-dark'}
+      theme={theme === 'light' ? 'aha-light' : 'aha-dark'}
       beforeMount={configureMonaco}
       onMount={handleMount}
       options={editorOptions(fontSize, extensions)}
@@ -588,7 +588,7 @@ export function DiffView({ original, modified, language = 'typescript', theme = 
       original={original}
       modified={modified}
       language={language}
-      theme={theme === 'light' ? 'nanocli-light' : 'nanocli-dark'}
+      theme={theme === 'light' ? 'aha-light' : 'aha-dark'}
       beforeMount={configureMonaco}
       onMount={handleMount}
       keepCurrentOriginalModel
@@ -616,7 +616,7 @@ export function OutputView({ value, language, name, theme = 'dark', fontSize = 1
       path={`file:///output/${name}`}
       language={language}
       value={value}
-      theme={theme === 'light' ? 'nanocli-light' : 'nanocli-dark'}
+      theme={theme === 'light' ? 'aha-light' : 'aha-dark'}
       beforeMount={configureMonaco}
       options={{
         ...editorOptions(fontSize, { wordWrap: false }),

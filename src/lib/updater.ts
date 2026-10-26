@@ -75,7 +75,7 @@ async function git(exec: Exec, cwd: string, args: string[], timeoutMs = 20_000) 
 export async function getUpdateStatus(options: { cwd?: string; fetch?: boolean; exec?: Exec; now?: () => number } = {}): Promise<UpdateStatus> {
   const cwd = options.cwd ?? process.cwd();
   const exec = options.exec ?? defaultExec;
-  const base: UpdateStatus = { supported: false, behind: 0, ahead: 0, dirty: false, commits: [], canApply: false, supervised: process.env.NANOCLI_SUPERVISED === '1', checkedAt: (options.now ?? Date.now)() };
+  const base: UpdateStatus = { supported: false, behind: 0, ahead: 0, dirty: false, commits: [], canApply: false, supervised: process.env.AHA_SUPERVISED === '1', checkedAt: (options.now ?? Date.now)() };
 
   if (!fs.existsSync(path.join(cwd, '.git'))) return { ...base, note: 'This copy of the studio isn’t a git checkout, so it can’t update itself. If you run it in a container, pull the new image instead.' };
   const inside = await git(exec, cwd, ['rev-parse', '--is-inside-work-tree']);

@@ -9,8 +9,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { upsertOutcome, type Outcome } from '@/lib/agent/outcomes';
 import { laneOf, verdict, type Proposal } from './proposals';
 
-const KEY = (project: string) => `nanocli:outcomes:${project}`;
-const IMPROVED_KEY = (project: string) => `nanocli:improved-at:${project}`;
+const KEY = (project: string) => `aha:outcomes:${project}`;
+const IMPROVED_KEY = (project: string) => `aha:improved-at:${project}`;
 
 function load<T>(key: string, fallback: T): T {
   try {

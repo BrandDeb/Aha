@@ -4,9 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-// The studio's toolchain folder lives under NANOCLI_HOME: a throwaway one here
-const home = fs.mkdtempSync(path.join(os.tmpdir(), 'nanocli-tools-'));
-process.env.NANOCLI_HOME = home;
+// The studio's toolchain folder lives under AHA_HOME: a throwaway one here
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'aha-tools-'));
+process.env.AHA_HOME = home;
 after(() => fs.rmSync(home, { recursive: true, force: true }));
 const { applyManaged, checksumFor, compareVersions, installMise, MANAGED, miseAsset, miseBin, miseEnv, miseVersion, pinFor } = await import('../src/lib/toolchains.ts');
 const { LANGUAGES } = await import('../src/lib/languages.ts');
@@ -72,7 +72,7 @@ test('every installable language exists, and what it needs is installable too', 
   }
 });
 
-test('mise installs from its mirror, checksum verified, and runs', { skip: process.env.NANOCLI_TEST_NETWORK !== '1', timeout: 10 * 60_000 }, async () => {
+test('mise installs from its mirror, checksum verified, and runs', { skip: process.env.AHA_TEST_NETWORK !== '1', timeout: 10 * 60_000 }, async () => {
   const lines: string[] = [];
   const version = await installMise((t) => lines.push(t));
   assert.match(version, /^\d{4}\.\d+\.\d+$/);
