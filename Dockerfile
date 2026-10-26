@@ -33,8 +33,14 @@ RUN apk add --no-cache python3 make g++
 COPY package*.json ./
 
 # Production dependencies only. The runtime image installs zig from the system packages,
-# so drop the bundled copy (~375 MB)
-RUN npm ci --omit=dev && rm -rf node_modules/@zigc
+# so drop the bundled copy (~375 MB).
+# Building for another platform (arm64 on an amd64 runner) runs Node under QEMU, which intermittently dies with
+# SIGILL on the machine code V8's JIT emits; --jitless makes V8 interpret instead. Installing is I/O-bound, so this
+# costs little, and native builds are unaffected.
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+RUN if [ "$TARGETPLATFORM" != "$BUILDPLATFORM" ]; then export NODE_OPTIONS=--jitless; fi \
+  && npm ci --omit=dev && rm -rf node_modules/@zigc
 
 # Stage 2: Production image
 FROM node:24-alpine AS runner
