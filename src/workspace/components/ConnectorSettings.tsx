@@ -5,6 +5,7 @@ import { KIND_LABEL, parseConnector, type Connector, type ConnectorKind } from '
 import { newConnectorId, removeConnector, saveConnectors, upsertConnector, useConnectors } from '../connectors-config';
 import { listConnectorTools, useConnectorStatus } from '../connectors-client';
 import { formatPairs, joinArgs, parsePairs, PRESETS, splitArgs } from '../connector-forms';
+import { ConnectorCatalog } from './ConnectorCatalog';
 
 type Fields = Record<string, string>;
 
@@ -117,7 +118,8 @@ export function ConnectorSettings() {
 
   const f = draft?.fields ?? {};
   const preset = PRESETS.find((p) => p.id === presetId);
-  const groups = ['Built in', 'MCP servers', 'Your own'] as const;
+  // Ready-made MCP servers live in the catalog; this list is the built-in kinds and your own
+  const groups = ['Built in', 'Your own'] as const;
 
   return (
     <div className="space-y-4">
@@ -163,9 +165,11 @@ export function ConnectorSettings() {
         </ul>
       )}
 
+      {!draft && <ConnectorCatalog hosted={status?.mode === 'hosted'} existing={connectors} onAdded={(c) => void test(c)} />}
+
       {!draft && (
         <div className="space-y-2 rounded-xl border border-border p-3">
-          <div className="text-sm text-gray-100">Add a connector</div>
+          <div className="text-sm text-gray-100">Built in, or your own</div>
           <div className="flex gap-2">
             <select value={presetId} onChange={(e) => setPresetId(e.target.value)} className="input h-9 min-w-0 flex-1 text-sm" aria-label="Connector type">
               <option value="">Choose…</option>

@@ -1,5 +1,7 @@
 # NanoCLI Studio backlog
 
+> The order and the specs for what comes next are in [ROADMAP.md](ROADMAP.md).
+
 Everything we have talked about or recommended, in one place, with where it stands. **Done** items shipped on
 `claude/aha-repository-yvfgce` (PR #15) with tests and a browser check; **Now** is being built; **Next** is queued
 in this order; **Later** needs a decision, an account or a bigger piece of work first. Items marked *needs you*
@@ -41,6 +43,8 @@ as a proposal with evidence, and vibe coding and hand-writing as equals.
 | Production to fix (paste a stack trace or a Sentry link, get a reproduction and a fix) | Next | |
 | Project memory and guided tour (what this codebase is, for a newcomer, in 5 stops) | Next | |
 | Supply-chain guard (new dependencies checked for typosquats, install scripts, advisories, licence) | Next | extends the risk score |
+| **Watchers: proactive agents** (time, change and message triggers; restraint log; budgets) | Now | spec in ROADMAP item 1 |
+| **Agent channels** (proposals message each other; typed messages; access control; searchable history) | Now | spec in ROADMAP item 2 |
 
 ## 2. Table stakes (what every top editor has)
 
@@ -68,7 +72,16 @@ with the studio; more install from any GitHub repository.
 |---|---|
 | Core engineering (debugging, TDD, tests, review, refactoring, security, performance, API and CLI design, components, database changes, smart-contract security, docs, upgrades, creating skills) | Done |
 | **Popular open-source ecosystems** (Done, 31 skills): React/Next.js, Vue/Nuxt, Svelte/SvelteKit, Tailwind, shadcn/ui, Node/Express/Hono, TypeScript strictness, Vite, Prisma/Drizzle, Python/FastAPI, Django, pandas, pytest, Go, Rust/cargo, Docker, GitHub Actions, Kubernetes basics, Playwright, Vitest/Jest, OpenAPI, GraphQL, PostgreSQL, Redis, accessibility, SEO, i18n, Conventional Commits and releases, Solidity/Foundry/Hardhat, viem/wagmi dapps | Done |
-| Skill marketplace view (curated GitHub sources, one-click install) | Next |
+| Popular skill collections one click away (Anthropic, Superpowers, Trail of Bits, Hugging Face, Vercel) | Done |
+
+## 3b. Connectors
+
+| Piece | Status |
+|---|---|
+| Built-in connectors: GitHub, web fetch and search, SQLite, PostgreSQL, custom commands | Done |
+| **Connector catalog**: 52 MCP servers in 12 categories, checked to exist, one-step add and test, OAuth through mcp-remote | Done |
+| Catalog kept fresh: a CI job that checks every package and URL still resolves | Next |
+| OAuth for remote MCP servers handled in the studio itself (no mcp-remote), so they work in the browser too | Later |
 
 ## 4. Extensions (VS Code-style)
 

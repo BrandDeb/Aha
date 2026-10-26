@@ -1,14 +1,34 @@
 # NanoCLI Studio
 
-> **TypeScript in. Native binary out.**
+> **The editor where the agent and you share one workspace.**
 
-A browser IDE for building command-line tools. Write ordinary TypeScript, compile it on the server with
-[scriptc](https://scriptc.dev) — Vercel Labs' TypeScript-to-native compiler — and download a single
-executable that runs without Node.js.
+NanoCLI Studio is a browser and desktop IDE (Next.js, Monaco, Tauri) where an AI agent works next to your code instead
+of in a separate tool: every change it makes arrives as a **proposal with evidence** (it built, it ran, the contracts
+hold, a second reviewer read it), and you can vibe-code a whole app from a sentence or a screenshot, or write every
+line yourself. It started as a home for [scriptc](https://scriptc.dev) (TypeScript compiled to a native binary) and
+now runs 70+ languages, web apps with live preview, Python with uv, and Solidity with Remix-style tools.
 
 [![CI/CD Pipeline](https://github.com/BrandDeb/Aha/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/BrandDeb/Aha/actions/workflows/ci-cd.yml)
 [![scriptc](https://github.com/BrandDeb/Aha/actions/workflows/scriptc.yml/badge.svg)](https://github.com/BrandDeb/Aha/actions/workflows/scriptc.yml)
 ![License: Proprietary](https://img.shields.io/badge/License-Proprietary-black.svg)
+
+**Highlights**
+
+- **Proposals, not surprises.** The agent edits a private copy; you get a diff with builds, runs, contracts, a risk
+  score and a second reviewer's verdict, and nothing touches your files until you accept.
+- **See what code does.** Live values on every line as you type, and **Rewind** to scrub back through a run.
+- **Vibe and hand-write as equals.** Describe an app, paste a screenshot, remix a repo or a website, or **fork the
+  future** three ways and pick the version you like, running side by side.
+- **Click to edit** the running app; **specs in plain English** become property tests; **contracts** keep rules true.
+- **Any model**, free or local or your own key, with an advisor for which model suits which job, and AI autocomplete.
+- **Skills and connectors out of the box:** 46 built-in skills and a catalog of 52 MCP servers (GitHub, Linear,
+  Notion, Sentry, Supabase, Stripe, Playwright, Context7…).
+- **Smart contracts like Remix IDE:** compile Solidity in the browser, deploy to a chain in the page or through your
+  wallet, call every function from a form.
+- **Ships:** CI/CD pipelines in the studio, native Windows and macOS apps, and the docs at `/docs`.
+
+Where it is going: [docs/ROADMAP.md](docs/ROADMAP.md) (specs for what comes next) and
+[docs/BACKLOG.md](docs/BACKLOG.md) (everything, with status).
 
 ---
 
@@ -46,6 +66,58 @@ docker compose up -d            # app, scriptc, clang/lld and zig in one image
 
 ---
 
+## Features
+
+A one-line tour; each links to the section with the details. The workspace is at `/`, the docs at `/docs`.
+
+**Write and run**
+
+| Feature | What it does |
+|---|---|
+| **Editor** | Monaco with tabs, split view, zen mode, command palette (⌘K), remappable shortcuts, Prettier on save, inline diagnostics |
+| **AI autocomplete** | Grey-text suggestions from any model, cached and cancelled as you type; Tab accepts ([Assistant](#assistant)) |
+| **Terminal** | Project commands (`ls`, `cat`, `run`…) plus a real shell when the studio runs on your machine |
+| **Build** | scriptc's nine outputs: native, WASM, LLVM IR, assembly, WAT, object, library… with timings and coverage |
+| **Live values** | Every line shows what it did as you type: values, returns, prints, errors; dead code fades ([Live values](#live-values)) |
+| **Rewind** | Scrub through a run and see every variable at each moment ([Rewind](#rewind)) |
+| **70+ languages** | Go, Rust, Python, Java, C#, Ruby, Zig, Swift… run here, toolchains installed on demand ([Other languages](#other-languages)) |
+| **Python (uv)** | Run, add and lock packages with uv, from a panel or the terminal ([Python and uv](#python-and-uv)) |
+| **Web apps** | Vite, Next.js, Nuxt, SvelteKit, Astro… with live preview, in the browser or on a dev server ([Web apps](#web-apps-and-live-preview)) |
+| **Click to edit** | Pick an element in the running app: edit its text and classes in the source, or ask for a change ([Web apps](#web-apps-and-live-preview)) |
+| **Smart contracts** | Solidity compiled in the browser, deployed to an in-page chain or your wallet, every function a form ([Smart contracts](#smart-contracts-deploy--run)) |
+
+**Build with the agent**
+
+| Feature | What it does |
+|---|---|
+| **Create** | Describe an app, start from a picture, remix a repo or a site, pick from a gallery of 24, or build a stack ([Create](#create)) |
+| **Agent and proposals** | Goals become reviewable proposals with evidence; follow-ups, per-file accept, rollback ([Agent](#agent)) |
+| **Second reviewer** | A separate reviewer reads every change cold and lists what to fix ([A second reviewer](#a-second-reviewer)) |
+| **Risk score and auto-accept** | Every proposal scored 0–100 with reasons; let the low-risk ones through ([Risk score](#risk-score-and-auto-accept)) |
+| **Fork the future** | One request built three ways at once, compared live ([Fork the future](#fork-the-future)) |
+| **Contracts and specs** | Rules that stay true; plain-English specs become property tests ([Contracts](#contracts)) |
+| **Debugging and worker** | Failures debugged on their own; an AI teammate that keeps going on the next useful task ([Agent](#agent)) |
+| **Skills** | 46 built in (debugging, TDD, React, FastAPI, Solidity…), more from GitHub ([Skills](#skills-what-the-agent-knows-how-to-do)) |
+| **Connectors** | A catalog of 52 MCP servers plus GitHub, databases, web and your own commands ([Connectors](#connectors)) |
+| **Models** | Free tiers, local models or your own keys, with an advisor per job ([Assistant](#assistant)) |
+
+**Ship and keep**
+
+| Feature | What it does |
+|---|---|
+| **Git and GitHub** | Pull, diff, branch, commit and push without overwriting newer work ([Signing in with GitHub](#signing-in-with-github)) |
+| **Pipelines** | GitHub Actions or GitLab CI written, run here and watched ([DevOps](#devops-pipelines-in-the-studio)) |
+| **Optimize** | SEO, answer engines, social cards, accessibility and speed, with fixes ([Optimize](#optimize-seo-aeo-geo-and-the-rest)) |
+| **Field kits** | A project, its playbook, checks and house rules in one file ([Field kits](#field-kits)) |
+| **History and why** | Versions on save and before every accept; every line remembers why it was written ([Why-history](#why-history)) |
+| **Desktop apps** | Native Windows and macOS builds that update themselves ([Desktop app](#desktop-app-windows-and-macos)) |
+| **Accessibility and looks** | Light, dark and high-contrast themes, any accent colour, full keyboard use and screen-reader labels |
+
+Native executables are linked for the machine the server runs on. Use the WASM target (or `run`) for a
+portable artifact.
+
+---
+
 ## What's measured
 
 On Linux x64 with scriptc 0.2.2 and Node.js 22:
@@ -57,53 +129,6 @@ On Linux x64 with scriptc 0.2.2 and Node.js 22:
 | `fib(32)` | 13 ms | 24 ms |
 
 Reproduce with `npm run templates:build` and the binaries in `dist/templates/`.
-
----
-
-## Features
-
-The workspace at `/` is a dark editor built around scriptc.
-
-| Area | What it does |
-|---|---|
-| **Projects** | File tree with folders, create/rename/move/delete, entry file, relative imports between files, autosave to the browser |
-| **Terminal** | Built-in commands over the project (`ls cd cat mv rm tree echo > file …`, `run`) plus a real shell: anything else (`npm test`, `go test ./...`, `cargo build`, `make`, pipes and `&&`) runs in the project's folder on your machine, and files it changes come back into the editor. `sh …` or `!…` forces the real shell |
-| **Layout** | The side panel has four groups: Run (Build, Language, Python, Packages), Agent (Do, Ask, Keep going), Source (Git, Pipelines, History) and Project (Graph, Kit). Run takes program arguments in the field beside it; a program that answers with its usage gets a hint instead of a failure. The status bar shows the branch, the last build and run, the current failure, the agent and the worker, each one click from its panel. A first visit gets a one-minute welcome (what you're building, a model, GitHub) |
-| **Build** | Nine outputs from one menu — native, WASM, LLVM IR, scriptc IR (JSON), assembly, WASM text (WAT), object file, static library, WASM reactor — with an output viewer (highlighted text, or a hexdump for binaries), build options (release/dev, strip, dynamic engine, sanitizers, Windows window), pipeline timings, scriptc coverage and a run profile |
-| **Create** | One place to start: **describe** an app in plain words and get a plan (language, stack and why) that the agent builds while you review; a **gallery** of 24 apps (dashboards, trackers, landing pages, APIs, games, AI chat) each on the stack that suits it and many in several languages; a **stack builder** (framework, styling, UI kit, data, routing, state, forms, testing, lint, API and database) that writes every dependency into package.json or pyproject.toml and wires each one into working code; and every template and field kit. See [Create](#create) |
-| **AI autocomplete** | Grey-text suggestions as you type, from any model (the one chosen for Autocomplete in Settings → AI models, or the main one): it sees the code around the cursor and the files it imports, and only what is missing is shown (echoes of the current line, code fences and anything already after the cursor are stripped). Tab accepts, Ctrl/⌘ + → accepts a word, Alt + \\ asks on demand. Answers are cached and cancelled as you type on; switch it off in Settings → Extensions |
-| **Live values** | Turn on **Live** above the editor and the entry file (TypeScript, JavaScript or Python) runs after each pause in typing: every line shows what it did, right after the code — the values it set (`sum = 3, 7, 12 ×3` for a loop), what it returned, what it printed and the error it threw — and lines that never ran fade. Hover a line for every value. Local only, like Run; see [Live values](#live-values) |
-| **Rewind** | Every live run is recorded: scrub back and forth through it, play it back, and see each variable as it was at that moment, with the line that ran highlighted. Click a variable to jump to where it changes; a crash opens on the line that threw; ask the agent about any moment. See [Rewind](#rewind) |
-| **Click to edit** | In the in-browser preview, press ⌖ Edit and click any element: its code opens (exact for React and Preact), its text and classes can be edited right there (written into the source), or describe a change and the agent makes it. ⇩ saves the app as one HTML page to share. See [Web apps and live preview](#web-apps-and-live-preview) |
-| **Risk score and auto-accept** | Every proposal is scored 0–100 with its reasons (dependencies, CI, auth, schema, secrets, eval and shell, removed tests, size, evidence, the reviewer). Optionally accept the low-risk, verified ones by themselves; anything sensitive always waits for you. See [Risk score and auto-accept](#risk-score-and-auto-accept) |
-| **Specs → property tests** | Write what must always be true about a function ("sortPrices returns the items in ascending order"): it becomes a fast-check or Hypothesis test that tries hundreds of random inputs and shrinks a failure to the smallest counterexample, plus a contract that runs it on every change. Common properties need no model. See [Specs](#specs-plain-english-to-property-tests) |
-| **Fork the future** | ⑂ Fork 3 ways builds one request in three deliberately different directions at once (Minimal / Bold / Playful for looks; Simplest / Robust / Fast for code), then shows them side by side, running live for web apps, so you pick from real results. See [Fork the future](#fork-the-future) |
-| **Build from a picture** | Paste a screenshot, a mock-up or a photo of a paper sketch in Create: the agent matches the screenshot (or interprets the sketch's layout) and builds a working app from it. See [Create](#create) |
-| **Remix** | Start from a public GitHub repo (copied in, licence shown) or any website (read for its structure and rebuilt as your own original app), and tell the agent what to change. See [Create](#create) |
-| **Smart contracts: deploy & run** | Remix-style Solidity tools: the official compiler in the browser at your pragma's version, imports from npm resolved, deploy to a chain in the page with ten funded accounts, a form for every function, events and decoded revert reasons, and a pitfalls analysis. See [Smart contracts](#smart-contracts-deploy--run) |
-| **Contracts** | Rules that stay true, written in words and checked by a pattern or a command ("no console.log in src", "every route checks the session", "the tests pass"). The agent is told every one and checks them before it finishes, a proposal that breaks one is never marked verified, the worker fixes broken ones, and the status bar shows how they stand; see [Contracts](#contracts) |
-| **Diagnostics** | scriptc errors drawn inline in the right file with their rewrite hint, listed in Problems and counted in the tree |
-| **Git** | Pull a branch, see changed files with +/− counts, side-by-side diffs, create branches, multi-file commit & push that refuses to overwrite newer commits |
-| **Pipelines** | CI/CD from the project: GitHub Actions or GitLab CI with lint, test and build, deploys (Pages, containers, Vercel, Netlify, Fly.io, release binaries), run locally before you push (or on every save: "works here = works in CI" in the status bar), GitHub run status in the Git tab, failures fixed by the agent; see [DevOps](#devops-pipelines-in-the-studio) |
-| **Assistant** | Any model you choose — free tiers (Gemini, Groq, OpenRouter, Cerebras, Mistral), local (Ollama, LM Studio) or your own Anthropic/OpenAI key: explain, fix build errors, generate tests, chat — with one-click Apply that versions the previous file first |
-| **Agent** | Give it a goal; it reads your project, edits a private copy, builds and runs it to check its work, and retries within a budget. You review diffs and accept or discard; see [Agent](#agent) |
-| **Field kits** | A project plus its playbook, setup, checks and agent house rules, shared as one file; three built in for FDE and ISV work; see [Field kits](#field-kits) |
-| **Skills** | Agent Skills (`SKILL.md`), the format Claude uses: 15 built in, install any from GitHub, or write your own; loaded on demand; see [Skills](#skills-what-the-agent-knows-how-to-do) |
-| **Worker** | An AI teammate that codes alongside you: fixes failures and editor errors, resolves TODOs, adds tests and takes the next step toward your goal, on its own while you pause (Autonomous) or when you say (Suggest); see [the worker](#the-worker-an-ai-teammate-that-codes-alongside-you) |
-| **Connectors** | MCP servers, GitHub, SQLite/PostgreSQL, web pages and search, and your own commands as agent tools, asked about before use |
-| **Formatting** | Prettier in the browser, format on save, configurable rules |
-| **History** | Versions on save, on successful builds and before pulls/restores/assistant edits; compare and restore |
-| **Graph** | Import graph from the entry, cycle detection, unused files, unresolved imports, external modules |
-| **Export** | ZIP export/import, secret GitHub Gist, share links that carry the whole project |
-| **Editing** | Split view, zen mode, command palette (⌘K), remappable shortcuts with export/import, built-in extensions (minimap, word wrap, bracket pairs, sticky scroll, TODO highlights, byte field) |
-| **Appearance** | Any accent colour (presets, colour picker or hex), background tone and corner radius in Settings → Appearance; the accent is adjusted automatically so text stays readable in light and dark, and the editor's syntax colours follow it |
-| **Accessibility** | Light, dark and high-contrast themes; ARIA tree, tabs and dialogs with focus management; skip link; live regions for builds and toasts; reduced motion respected |
-| **Python (uv)** | Python projects managed with [uv](https://docs.astral.sh/uv/): run files, add/remove/sync/lock/tree from a Packages panel or the terminal, pin a Python version, inline-script dependencies, environment variables for API keys, files your program writes land in the explorer. uv is detected, or downloaded from the official release with a checksum |
-| **Templates** | Eleven TypeScript starters (CI compiles every one with scriptc) and six Python/AI starters: LLM agent with tool calling, embeddings + search (RAG), local models (Ollama), pandas data analysis, an MCP server, a single-file uv script |
-| **Project templates** | A real project per language (Node.js, Python, Go, Rust, Java, Ruby, PHP, C, C++): a library and a CLI with unit tests in the language's usual framework (node:test, pytest, go test, cargo test, JUnit, Minitest, PHPUnit, make, CTest) and a CI workflow. Run works straight away; the Pipelines tab runs the tests. `npm run verify:templates` runs every one for real |
-
-Native executables are linked for the machine the server runs on. Use the WASM target (or `run`) for a
-portable artifact.
 
 ---
 
@@ -503,12 +528,28 @@ and travel to the studio server only with the call that needs them.
 
 | Connector | What the agent gets |
 |---|---|
-| **MCP server** (local process or HTTP) | Any [Model Context Protocol](https://modelcontextprotocol.io) server's tools. Presets for filesystem, git, memory, Context7 docs and Playwright; or point it at your own, including the Python MCP template from the project list |
+| **MCP server** (local process or HTTP) | Any [Model Context Protocol](https://modelcontextprotocol.io) server's tools: from the catalog below, or point it at your own, including the Python MCP template from the project list |
 | **GitHub** | Search code, read files, issues and pull requests (your sign-in or a token) |
 | **Web pages** | Fetch a public URL as readable text |
 | **Web search** | Brave, Tavily or your own SearXNG |
 | **SQLite / PostgreSQL** | Schema and read-only queries (a single `SELECT`/`WITH` statement, rows capped, read-only connection) |
 | **Custom command** | Any command of yours as a tool, with named parameters passed as plain arguments (never through a shell). Always asks |
+
+**The catalog** lists 52 well-known MCP servers in twelve categories, each checked to exist, with who makes it
+(most are official), what it gives the agent and what it needs. Search it ("database", "Jira", "payments"), pick one,
+fill in its key if it has one, and it is added and tested in one step:
+
+| How it runs | Examples | What you do |
+|---|---|---|
+| **Remote, no setup** | Context7 (library docs), DeepWiki, Exa search, Hugging Face, Cloudflare docs, GitMCP | Nothing: add it |
+| **Remote, token** | GitHub, Apify | Paste a token |
+| **Sign in (OAuth)** | Linear, Notion, Jira and Confluence, Sentry, Vercel, Cloudflare, Neon, Asana, monday.com, Zapier, PostHog, Canva, PayPal, Square | Sign in once in the browser window that opens; runs through `mcp-remote` on your machine, which keeps the token there |
+| **Local, with a key** | Supabase, Stripe, Firecrawl, Brave, Tavily, Perplexity, MongoDB, Redis, ClickHouse, Elasticsearch, Netlify, Heroku, Resend, Browserbase, Alchemy, Figma files | Paste the key; it goes into the server's environment |
+| **Local, no key** | Playwright, Chrome DevTools, Filesystem, Git, Memory, Sequential thinking, Time, Fetch, Semgrep, DuckDB, Kubernetes, AWS docs, Shopify dev | Nothing (needs Node or uv, which the studio already uses) |
+| **Desktop app** | Figma Dev Mode | Turn on its MCP server in the Figma app |
+
+Servers whose tools only read are added with **Don't ask before read-only tools** ticked; database servers start
+read-only (Supabase `--read-only`, MongoDB `--readOnly`). On a shared studio the local ones are greyed out.
 
 Safety model, since the agent reads untrusted text (web pages, issues, query results):
 
