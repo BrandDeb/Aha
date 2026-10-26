@@ -1,7 +1,7 @@
 {
-  "name": "nano-cli-studio",
+  "name": "aha",
   "version": "1.0.0",
-  "description": "Zero-Runtime TypeScript CLI Generator - Write TypeScript, Get Native Binaries",
+  "description": "The AI IDE that proves its work",
   "private": true,
   "scripts": {
     "dev": "node scripts/supervise.js",

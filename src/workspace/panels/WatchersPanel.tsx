@@ -47,7 +47,7 @@ export function WatchersPanel({ watchers: handle }: { watchers: WatchersHandle }
         <p className="text-xs leading-relaxed text-gray-400">
           Agents that wake on their own: on a schedule, when files change, or when something fails. Each one either suggests its task or starts it as a background proposal you review. One event runs once, a fixed failure is skipped, and every time one holds back it says why below.
         </p>
-        <p className="text-[11px] text-gray-500">Saved in <code className="font-mono">.nanocli/watchers.json</code>, so they travel with the project. They run while the studio is open.</p>
+        <p className="text-[11px] text-gray-500">Saved in <code className="font-mono">.aha/watchers.json</code>, so they travel with the project. They run while the studio is open.</p>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">

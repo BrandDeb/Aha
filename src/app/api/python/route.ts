@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** Each request can start a process; cap them per client */
-const limiter = createRateLimiter(Number(process.env.NANOCLI_PY_REQUESTS_PER_10_MIN) || 120, 10 * 60 * 1000);
+const limiter = createRateLimiter(Number(process.env.AHA_PY_REQUESTS_PER_10_MIN) || 120, 10 * 60 * 1000);
 
 /** Whether uv is available, and which Python versions it already has */
 export async function GET() {
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     );
   }
   if (!isPythonEnabled()) {
-    return NextResponse.json({ error: 'Python support is turned off on this server (NANOCLI_PYTHON=0).' }, { status: 503 });
+    return NextResponse.json({ error: 'Python support is turned off on this server (AHA_PYTHON=0).' }, { status: 503 });
   }
 
   const wait = limiter.check(clientKey(request.headers));

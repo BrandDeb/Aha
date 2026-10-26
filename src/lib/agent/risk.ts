@@ -36,11 +36,11 @@ const DOCS = /\.(md|mdx|txt|rst|adoc)$|(^|\/)(LICENSE|CHANGELOG)[^/]*$/i;
 const TEST = /(^|\/)(tests?|__tests__|spec)\/|[._-](test|spec)\.[\w]+$|(^|\/)test_[\w]+\.py$|_test\.(go|py)$/i;
 const MANIFEST = /(^|\/)(package\.json|requirements[\w.-]*\.txt|pyproject\.toml|Cargo\.toml|go\.mod|Gemfile|composer\.json|pom\.xml|build\.gradle(\.kts)?|mix\.exs|pubspec\.yaml)$/;
 const LOCKFILE = /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|uv\.lock|poetry\.lock|Cargo\.lock|go\.sum|Gemfile\.lock|composer\.lock)$/;
-const PIPELINE = /(^|\/)(\.github\/workflows\/|\.gitlab-ci\.yml|Dockerfile|docker-compose[\w.-]*\.ya?ml|vercel\.json|netlify\.toml|fly\.toml|render\.yaml|\.nanocli\/pipelines?)/i;
+const PIPELINE = /(^|\/)(\.github\/workflows\/|\.gitlab-ci\.yml|Dockerfile|docker-compose[\w.-]*\.ya?ml|vercel\.json|netlify\.toml|fly\.toml|render\.yaml|\.aha\/pipelines?)/i;
 const SENSITIVE = /(^|[/_.-])(auth|login|logout|session|crypto|password|passwd|token|permission|acl|security|middleware|oauth|jwt|csrf|cors)([/_.-]|s?\.|$)/i;
 const CONFIG_ENV = /(^|\/)\.env(\.[\w-]+)?$|(^|\/)(next|vite|nuxt|svelte|astro|tsconfig|webpack)\.config\.\w+$|(^|\/)tsconfig\.json$/;
 const MIGRATION = /(^|\/)(migrations?|alembic|prisma\/migrations)\/|(^|\/)schema\.(sql|prisma)$|\.sql$/i;
-const CONTRACTS = /(^|\/)\.nanocli\/contracts\.json$/;
+const CONTRACTS = /(^|\/)\.aha\/contracts\.json$/;
 const SECRET = /\b(api[_-]?key|secret|password|passwd|private[_-]?key|access[_-]?token|auth[_-]?token)\b\s*[:=]\s*['"`][^'"`\s]{8,}['"`]|\b(sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|xox[bp]-[A-Za-z0-9-]{10,})\b/i;
 
 /** Things that are fine in their place but deserve a look when a change adds them */
@@ -99,7 +99,7 @@ const testCount = (text: string) => (text.match(/\b(it|test)\s*\(|^\s*def test_|
 export function riskOf({ files, evidence, review }: RiskInput): RiskScore {
   const factors: RiskFactor[] = [];
   const add = (f: RiskFactor) => factors.push(f);
-  const project = files.filter((f) => !f.path.startsWith('.nanocli/why'));
+  const project = files.filter((f) => !f.path.startsWith('.aha/why'));
   if (!project.length) return { score: 0, level: 'low', factors: [{ label: 'No changes', points: 0, detail: 'Nothing in the project changes' }] };
   const docsOnly = project.every((f) => DOCS.test(f.path));
 

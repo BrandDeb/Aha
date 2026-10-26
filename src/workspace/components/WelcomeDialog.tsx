@@ -36,7 +36,7 @@ export function WelcomeDialog({ onClose, onStart }: { onClose: () => void; onSta
   };
 
   return (
-    <Dialog title="Welcome to NanoCLI Studio" description={['What are you building?', 'Connect a model for the agent', 'GitHub (optional)'][step]} onClose={finish} width="max-w-xl">
+    <Dialog title="Welcome to Aha!" description={['What are you building?', 'Connect a model for the agent', 'GitHub (optional)'][step]} onClose={finish} width="max-w-xl">
       <div className="space-y-4 p-5">
         <ol className="flex gap-1.5" aria-label="Steps">
           {[0, 1, 2].map((i) => (

@@ -48,7 +48,7 @@ export function ProjectDialog({ user, onClose }: { user: GitHubUserInfo | null; 
       const response = await fetch('/api/github/gists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ description: `${project.name} — NanoCLI project`, files: project.files }),
+        body: JSON.stringify({ description: `${project.name} — Aha! project`, files: project.files }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Gist export failed');

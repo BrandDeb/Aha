@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "NanoCLI Studio",
+  "productName": "Aha",
   "version": "1.0.0",
   "identifier": "dev.nanocli.studio",
   "build": {

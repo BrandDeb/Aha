@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { changesSince, debugBrief, excerpt, failureSignature, headline, lineDiff, makeFailure, parseLocations, projectPathFor } from '../src/lib/debug.ts';
 
-const RUN = '/root/.nanocli/run/proj-1234abcd';
+const RUN = '/root/.aha/run/proj-1234abcd';
 
 // Real-world error output, one per toolchain, and where it should point
 const CASES: { name: string; paths: string[]; output: string; expect: string; title: RegExp }[] = [

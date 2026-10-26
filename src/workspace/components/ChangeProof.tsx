@@ -29,7 +29,7 @@ export function ChangeProof({ id, changes, onPick }: { id: string; changes: File
   // Tracing runs the program on this machine: on its own only when you turned Live on, otherwise on a click
   const [go, setGo] = useState(() => {
     try {
-      return localStorage.getItem('nanocli:live') === '1';
+      return localStorage.getItem('aha:live') === '1';
     } catch {
       return false;
     }

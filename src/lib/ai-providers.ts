@@ -286,7 +286,7 @@ function headersFor(target: ResolvedProvider): Record<string, string> {
   }
   const headers: Record<string, string> = {};
   if (target.apiKey) headers.Authorization = `Bearer ${target.apiKey}`;
-  if (target.provider.id === 'openrouter') headers['X-Title'] = 'NanoCLI Studio';
+  if (target.provider.id === 'openrouter') headers['X-Title'] = 'Aha!';
   return headers;
 }
 

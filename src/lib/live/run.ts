@@ -1,7 +1,7 @@
 /**
  * Running a program for live values: the project's files go in its run folder
  * (shared with Run, so installed packages are there), the TypeScript and
- * JavaScript files are instrumented into .nanocli-live/, and the entry runs
+ * JavaScript files are instrumented into .aha-live/, and the entry runs
  * with a small runtime that records hits and values per line and writes them
  * out when the program ends. Python runs under a sys.settrace tracer instead.
  * Like Run, it executes the program on the host: local only. Server only.
@@ -75,7 +75,7 @@ function fmt(v, depth) {
   } catch (e) { return '‹unreadable›'; }
 }
 const short = (s) => (s.length > MAX_LEN ? s.slice(0, MAX_LEN - 1) + '…' : s);
-function write() { try { fs.writeFileSync(process.env.NANOCLI_LIVE_OUT, JSON.stringify({ truncated, data, steps })); } catch (e) {} }
+function write() { try { fs.writeFileSync(process.env.AHA_LIVE_OUT, JSON.stringify({ truncated, data, steps })); } catch (e) {} }
 function count() {
   if (++events > MAX_EVENTS && !truncated) { truncated = true; write(); process.stdout.write('\\n[live values: the program ran too long; showing the start of the run]\\n'); process.exit(124); }
 }
@@ -117,7 +117,7 @@ export function cleanLiveOutput(output: string, liveDir: string, toOriginal: (re
     .replace(/^\s*File "<frozen runpy>".*\n(?:\s{4}.*\n)?/gm, '');
 }
 
-const pool = createJobPool(Number(process.env.NANOCLI_LIVE_JOBS) || 2, 4, 'Live values are busy with another run. Try again in a moment.');
+const pool = createJobPool(Number(process.env.AHA_LIVE_JOBS) || 2, 4, 'Live values are busy with another run. Try again in a moment.');
 const lock = createKeyedLock();
 
 export async function runLive(request: LiveRequest, options: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<LiveResult> {
@@ -125,12 +125,12 @@ export async function runLive(request: LiveRequest, options: { timeoutMs?: numbe
   return pool.run(() =>
     lock(request.projectId, async () => {
       const dir = path.join(RUN_PROJECTS, request.projectId);
-      const liveDir = path.join(dir, '.nanocli-live');
-      await writeProject(dir, request.files, { keep: new Set([...KEEP, '.nanocli-live', 'dist', 'build']) });
+      const liveDir = path.join(dir, '.aha-live');
+      await writeProject(dir, request.files, { keep: new Set([...KEEP, '.aha-live', 'dist', 'build']) });
       await fs.rm(liveDir, { recursive: true, force: true });
       await fs.mkdir(liveDir, { recursive: true });
       const out = path.join(liveDir, 'result.json');
-      const env: Record<string, string> = { ...runEnv(process.env, dir, {}), NANOCLI_LIVE_OUT: out, NO_COLOR: '1' };
+      const env: Record<string, string> = { ...runEnv(process.env, dir, {}), AHA_LIVE_OUT: out, NO_COLOR: '1' };
       const timeoutMs = options.timeoutMs ?? 10_000;
       const fileIds: string[] = [];
       const statementLines: Record<string, number[]> = {};

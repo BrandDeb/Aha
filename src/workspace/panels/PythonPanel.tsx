@@ -150,7 +150,7 @@ export function PythonPanel() {
     return (
       <div className="space-y-3 p-4">
         {header}
-        <p className="text-sm text-gray-400">Python is turned off on this server (<code className="font-mono">NANOCLI_PYTHON=0</code>). Remove that setting and restart to use uv here.</p>
+        <p className="text-sm text-gray-400">Python is turned off on this server (<code className="font-mono">AHA_PYTHON=0</code>). Remove that setting and restart to use uv here.</p>
       </div>
     );
   }

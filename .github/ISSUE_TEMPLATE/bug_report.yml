@@ -1,0 +1,34 @@
+name: Bug report
+description: Something does not work as described in the guide.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a new TypeScript project
+        2. …
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where it runs
+      description: Browser and OS, desktop app, or Docker; and the commit or version.
+      placeholder: Chrome 140 on macOS 15, commit 8a00629
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Errors and logs
+      description: The error text, the browser console, or the server log. Remove keys and tokens first.
+      render: text

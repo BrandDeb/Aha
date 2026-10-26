@@ -13,6 +13,20 @@
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 
+// Renamed from NanoCLI Studio: old NANOCLI_* settings still work (as AHA_*), and ~/.nanocli moves to ~/.aha once
+for (const [key, value] of Object.entries(process.env)) {
+  if (key.startsWith('NANOCLI_') && process.env[`AHA_${key.slice(8)}`] === undefined) process.env[`AHA_${key.slice(8)}`] = value;
+}
+try {
+  const os = require('node:os');
+  const { existsSync, renameSync } = require('node:fs');
+  const legacy = require('node:path').join(os.homedir(), '.nanocli');
+  const home = require('node:path').join(os.homedir(), '.aha');
+  if (!process.env.AHA_HOME && existsSync(legacy) && !existsSync(home)) renameSync(legacy, home);
+} catch {
+  // read-only home, or another process moved it first: the new folder starts empty
+}
+
 /** The exit code server.js uses to say "start me again" */
 const RESTART_CODE = 75;
 
@@ -43,7 +57,7 @@ function supervise(options) {
 
   const start = () => {
     const started = now();
-    child = spawn(command, args, { env: { ...env, NANOCLI_SUPERVISED: '1' }, stdio: 'inherit' });
+    child = spawn(command, args, { env: { ...env, AHA_SUPERVISED: '1' }, stdio: 'inherit' });
     child.on('error', (error) => {
       log(`[supervisor] could not start: ${error.message}`);
       child = null;
@@ -98,7 +112,7 @@ module.exports = { supervise, RESTART_CODE };
 function rollbackUnverifiedUpdate(root, log = console.log, run = defaultRun) {
   const fs = require('node:fs');
   const os = require('node:os');
-  const file = path.join(process.env.NANOCLI_HOME || path.join(os.homedir(), '.nanocli'), 'autopilot.json');
+  const file = path.join(process.env.AHA_HOME || path.join(os.homedir(), '.aha'), 'autopilot.json');
   let state;
   try {
     state = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -138,7 +152,7 @@ if (require.main === module) {
   const run = supervise({ command: process.execPath, args: [path.join(root, 'server.js')], env: process.env, onRepeatedCrash: () => rollbackUnverifiedUpdate(root) });
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, run.stop);
   // Started by the desktop app: if the app goes away without stopping us (a crash, a force quit), stop too
-  const parent = Number(process.env.NANOCLI_PARENT_PID);
+  const parent = Number(process.env.AHA_PARENT_PID);
   if (parent > 0) {
     setInterval(() => {
       try {

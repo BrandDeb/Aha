@@ -1,9 +1,10 @@
 # Security
 
-NanoCLI Studio compiles and runs code, talks to your models and services, and can update itself. This page says what
+Aha! compiles and runs code, talks to your models and services, and can update itself. This page says what
 protects each of those, what the studio deliberately does not protect against, and what the last audit found.
 
-To report a vulnerability, email the maintainers privately rather than opening a public issue.
+To report a vulnerability, use [private vulnerability reporting](https://github.com/BrandDeb/Aha/security/advisories/new)
+(the repository's Security tab, *Report a vulnerability*). Please don't open a public issue.
 
 ## Threat model
 
@@ -27,7 +28,7 @@ host runners are not.
 **Network exposure**
 - The server binds to `127.0.0.1` by default. Every feature that executes code or touches the machine (Python, other
   languages, dev servers, connectors, doctor and updates) switches on only when it listens on loopback, and each has a
-  kill switch: `NANOCLI_PYTHON`, `NANOCLI_RUN`, `NANOCLI_DEV`, `NANOCLI_CONNECTORS`.
+  kill switch: `AHA_PYTHON`, `AHA_RUN`, `AHA_DEV`, `AHA_CONNECTORS`.
 - The Docker image sets all of them off explicitly and runs as the unprivileged `node` user.
 
 **Requests from other sites**

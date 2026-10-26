@@ -1,4 +1,4 @@
-//! NanoCLI Studio's desktop shell.
+//! The desktop shell for Aha!
 //!
 //! The studio is a web app with a local server (compilers, runners, the agent's
 //! tools), so the native app is deliberately thin: it starts that server with a
@@ -132,10 +132,10 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(Child, PathBuf), String> 
         .env("HOST", "127.0.0.1")
         .env("PORT", port.to_string())
         .env("NEXT_PUBLIC_BASE_URL", format!("http://127.0.0.1:{port}"))
-        .env("NANOCLI_TEMP_DIR", &temp)
-        .env("NANOCLI_DESKTOP", "1")
+        .env("AHA_TEMP_DIR", &temp)
+        .env("AHA_DESKTOP", "1")
         // The supervisor stops the studio if the app disappears without saying so
-        .env("NANOCLI_PARENT_PID", std::process::id().to_string())
+        .env("AHA_PARENT_PID", std::process::id().to_string())
         .env("NEXT_TELEMETRY_DISABLED", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::from(log))
@@ -214,7 +214,7 @@ fn main_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     let handle = app.clone();
     let downloads = app.path().download_dir().ok();
     WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-        .title("NanoCLI Studio")
+        .title("Aha!")
         .inner_size(1440.0, 900.0)
         .min_inner_size(900.0, 600.0)
         .on_navigation(move |url| {
@@ -280,7 +280,7 @@ pub fn run() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("error while building NanoCLI Studio");
+        .expect("error while building Aha!");
 
     app.run(|handle, event| {
         if let RunEvent::Exit = event {

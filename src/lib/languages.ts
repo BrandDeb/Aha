@@ -6,7 +6,7 @@
  * is runnable and what to say when a toolchain is missing).
  */
 
-export const OUT_DIR = '.nanocli-out';
+export const OUT_DIR = '.aha-out';
 
 /** One command of a run. `tool` lists alternatives (first one installed wins); each alternative is a command plus leading arguments. */
 export interface LangStep {

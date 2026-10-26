@@ -12,8 +12,8 @@ import { useProposals } from './proposals';
 import { useWorkspace } from './store';
 import { useToast } from './toasts';
 
-const RUNS_KEY = (project: string) => `nanocli:watcher-runs:${project}`;
-const CHECK_KEY = (project: string) => `nanocli:watcher-check:${project}`;
+const RUNS_KEY = (project: string) => `aha:watcher-runs:${project}`;
+const CHECK_KEY = (project: string) => `aha:watcher-check:${project}`;
 const TICK_MS = 20_000;
 /** You are typing: changes are looked at once you pause this long */
 const IDLE_MS = 8_000;

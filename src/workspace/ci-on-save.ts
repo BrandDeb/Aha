@@ -13,7 +13,7 @@ import { pipelineFiles } from '@/lib/pipelines/parse';
 import { failureReport, fetchPipelinesEnabled, runPipelineFile } from './pipelines-client';
 import { filesKey } from './contracts-client';
 
-const KEY = 'nanocli:ci-on-save';
+const KEY = 'aha:ci-on-save';
 const MAX_OUTPUT = 60_000;
 
 export type CiState =

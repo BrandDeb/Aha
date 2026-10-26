@@ -8,7 +8,7 @@ type Folder = Record<string, string>;
 
 const skill = (name: string, description: string, body: string): [string, Folder] => [
   name,
-  { 'SKILL.md': `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\nlicense: Proprietary (NanoCLI Studio)\n---\n\n${body.trim()}\n` },
+  { 'SKILL.md': `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\nlicense: Proprietary (Aha!)\n---\n\n${body.trim()}\n` },
 ];
 
 export const ECOSYSTEM_SKILLS: [string, Folder][] = [

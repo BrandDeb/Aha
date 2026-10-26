@@ -115,7 +115,7 @@ function once(url: URL, target: { address: string; family: number }, options: Fe
       {
         method: options.method ?? 'GET',
         headers: {
-          'User-Agent': 'NanoCLI-Studio-Agent/1.0',
+          'User-Agent': 'Aha-Agent/1.0',
           'Accept-Encoding': 'gzip, deflate, br',
           ...(options.body !== undefined ? { 'Content-Length': String(Buffer.byteLength(options.body)) } : {}),
           ...options.headers,

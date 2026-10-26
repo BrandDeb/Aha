@@ -1,5 +1,5 @@
 /**
- * NanoCLI Studio - the product page. Every claim here is something the studio
+ * Aha! - the product page. Every claim here is something the studio
  * does today; keep it that way (numbers measured on Linux x64, scriptc 0.2.2).
  */
 
@@ -15,7 +15,7 @@ import { JsonLd } from '@/components/JsonLd';
 import { organizationLd, pageMeta, siteUrl, softwareLd, websiteLd } from '@/lib/site';
 
 export const metadata: Metadata = pageMeta({
-  title: 'NanoCLI Studio · The IDE where AI does the work and proves it',
+  title: 'Aha! · The IDE where AI does the work and proves it',
   absoluteTitle: true,
   description: 'An editor and an AI teammate in one workspace. Describe an app or write it yourself; every change arrives as a proposal with the diff and evidence that it builds and runs. 40+ languages, live preview, a stack builder, your own model.',
   path: '/landing',

@@ -9,7 +9,7 @@
  *
  * This executes the user's code on the machine running the studio. That is
  * the point of a local editor, but on a shared or public server set
- * NANOCLI_PYTHON=0 or run it inside a container.
+ * AHA_PYTHON=0 or run it inside a container.
  */
 
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
@@ -31,10 +31,10 @@ const execFileAsync = promisify(execFile);
  * Where Python environments, caches and the downloaded uv live. A per-user folder, not the project:
  * environments are large, hold symlinks, and must not be picked up by the bundler or by git.
  */
-export const NANOCLI_DIR = process.env.NANOCLI_HOME || path.join(os.homedir(), '.nanocli');
-export const PY_PROJECTS = path.join(NANOCLI_DIR, 'python');
-const PY_CACHE = path.join(NANOCLI_DIR, 'cache');
-const UV_INSTALL_DIR = path.join(NANOCLI_DIR, 'bin');
+export const AHA_DIR = process.env.AHA_HOME || path.join(os.homedir(), '.aha');
+export const PY_PROJECTS = path.join(AHA_DIR, 'python');
+const PY_CACHE = path.join(AHA_DIR, 'cache');
+const UV_INSTALL_DIR = path.join(AHA_DIR, 'bin');
 
 export const MAX_PY_FILES = 200;
 export const MAX_PY_PROJECT_BYTES = 5 * 1024 * 1024;
@@ -43,13 +43,13 @@ const MAX_RETURNED_TOTAL_BYTES = 1536 * 1024;
 const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
 
 /** Running a program, and installing packages (which is slower and rarely hangs) */
-const RUN_TIMEOUT_MS = Number(process.env.NANOCLI_PY_TIMEOUT_MS) || 5 * 60_000;
-const INSTALL_TIMEOUT_MS = Number(process.env.NANOCLI_PY_INSTALL_TIMEOUT_MS) || 20 * 60_000;
-const MAX_PY_JOBS = Number(process.env.NANOCLI_PY_JOBS) || 3;
+const RUN_TIMEOUT_MS = Number(process.env.AHA_PY_TIMEOUT_MS) || 5 * 60_000;
+const INSTALL_TIMEOUT_MS = Number(process.env.AHA_PY_INSTALL_TIMEOUT_MS) || 20 * 60_000;
+const MAX_PY_JOBS = Number(process.env.AHA_PY_JOBS) || 3;
 const MAX_QUEUED_JOBS = 12;
 
 export function isPythonEnabled(): boolean {
-  return process.env.NANOCLI_PYTHON !== '0';
+  return process.env.AHA_PYTHON !== '0';
 }
 
 // ---------------------------------------------------------------------------
@@ -265,7 +265,7 @@ export function childEnv(host: NodeJS.ProcessEnv, projectDir: string, user: Reco
     HOME: home,
     USERPROFILE: home,
     UV_CACHE_DIR: path.join(PY_CACHE, 'uv'),
-    UV_PYTHON_INSTALL_DIR: path.join(NANOCLI_DIR, 'python-installs'),
+    UV_PYTHON_INSTALL_DIR: path.join(AHA_DIR, 'python-installs'),
     UV_NO_PROGRESS: '1',
     XDG_CACHE_HOME: path.join(PY_CACHE, 'xdg'),
     HF_HOME: path.join(PY_CACHE, 'huggingface'),
@@ -351,7 +351,7 @@ export async function getPythonStatus(): Promise<PythonStatus> {
     const { stdout } = await execFileAsync(uv.bin, ['python', 'list', '--only-installed'], {
       timeout: 20_000,
       windowsHide: true,
-      env: childEnv(process.env, NANOCLI_DIR, {}) as NodeJS.ProcessEnv,
+      env: childEnv(process.env, AHA_DIR, {}) as NodeJS.ProcessEnv,
     });
     pythons = [...new Set([...stdout.matchAll(/cpython-(\d+\.\d+\.\d+)/g)].map((m) => m[1]))].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
   } catch {
@@ -560,7 +560,7 @@ export async function runPython(request: PythonRequest, hooks: RunHooks): Promis
   const started = Date.now();
   const empty = (error: string, code: number | null = null): PythonResult => ({ code, ms: Date.now() - started, changed: {}, removed: [], skipped: [], error });
 
-  if (!isPythonEnabled()) return empty('Python support is turned off on this server (NANOCLI_PYTHON=0).');
+  if (!isPythonEnabled()) return empty('Python support is turned off on this server (AHA_PYTHON=0).');
   const uv = await resolveUv();
   if (!uv) return empty(UV_INSTALL_HELP);
 

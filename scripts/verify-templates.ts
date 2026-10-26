@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-process.env.NANOCLI_HOME ??= mkdtempSync(path.join(tmpdir(), 'tplv-'));
+process.env.AHA_HOME ??= mkdtempSync(path.join(tmpdir(), 'tplv-'));
 const { TEMPLATES } = await import('../src/lib/templates.ts');
 const { PROJECT_TEMPLATES, WORDSTATS_OUTPUT } = await import('../src/lib/project-templates.ts');
 const { MORE_PROJECT_TEMPLATES } = await import('../src/lib/project-templates-more.ts');

@@ -1,8 +1,8 @@
 /**
- * The developer docs (/docs), made from README.md: every "## " section is a
+ * The developer docs (/docs), made from docs/guide.md: every "## " section is a
  * page, grouped for the sidebar, with its "### " sections as the page's
- * contents. One source, so the docs never drift from the README. The markdown
- * is parsed here into plain blocks and inline runs (the subset the README
+ * contents. One source, so the site and the repository never disagree. The markdown
+ * is parsed here into plain blocks and inline runs (the subset the guide
  * uses: headings, paragraphs, lists, code, tables, quotes, links), which
  * components/DocBody renders. Pure, so it is tested directly.
  */
@@ -35,7 +35,7 @@ export interface DocPage {
   text: string;
 }
 
-/** Sidebar groups, in order; a README section not listed goes under "More" */
+/** Sidebar groups, in order; a guide section not listed goes under "More" */
 export const DOC_GROUPS: { name: string; pages: string[] }[] = [
   { name: 'Getting started', pages: ['Quick start', 'Create', 'Features', "What's measured"] },
   { name: 'Writing code', pages: ['Live values', 'Contracts', 'Web apps and live preview', 'Smart contracts: deploy & run', 'Other languages', 'Python and uv'] },
@@ -166,8 +166,8 @@ export function parseBlocks(md: string): Block[] {
 }
 
 /** Every page of the docs, in sidebar order */
-export function docsFromReadme(readme: string): DocPage[] {
-  const parts = readme.replace(/\r\n?/g, '\n').split(/^## /m).slice(1);
+export function docsFromGuide(guide: string): DocPage[] {
+  const parts = guide.replace(/\r\n?/g, '\n').split(/^## /m).slice(1);
   const pages: DocPage[] = [];
   for (const part of parts) {
     const newline = part.indexOf('\n');
@@ -197,7 +197,7 @@ export function docsFromReadme(readme: string): DocPage[] {
 }
 
 /**
- * Where a README link goes in the docs: "#assistant" or "#which-model-for-which-job" become the page
+ * Where a guide link goes in the docs: "#assistant" or "#which-model-for-which-job" become the page
  * (and section) that holds that heading; anything else is left as it is.
  */
 export function docHref(href: string, pages: DocPage[]): string {

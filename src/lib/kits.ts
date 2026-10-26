@@ -11,7 +11,7 @@
  *   checks       how to tell it works here: runs with expected output
  *   house rules  agent/prompt.md and agent/skills/: how the agent should work in it
  *
- * Inside a project the kit lives at .nanocli/kit.json; to share it, a whole
+ * Inside a project the kit lives at .aha/kit.json; to share it, a whole
  * project is exported as one .nanokit.json bundle. Exporting refuses to carry
  * secrets: .env files are left out, and any file that looks like it holds a key
  * is left out and named, so nothing leaks to a customer or a public repo.
@@ -21,7 +21,7 @@
 
 import { parseConnector, type Connector } from './connectors/types.ts';
 
-export const KIT_FILE = '.nanocli/kit.json';
+export const KIT_FILE = '.aha/kit.json';
 export const KIT_FORMAT = 1;
 
 export type KitAudience = 'fde' | 'isv' | 'team';
@@ -269,7 +269,7 @@ export function parseBundle(json: string): Result<{ kit: Kit; files: Record<stri
   } catch {
     return fail('Not a kit: the file is not JSON');
   }
-  if (!isObj(data) || data.nanokit !== KIT_FORMAT || !isObj(data.files)) return fail('Not a NanoCLI kit (.nanokit.json)');
+  if (!isObj(data) || data.nanokit !== KIT_FORMAT || !isObj(data.files)) return fail('Not an Aha! kit (.nanokit.json)');
   const kit = parseKit(data.kit);
   if ('error' in kit) return kit;
   const entries = Object.entries(data.files);

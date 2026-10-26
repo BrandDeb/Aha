@@ -35,10 +35,10 @@ test('a kit is untrusted input: bad ids, paths, regexes and embedded secrets are
   assert.match(bad({ connectors: [{ name: 'x', description: 'd', config: { kind: 'shell' } }] })!, /unknown kind/);
   assert.equal(bad({ connectors: [{ name: 'db', description: 'd', config: { kind: 'postgres', url: '${DATABASE_URL}' } }] }), null, 'a placeholder is fine');
   for (const p of ['a/../b', '/abs', 'node_modules/x/y.js', '.git/config', 'a\\b']) assert.equal(safeKitPath(p), false, p);
-  assert.equal(safeKitPath('.nanocli/kit.json'), true);
+  assert.equal(safeKitPath('.aha/kit.json'), true);
   // A project carrying a kit still builds and runs: the servers accept the manifest, and nothing else hidden
   assert.equal(isValidProjectPath(KIT_FILE), true);
-  for (const p of ['.nanocli/../x', '.nanocli/a/b.json', '.git/config', '.env']) assert.equal(isValidProjectPath(p), false, p);
+  for (const p of ['.aha/../x', '.aha/a/b.json', '.git/config', '.env']) assert.equal(isValidProjectPath(p), false, p);
 });
 
 test('secrets: found in common shapes, not in look-alikes', () => {
@@ -73,7 +73,7 @@ test('import: refuses what is not a kit or would write outside the project', () 
     const r = parseBundle(JSON.stringify(b));
     return 'error' in r ? r.error : null;
   };
-  assert.match(err({ hello: 1 })!, /Not a NanoCLI kit/);
+  assert.match(err({ hello: 1 })!, /Not an Aha! kit/);
   assert.match(err({ ...bundle, files: { ...bundle.files, '../../.bashrc': 'x' } })!, /Unsafe file path/);
   assert.match(err({ ...bundle, files: { 'README.md': 'x' } })!, /entry src\/index\.js is not in the kit/);
   assert.match((parseBundle('{') as { error: string }).error, /not JSON/);

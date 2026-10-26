@@ -15,7 +15,7 @@ const counter = path.join(dir, 'runs.txt');
 /** A child that records each start, then exits with the next code from `codes` (the last one repeats) */
 function child(codes: number[], extra = '') {
   fs.writeFileSync(counter, '');
-  const script = `const fs=require('fs');fs.appendFileSync(${JSON.stringify(counter)},(process.env.NANOCLI_SUPERVISED||'-')+'\\n');const n=fs.readFileSync(${JSON.stringify(counter)},'utf8').split('\\n').length-2;${extra}process.exit(${JSON.stringify(codes)}[Math.min(n,${codes.length - 1})]);`;
+  const script = `const fs=require('fs');fs.appendFileSync(${JSON.stringify(counter)},(process.env.AHA_SUPERVISED||'-')+'\\n');const n=fs.readFileSync(${JSON.stringify(counter)},'utf8').split('\\n').length-2;${extra}process.exit(${JSON.stringify(codes)}[Math.min(n,${codes.length - 1})]);`;
   return { command: process.execPath, args: ['-e', script] };
 }
 const runs = () => fs.readFileSync(counter, 'utf8').trim().split('\n').filter(Boolean);

@@ -74,7 +74,7 @@ export function BrowserPreview({ files, reloads, width, picking, snapshots, onSt
       // Only our frame; it has an opaque origin, so the window is what identifies it
       if (event.source !== frame.current?.contentWindow) return;
       const data = event.data as { source?: string; type?: string; ms?: number; message?: string; level?: string; text?: string; element?: PickedElement; html?: string } | null;
-      if (data?.source !== 'nanocli-preview') return;
+      if (data?.source !== 'aha-preview') return;
       if (data.type === 'ready') {
         ready.current = true;
         send();
@@ -336,7 +336,7 @@ export function PreviewPane({ detected, server, files, mode, browserSupport, onM
       ) : enabled === false ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
           <p className="text-sm text-gray-300">Dev servers are off on this server.</p>
-          <p className="max-w-sm text-xs leading-relaxed text-gray-500">They run your project&apos;s code, so they only start when the studio runs on your own machine (or with NANOCLI_DEV=1).</p>
+          <p className="max-w-sm text-xs leading-relaxed text-gray-500">They run your project&apos;s code, so they only start when the studio runs on your own machine (or with AHA_DEV=1).</p>
         </div>
       ) : ready ? (
         <div className="flex min-h-0 flex-1 flex-col">

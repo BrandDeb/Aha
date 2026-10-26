@@ -1,12 +1,12 @@
 [package]
-name = "nanocli-studio"
+name = "aha"
 version = "1.0.0"
-description = "NanoCLI Studio for Windows and macOS"
+description = "Aha! for Windows and macOS"
 edition = "2021"
 publish = false
 
 [lib]
-name = "nanocli_studio_lib"
+name = "aha_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

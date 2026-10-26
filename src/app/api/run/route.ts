@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** Each request starts processes; cap them per client */
-const limiter = createRateLimiter(Number(process.env.NANOCLI_RUN_REQUESTS_PER_10_MIN) || 150, 10 * 60 * 1000);
+const limiter = createRateLimiter(Number(process.env.AHA_RUN_REQUESTS_PER_10_MIN) || 150, 10 * 60 * 1000);
 
 /** Which languages this machine can run, and how to get the ones it can't */
 export async function GET(request: NextRequest) {
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Programs are only run for localhost or the site in NEXT_PUBLIC_BASE_URL (add other names to ALLOWED_HOSTS).' }, { status: 403 });
   }
   if (!isRunEnabled()) {
-    return NextResponse.json({ error: 'Running other languages is off on this server: it only runs programs when it listens on your own machine (or NANOCLI_RUN=1).' }, { status: 503 });
+    return NextResponse.json({ error: 'Running other languages is off on this server: it only runs programs when it listens on your own machine (or AHA_RUN=1).' }, { status: 503 });
   }
   const wait = limiter.check(clientKey(request.headers));
   if (wait) return NextResponse.json({ error: `Too many runs. Try again in ${Math.ceil(wait / 60)} min.` }, { status: 429, headers: { 'Retry-After': String(wait) } });

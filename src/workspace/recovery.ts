@@ -6,12 +6,12 @@
  * file. Everything takes a Storage so it can be tested without a browser.
  */
 
-export const WORKSPACE_KEY = 'nanocli:workspace';
-export const LAST_GOOD_KEY = 'nanocli:workspace:last-good';
-export const CRASHES_KEY = 'nanocli:crashes';
+export const WORKSPACE_KEY = 'aha:workspace';
+export const LAST_GOOD_KEY = 'aha:workspace:last-good';
+export const CRASHES_KEY = 'aha:crashes';
 
 /** Keys that only affect how the studio looks and behaves; resetting them never touches a project or an API key */
-export const SETTINGS_KEYS = ['nanocli:settings', 'nanocli:appearance-vars'];
+export const SETTINGS_KEYS = ['aha:settings', 'aha:appearance-vars'];
 
 const CRASH_WINDOW_MS = 10 * 60_000;
 

@@ -7,8 +7,8 @@ import path from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 // The studio home is read when the module loads
-const home = mkdtempSync(path.join(tmpdir(), 'nanocli-home-'));
-process.env.NANOCLI_HOME = home;
+const home = mkdtempSync(path.join(tmpdir(), 'aha-home-'));
+process.env.AHA_HOME = home;
 const { ensureZig, packageFiles, verifyIntegrity, zigHome, zigPackage } = await import('../src/lib/zig-install.ts');
 
 /** A minimal npm tarball: ustar entries under package/, gzipped */

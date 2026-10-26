@@ -100,7 +100,7 @@ export function chipsFor(e: Evidence): Chip[] {
     else if (checked === false) chips.push({ label: 'contracts ✕', tone: 'bad', detail: 'The last contract check failed' });
     else chips.push({ label: `contracts ${checked ? '✓' : 'kept'} ${total}/${total}`, tone: checked ? 'good' : 'neutral', detail: checked ? 'Every contract was checked and holds' : 'The pattern contracts hold; the command contracts were not run' });
   }
-  if (e.contractsChanged) chips.push({ label: 'changes a contract', tone: 'warn', detail: 'This proposal edits .nanocli/contracts.json: check that it does not loosen a rule' });
+  if (e.contractsChanged) chips.push({ label: 'changes a contract', tone: 'warn', detail: 'This proposal edits .aha/contracts.json: check that it does not loosen a rule' });
   if (e.failedChecks) chips.push({ label: `${e.failedChecks} failed attempt${e.failedChecks > 1 ? 's' : ''}`, tone: 'neutral', detail: 'Builds or runs that failed before the final state' });
   if (e.reason !== 'finished') {
     const why: Partial<Record<StopReason, string>> = { budget: 'stopped at its budget', stuck: 'stopped going in circles', aborted: 'stopped', declined: 'declined', error: 'failed' };

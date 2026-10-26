@@ -66,7 +66,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
 
   const commitMessage = typeof message === 'string' && message.trim()
     ? message.trim().slice(0, 500)
-    : `Update ${filePath} from NanoCLI Studio`;
+    : `Update ${filePath} from Aha!`;
 
   const { owner, repo } = await params;
 

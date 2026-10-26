@@ -34,6 +34,8 @@ import { useDevServer } from './devserver-client';
 import { laneOf, useProposals, verdict } from './proposals';
 import { useWorker } from './worker';
 import { useWatchers } from './watchers';
+import { useChannelUpdates } from './channel-client';
+import { YOU } from '@/lib/agent/channel';
 import { useWorkspace } from './store';
 import { useToast } from './toasts';
 import { useLiveValues } from './live-client';
@@ -49,7 +51,7 @@ import { describeWhy, parseWhy, whyByLine, WHY_FILE } from '@/lib/why';
 import { AWAY_MS, morningReport, type MorningReport } from '@/lib/morning';
 import { MorningReportDialog } from './components/MorningReportDialog';
 
-const SEEN_KEY = 'nanocli:last-seen';
+const SEEN_KEY = 'aha:last-seen';
 import { liveSummary } from '@/lib/live/display';
 
 // Everything beyond the editor, terminal and Build panel loads the first time it is opened, so the studio starts with
@@ -69,6 +71,7 @@ const Web3Panel = dynamic(() => import('./panels/Web3Panel').then((m) => m.Web3P
 const ContractsPanel = dynamic(() => import('./panels/ContractsPanel').then((m) => m.ContractsPanel), { ssr: false, loading: PanelLoading });
 const KitPanel = dynamic(() => import('./panels/KitPanel').then((m) => m.KitPanel), { ssr: false, loading: PanelLoading });
 const PipelinesPanel = dynamic(() => import('./panels/PipelinesPanel').then((m) => m.PipelinesPanel), { ssr: false, loading: PanelLoading });
+const ChannelPanel = dynamic(() => import('./panels/ChannelPanel').then((m) => m.ChannelPanel), { ssr: false, loading: PanelLoading });
 const WatchersPanel = dynamic(() => import('./panels/WatchersPanel').then((m) => m.WatchersPanel), { ssr: false, loading: PanelLoading });
 const WorkerPanel = dynamic(() => import('./panels/WorkerPanel').then((m) => m.WorkerPanel), { ssr: false, loading: PanelLoading });
 const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then((m) => m.SettingsDialog), { ssr: false });
@@ -118,6 +121,7 @@ const GROUPS: { id: string; label: string; panels: { id: PanelId; label: string;
       { id: 'agent', label: 'Do', hint: 'Give it a task: it works on a copy and comes back with a proposal and the proof that it works' },
       { id: 'ai', label: 'Ask', hint: 'Questions and explanations about your code; nothing changes' },
       { id: 'worker', label: 'Keep going', hint: 'It picks up the next useful task by itself while you work' },
+      { id: 'channel', label: 'Channel', hint: 'Running agents tell each other what they changed and ask each other, or you' },
       { id: 'watchers', label: 'Watchers', hint: 'Agents that wake on a schedule, on changes or on failures, and say when they hold back' },
     ],
   },
@@ -249,8 +253,8 @@ export function Workspace() {
     setLastInGroup((prev) => ({ ...prev, [groupOf(id).id]: id }));
   }, []);
   // The explorer collapses to a rail on the left, the tools to a rail on the right
-  const [showExplorer, setShowExplorer] = usePersistedFlag('nanocli:explorer-open', true);
-  const [showPanel, setShowPanel] = usePersistedFlag('nanocli:tools-open', true);
+  const [showExplorer, setShowExplorer] = usePersistedFlag('aha:explorer-open', true);
+  const [showPanel, setShowPanel] = usePersistedFlag('aha:tools-open', true);
   // Phones and tablets: the explorer, the tools and the agent bar open as full-width sheets over the editor
   const [sheet, setSheet] = useState<null | 'files' | 'tools' | 'ask'>(null);
   const mobileAskRef = useRef<HTMLInputElement | null>(null);
@@ -291,7 +295,7 @@ export function Workspace() {
   useEffect(() => {
     if (!hydrated) return;
     try {
-      const firstVisit = !localStorage.getItem('nanocli:welcomed') && !localStorage.getItem('nanocli:ai') && !localStorage.getItem('nanocli:workspace') && !window.location.search;
+      const firstVisit = !localStorage.getItem('aha:welcomed') && !localStorage.getItem('aha:ai') && !localStorage.getItem('aha:workspace') && !window.location.search;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- storage is only readable after hydration
       if (firstVisit) setDialog('welcome');
       else {
@@ -657,7 +661,7 @@ export function Workspace() {
   useEffect(() => {
     try {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- storage is only readable in the browser
-      setRunArgs(localStorage.getItem(`nanocli:run-args:${project.name}`) ?? '');
+      setRunArgs(localStorage.getItem(`aha:run-args:${project.name}`) ?? '');
     } catch {
       setRunArgs('');
     }
@@ -665,7 +669,7 @@ export function Workspace() {
   const updateRunArgs = useCallback((value: string) => {
     setRunArgs(value);
     try {
-      localStorage.setItem(`nanocli:run-args:${projectRef.current.name}`, value);
+      localStorage.setItem(`aha:run-args:${projectRef.current.name}`, value);
     } catch {
       // storage blocked: kept for this session
     }
@@ -776,6 +780,20 @@ export function Workspace() {
   // Watchers: agents that wake on a schedule, on changes or on failures
   const watcherFailure = useMemo(() => (failure ? { signature: failure.signature, title: failure.title } : null), [failure]);
   const watchers = useWatchers(watcherFailure);
+
+  // Agents' questions for you on the channel: a notice when one arrives, and a count in the status bar
+  useChannelUpdates(proposals.channel);
+  const questionsForYou = proposals.channel.openQuestions(YOU);
+  useEffect(() => {
+    const seen = new Set(proposals.channel.openQuestions(YOU).map((q) => q.id));
+    return proposals.channel.subscribe(() => {
+      for (const q of proposals.channel.openQuestions(YOU)) {
+        if (seen.has(q.id)) continue;
+        seen.add(q.id);
+        notify({ kind: 'info', title: `${q.fromLabel} asks you`, detail: q.text.slice(0, 160), action: { label: 'Answer', run: () => openPanel('channel') } });
+      }
+    });
+  }, [proposals.channel, notify, openPanel]);
 
   // The morning report: built from how things stand when it opens
   const [report, setReport] = useState<MorningReport | null>(null);
@@ -994,8 +1012,8 @@ export function Workspace() {
       <div className="flex h-dvh flex-col bg-background text-gray-100">
         {/* Top bar */}
         <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-[var(--bar)] px-3" data-zen-hide>
-          <Link href="/landing" prefetch={false} className="flex items-center gap-2 pl-1" aria-label="NanoCLI overview">
-            <span className="wordmark text-[20px] text-gray-100">NANOCLI</span>
+          <Link href="/landing" prefetch={false} className="flex items-center gap-2 pl-1" aria-label="Aha! overview">
+            <span className="wordmark text-[20px] text-gray-100">AHA!</span>
           </Link>
           <span className="h-5 w-px bg-border" aria-hidden="true" />
           <input
@@ -1355,6 +1373,7 @@ export function Workspace() {
                 {shownPanel === 'agent' && <AgentPanel />}
                 {shownPanel === 'worker' && <WorkerPanel worker={worker} />}
                 {shownPanel === 'watchers' && <WatchersPanel watchers={watchers} />}
+                {shownPanel === 'channel' && <ChannelPanel />}
                 {shownPanel === 'optimize' && <OptimizePanel onOpen={(file) => openLocation({ file, line: 1 })} />}
                 {shownPanel === 'web3' && <Web3Panel onOpen={(file, line) => openLocation({ file, line: line ?? 1 })} />}
                 {shownPanel === 'contracts' && <ContractsPanel onOpen={(file, line) => openLocation({ file, line: line ?? 1 })} />}
@@ -1459,6 +1478,11 @@ export function Workspace() {
               {contractStatus.counts.fail ? `${contractStatus.counts.fail} contract${contractStatus.counts.fail > 1 ? 's' : ''} broken` : `contracts ${contractStatus.counts.pass}/${contractStatus.views.length}`}
             </button>
           )}
+          {questionsForYou.length > 0 && (
+            <button onClick={() => openPanel('channel')} className="rounded px-1.5 text-amber-300 hover:bg-white/[0.06]" title={questionsForYou.map((q) => `${q.fromLabel}: ${q.text}`).join('\n')}>
+              {questionsForYou.length} question{questionsForYou.length > 1 ? 's' : ''} for you
+            </button>
+          )}
           {worker.settings.mode !== 'off' && (
             <button onClick={() => openPanel('worker')} className={`rounded px-1.5 hover:bg-white/[0.06] ${worker.status.kind === 'waiting-for-you' ? 'text-amber-300' : ''}`} title="Keep going: the worker">
               {worker.status.kind === 'working' ? 'worker on it' : worker.status.kind === 'waiting-for-you' ? 'worker needs you' : worker.status.kind === 'paused' ? 'worker paused' : `worker · ${worker.queue.length} queued`}
@@ -1514,7 +1538,7 @@ export function Workspace() {
           onClose={() => {
             setDialog(null);
             try {
-              localStorage.setItem('nanocli:welcomed', '1');
+              localStorage.setItem('aha:welcomed', '1');
             } catch {
               // storage blocked: shown again next time
             }

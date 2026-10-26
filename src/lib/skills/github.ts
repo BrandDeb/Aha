@@ -98,7 +98,7 @@ async function listWithGit(src: RepoSource, git: Git, token?: string): Promise<{
   const url = `https://github.com/${src.owner}/${src.repo}.git`;
   // The token goes in a header, never the URL (which would show in the process list)
   const auth = token ? ['-c', `http.https://github.com/.extraheader=AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}`] : [];
-  const dir = await mkdtemp(path.join(tmpdir(), 'nanocli-skills-'));
+  const dir = await mkdtemp(path.join(tmpdir(), 'aha-skills-'));
   try {
     await git(['init', '-q'], dir);
     const ref = src.ref ?? 'HEAD';

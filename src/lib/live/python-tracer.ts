@@ -9,7 +9,7 @@
 export const PY_TRACER = String.raw`import ast, atexit, builtins, json, os, reprlib, runpy, sys, types
 
 ROOT = os.getcwd()
-OUT = os.environ["NANOCLI_LIVE_OUT"]
+OUT = os.environ["AHA_LIVE_OUT"]
 MAX_EVENTS = 300000
 r = reprlib.Repr()
 r.maxstring, r.maxother, r.maxlist, r.maxtuple, r.maxdict, r.maxset, r.maxlevel = 60, 60, 6, 6, 5, 6, 2
@@ -32,7 +32,7 @@ def rel(filename):
     except ValueError:
         return None
     parts = p.split(os.sep)
-    if p.startswith("..") or ".venv" in parts or "site-packages" in parts or parts[0] == ".nanocli-live":
+    if p.startswith("..") or ".venv" in parts or "site-packages" in parts or parts[0] == ".aha-live":
         return None
     return p.replace(os.sep, "/")
 
@@ -74,7 +74,7 @@ def snap(frame):
 def statement_lines():
     files = {}
     for dirpath, dirnames, filenames in os.walk(ROOT):
-        dirnames[:] = [d for d in dirnames if d not in (".venv", "node_modules", ".nanocli-live", "__pycache__", ".git")]
+        dirnames[:] = [d for d in dirnames if d not in (".venv", "node_modules", ".aha-live", "__pycache__", ".git")]
         for name in filenames:
             if not name.endswith(".py"):
                 continue

@@ -8,10 +8,10 @@
  * - restraint is visible: every skip is logged with its reason, so silence can be read;
  * - a budget per day, and no new run while its last result still waits for review.
  *
- * Definitions live in the project (`.nanocli/watchers.json`) so they travel with it; run history stays in the browser.
+ * Definitions live in the project (`.aha/watchers.json`) so they travel with it; run history stays in the browser.
  */
 
-export const WATCHERS_FILE = '.nanocli/watchers.json';
+export const WATCHERS_FILE = '.aha/watchers.json';
 
 export type WatcherTrigger =
   | { kind: 'schedule'; cron: string }
@@ -217,7 +217,7 @@ export function eventFor(w: Watcher, ctx: Context): WatcherEvent | null {
   }
   if (t.kind === 'change') {
     const re = globToRegExp(t.glob);
-    const paths = ctx.changed.filter((p) => re.test(p) && !p.startsWith('.nanocli/'));
+    const paths = ctx.changed.filter((p) => re.test(p) && !p.startsWith('.aha/'));
     if (!paths.length) return null;
     const state = paths.map((p) => `${p}\n${ctx.files[p] ?? '(removed)'}`).join('\n');
     return { key: `${w.id}:change:${hash(state)}`, summary: `${paths.length === 1 ? paths[0] : `${paths.length} files`} changed`, paths };
@@ -312,7 +312,7 @@ function triggerOf(raw: unknown): WatcherTrigger | null {
   return null;
 }
 
-/** The watchers in a project's `.nanocli/watchers.json`; anything malformed is left out */
+/** The watchers in a project's `.aha/watchers.json`; anything malformed is left out */
 export function parseWatchers(text: string | undefined): Watcher[] {
   if (!text) return [];
   let data: unknown;

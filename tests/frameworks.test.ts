@@ -77,13 +77,13 @@ test('dev server requests: paths stay out of generated folders', async () => {
 
 /**
  * The real thing, per starter: install, start, fetch the page, edit a file and
- * see the change served. Needs the npm registry: NANOCLI_TEST_NETWORK=1.
+ * see the change served. Needs the npm registry: AHA_TEST_NETWORK=1.
  */
-test('every web starter installs, serves its page and picks up edits', { skip: process.env.NANOCLI_TEST_NETWORK !== '1', timeout: 30 * 60_000 }, async () => {
-  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'nanocli-dev-'));
-  process.env.NANOCLI_HOME = home;
+test('every web starter installs, serves its page and picks up edits', { skip: process.env.AHA_TEST_NETWORK !== '1', timeout: 30 * 60_000 }, async () => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'aha-dev-'));
+  process.env.AHA_HOME = home;
   const dev = await import('../src/lib/devserver.ts');
-  const only = process.env.NANOCLI_TEST_STARTERS?.split(',');
+  const only = process.env.AHA_TEST_STARTERS?.split(',');
   const failures: string[] = [];
   for (const starter of WEB_STARTERS.filter((s) => !only || only.includes(s.id))) {
     const id = `test-${starter.id}`.slice(0, 40);

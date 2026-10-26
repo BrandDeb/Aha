@@ -33,7 +33,7 @@ export function CrashScreen({ error, retry, standalone = false }: { error: Error
     const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `nanocli-project-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `aha-project-backup-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
   };

@@ -2,7 +2,7 @@
  * How the site presents itself to search engines (SEO), answer engines (AEO:
  * featured answers, voice assistants) and generative engines (GEO: ChatGPT,
  * Claude, Perplexity, Google AI Overviews): one canonical address, a clear
- * entity (what NanoCLI Studio is, who makes it, what it costs), schema.org
+ * entity (what Aha! is, who makes it, what it costs), schema.org
  * structured data per page, and llms.txt — a plain-text map of the site
  * written for language models. Pure: the routes in app/ only serialise these.
  */
@@ -18,11 +18,11 @@ export function siteUrl(env: Record<string, string | undefined> = process.env): 
 }
 
 export const SITE = {
-  name: 'NanoCLI Studio',
-  shortName: 'NanoCLI',
+  name: 'Aha!',
+  shortName: 'Aha!',
   tagline: 'The IDE where AI does the work and proves it',
   description:
-    'NanoCLI Studio is an editor and an AI teammate in one workspace. Describe an app or write it yourself in 40+ languages; the agent works on a private copy and every change arrives as a proposal with the diff and evidence that it builds and runs. Live values, contracts, a second reviewer, live preview, native desktop apps, and your own model.',
+    'Aha! is an editor and an AI teammate in one workspace. Describe an app or write it yourself in 40+ languages; the agent works on a private copy and every change arrives as a proposal with the diff and evidence that it builds and runs. Live values, contracts, a second reviewer, live preview, native desktop apps, and your own model.',
   publisher: 'BrandDeb',
   category: 'DeveloperApplication',
   keywords: ['AI code editor', 'AI IDE', 'coding agent', 'vibe coding', 'app builder', 'TypeScript to native binary', 'scriptc', 'live preview', 'stack builder', 'online IDE', 'browser IDE', 'polyglot IDE'],

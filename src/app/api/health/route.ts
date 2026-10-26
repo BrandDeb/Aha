@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       uptimeSeconds: Math.round((Date.now() - started) / 1000),
       memoryMb: { rss: Math.round(memory.rss / 1048576), heapUsed: Math.round(memory.heapUsed / 1048576) },
       node: process.version,
-      supervised: process.env.NANOCLI_SUPERVISED === '1',
+      supervised: process.env.AHA_SUPERVISED === '1',
       autopilot: { autoRepair: state.autoRepair, autoUpdate: state.autoUpdate, pendingVerify: !!state.pendingVerify, recent: state.journal.slice(0, 5) },
     },
     { headers }

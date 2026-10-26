@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { liveSupported, type LiveResult } from '@/lib/live/shared';
 import { pythonProjectId } from './python-client';
 
-const KEY = 'nanocli:live';
+const KEY = 'aha:live';
 
 let enabledCheck: Promise<boolean> | null = null;
 /** Whether this server runs programs for live values (asked once per page) */

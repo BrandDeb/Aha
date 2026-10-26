@@ -1,4 +1,4 @@
-# NanoCLI Studio backlog
+# Aha! backlog
 
 > The order and the specs for what comes next are in [ROADMAP.md](ROADMAP.md).
 
@@ -44,7 +44,7 @@ as a proposal with evidence, and vibe coding and hand-writing as equals.
 | Project memory and guided tour (what this codebase is, for a newcomer, in 5 stops) | Next | |
 | Supply-chain guard (new dependencies checked for typosquats, install scripts, advisories, licence) | Next | extends the risk score |
 | **Watchers: proactive agents** (schedule, interval, change and failure triggers; restraint log; budgets) | Done | background running and webhook triggers: Next |
-| **Agent channels** (proposals message each other; typed messages; access control; searchable history) | Now | spec in ROADMAP item 2 |
+| **Agent channels** (proposals message each other; typed messages; open / ask first / off; searchable history) | Done | a bridge to external relays: Later |
 
 ## 2. Table stakes (what every top editor has)
 
@@ -126,8 +126,7 @@ and would undo the "lightweight" goal. The plan instead:
 | Item | Why |
 |---|---|
 | Google sign-in | needs a domain |
-| GitHub OAuth app (`NANOCLI_GITHUB_CLIENT_ID`) | GitHub sign-in in production |
+| GitHub OAuth app (`AHA_GITHUB_CLIENT_ID`) | GitHub sign-in in production |
 | `NEXT_PUBLIC_SITE_URL` | canonical URLs, sitemap, OG images |
 | Tauri updater signing key | signed desktop updates |
 | Testing the macOS app on a real Mac | |
-| `SNYK_TOKEN` (optional) | Snyk instead of `npm audit` in CI |

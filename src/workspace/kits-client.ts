@@ -23,7 +23,7 @@ export function downloadText(filename: string, text: string, type = 'application
 
 /** Which playbook steps are done, per kit, kept in this browser */
 export function useStepsDone(kitId: string): [Set<number>, (index: number) => void] {
-  const key = `nanocli:kit-steps:${kitId}`;
+  const key = `aha:kit-steps:${kitId}`;
   const [done, setDone] = useState<Set<number>>(new Set());
   useEffect(() => {
     try {

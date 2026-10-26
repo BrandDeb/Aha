@@ -72,7 +72,7 @@ export interface Generated {
 }
 
 const HEADER = (stacks: Stack[], provider: Provider) =>
-  `# ${provider === 'github' ? 'GitHub Actions' : 'GitLab CI'} for ${stacks.map((s) => s.name).join(' + ')}, set up by NanoCLI Studio.\n` +
+  `# ${provider === 'github' ? 'GitHub Actions' : 'GitLab CI'} for ${stacks.map((s) => s.name).join(' + ')}, set up by Aha!\n` +
   `# It is yours to edit: the studio reads this file as it is and runs it locally from the Pipelines tab.\n`;
 
 const dump = (doc: unknown) => yaml.dump(doc, { lineWidth: -1, noRefs: true, quotingType: '"' });

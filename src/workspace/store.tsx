@@ -6,6 +6,7 @@
  * so private windows and blocked storage still work, just without saving).
  */
 
+import { migrateProjectFiles } from '@/lib/legacy-names';
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { DEFAULT_CODE } from '@/lib/default-code';
 import type { CompileTarget } from '@/types';
@@ -87,7 +88,7 @@ interface EditorState {
   git: GitLink | null;
 }
 
-type Action =
+export type Action =
   | { type: 'write'; path: string; content: string }
   /** Merge files in (and remove some) without opening tabs, e.g. what uv or a program changed */
   | { type: 'put'; files: Record<string, string>; removed?: string[] }
@@ -103,9 +104,9 @@ type Action =
   | { type: 'replace'; project: Project; git?: GitLink | null }
   | { type: 'git'; git: GitLink | null };
 
-const STORAGE_KEY = 'nanocli:workspace';
-const HISTORY_KEY = 'nanocli:history';
-const SETTINGS_KEY = 'nanocli:settings';
+const STORAGE_KEY = 'aha:workspace';
+const HISTORY_KEY = 'aha:history';
+const SETTINGS_KEY = 'aha:settings';
 const MAX_SNAPSHOTS = 40;
 
 export function defaultProject(): Project {
@@ -193,9 +194,12 @@ function reducer(state: EditorState, action: Action): EditorState {
     case 'split':
       return { ...state, split: action.path && action.path in project.files ? action.path : null };
     case 'replace': {
-      const first = action.project.entry in action.project.files ? action.project.entry : Object.keys(action.project.files)[0] ?? '';
+      // Projects saved before the rename keep their watchers, why-history and channel history (.nanocli/ → .aha/)
+      const files = migrateProjectFiles(action.project.files);
+      const incoming = files === action.project.files ? action.project : { ...action.project, files };
+      const first = incoming.entry in incoming.files ? incoming.entry : Object.keys(incoming.files)[0] ?? '';
       return {
-        project: action.project,
+        project: incoming,
         tabs: first ? [first] : [],
         active: first,
         split: null,

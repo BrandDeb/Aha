@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { makeFailure, type Failure, type FailureSource } from '@/lib/debug';
 
-const KEY = (project: string) => `nanocli:last-good:${project}`;
+const KEY = (project: string) => `aha:last-good:${project}`;
 /** Bigger projects keep their last good version for the session only */
 const MAX_STORED = 1.5 * 1024 * 1024;
 

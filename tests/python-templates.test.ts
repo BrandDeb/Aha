@@ -12,8 +12,8 @@ import { TEMPLATES, templateFiles } from '../src/lib/templates.ts';
 const python = TEMPLATES.filter((t) => t.language === 'python' && !t.app);
 const uv = await resolveUv();
 const skipNoUv = uv ? false : 'uv is not installed';
-// These install real packages from PyPI, so they only run when asked: NANOCLI_TEST_NETWORK=1 npm test
-const skipNet = skipNoUv || (process.env.NANOCLI_TEST_NETWORK === '1' ? false : 'set NANOCLI_TEST_NETWORK=1 to install packages and run the Python templates');
+// These install real packages from PyPI, so they only run when asked: AHA_TEST_NETWORK=1 npm test
+const skipNet = skipNoUv || (process.env.AHA_TEST_NETWORK === '1' ? false : 'set AHA_TEST_NETWORK=1 to install packages and run the Python templates');
 
 test('there is a Python template for each AI starting point, with unique ids', () => {
   const ids = python.map((t) => t.id);

@@ -8,7 +8,7 @@
 /** Errors meaning "this page's code is out of date" (each bundler and browser words it differently) */
 export const STALE_CODE = /ChunkLoadError|Loading (?:CSS )?chunk [\w-]+ failed|Failed to load chunk|Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i;
 
-const KEY = 'nanocli:healed-at';
+const KEY = 'aha:healed-at';
 const MIN_GAP_MS = 60_000;
 
 /** Reload once if the error means stale code; returns whether it did */

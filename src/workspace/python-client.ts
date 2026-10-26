@@ -96,7 +96,7 @@ export async function streamCommand(
 // Per-project id
 // ---------------------------------------------------------------------------
 
-const IDS_KEY = 'nanocli:pyids';
+const IDS_KEY = 'aha:pyids';
 
 /** A stable id for a project name, so the server keeps its environment between commands */
 export function pythonProjectId(name: string): string {
@@ -121,7 +121,7 @@ export function pythonProjectId(name: string): string {
 // Environment variables for programs (API keys and so on)
 // ---------------------------------------------------------------------------
 
-const ENV_KEY = 'nanocli:pyenv';
+const ENV_KEY = 'aha:pyenv';
 const envListeners = new Set<() => void>();
 let envCache: Record<string, string> | null = null;
 const NO_ENV: Record<string, string> = {};

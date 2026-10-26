@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** Each call can start a process or reach the network; cap them per client */
-const limiter = createRateLimiter(Number(process.env.NANOCLI_CONNECTOR_CALLS_PER_10_MIN) || 400, 10 * 60 * 1000);
+const limiter = createRateLimiter(Number(process.env.AHA_CONNECTOR_CALLS_PER_10_MIN) || 400, 10 * 60 * 1000);
 
 /** What this server allows: connectors off, local (everything) or hosted (network connectors only) */
 export function GET() {
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Connectors are only accepted for localhost or the site in NEXT_PUBLIC_BASE_URL (add other names to ALLOWED_HOSTS).' }, { status: 403 });
   }
   const mode = connectorsMode();
-  if (mode === 'off') return NextResponse.json({ error: 'Connectors are turned off on this server (NANOCLI_CONNECTORS=0).' }, { status: 503 });
+  if (mode === 'off') return NextResponse.json({ error: 'Connectors are turned off on this server (AHA_CONNECTORS=0).' }, { status: 503 });
 
   const wait = limiter.check(clientKey(request.headers));
   if (wait) return NextResponse.json({ error: `Too many connector calls. Try again in ${Math.ceil(wait / 60)} min.` }, { status: 429, headers: { 'Retry-After': String(wait) } });

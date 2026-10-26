@@ -12,8 +12,8 @@ const NAV = [
 
 export function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <Link href="/landing" className="flex shrink-0 items-center" aria-label="NanoCLI home">
-      <span className={`wordmark text-gray-100 ${compact ? 'text-lg' : 'text-[22px]'}`}>NANOCLI</span>
+    <Link href="/landing" className="flex shrink-0 items-center" aria-label="Aha! home">
+      <span className={`wordmark text-gray-100 ${compact ? 'text-lg' : 'text-[22px]'}`}>AHA!</span>
     </Link>
   );
 }

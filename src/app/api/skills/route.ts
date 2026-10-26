@@ -15,10 +15,10 @@ const limiter = createRateLimiter(60, 10 * 60 * 1000);
 
 const trusted = (request: NextRequest) => isTrustedHost(request.headers.get('host'), getBaseUrl(), process.env.ALLOWED_HOSTS);
 
-/** Installing and writing skills changes this machine: only when the studio runs on it (or NANOCLI_SKILLS=1) */
+/** Installing and writing skills changes this machine: only when the studio runs on it (or AHA_SKILLS=1) */
 export function skillsWritable(env: Record<string, string | undefined> = process.env): boolean {
-  if (env.NANOCLI_SKILLS === '0') return false;
-  if (env.NANOCLI_SKILLS === '1') return true;
+  if (env.AHA_SKILLS === '0') return false;
+  if (env.AHA_SKILLS === '1') return true;
   return listensOnLoopbackOnly(env);
 }
 

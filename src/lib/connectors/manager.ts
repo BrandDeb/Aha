@@ -15,20 +15,20 @@ import { LOCAL_KINDS, type Connector, type ConnectorCallResult, type ConnectorKi
 export type Mode = 'off' | 'local' | 'hosted';
 
 /**
- * off:    NANOCLI_CONNECTORS=0
- * local:  the studio listens only on this machine (or NANOCLI_CONNECTORS=1), so running a
+ * off:    AHA_CONNECTORS=0
+ * local:  the studio listens only on this machine (or AHA_CONNECTORS=1), so running a
  *         tool the user configured is the same trust as running their own code
  * hosted: shared server; only network connectors, which can never reach private addresses
  */
 export function connectorsMode(env: Record<string, string | undefined> = process.env): Mode {
-  if (env.NANOCLI_CONNECTORS === '0') return 'off';
-  if (env.NANOCLI_CONNECTORS === '1') return 'local';
+  if (env.AHA_CONNECTORS === '0') return 'off';
+  if (env.AHA_CONNECTORS === '1') return 'local';
   return listensOnLoopbackOnly(env) ? 'local' : 'hosted';
 }
 
 /** A message when this kind can't run in this mode, otherwise null */
 export function modeBlocks(kind: ConnectorKind, mode: Mode): string | null {
-  if (mode === 'off') return 'Connectors are turned off on this server (NANOCLI_CONNECTORS=0).';
+  if (mode === 'off') return 'Connectors are turned off on this server (AHA_CONNECTORS=0).';
   if (mode === 'hosted' && LOCAL_KINDS.includes(kind)) return 'This kind of connector runs programs or reads files on the server, so it is only available when the studio runs on your own machine.';
   return null;
 }
@@ -41,8 +41,8 @@ interface Pooled {
 const IDLE_MS = 5 * 60_000;
 const MAX_SESSIONS = 8;
 
-const g = globalThis as unknown as { __nanocliMcpPool?: Map<string, Pooled>; __nanocliMcpReaper?: NodeJS.Timeout };
-const pool = (g.__nanocliMcpPool ??= new Map<string, Pooled>());
+const g = globalThis as unknown as { __ahaMcpPool?: Map<string, Pooled>; __ahaMcpReaper?: NodeJS.Timeout };
+const pool = (g.__ahaMcpPool ??= new Map<string, Pooled>());
 
 function reap(): void {
   const now = Date.now();
@@ -61,9 +61,9 @@ export function closeAllConnectors(): void {
   for (const key of [...pool.keys()]) drop(key);
 }
 
-if (!g.__nanocliMcpReaper) {
-  g.__nanocliMcpReaper = setInterval(reap, 60_000);
-  g.__nanocliMcpReaper.unref();
+if (!g.__ahaMcpReaper) {
+  g.__ahaMcpReaper = setInterval(reap, 60_000);
+  g.__ahaMcpReaper.unref();
   process.once('exit', closeAllConnectors);
 }
 

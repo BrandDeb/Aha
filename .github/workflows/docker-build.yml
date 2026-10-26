@@ -1,4 +1,4 @@
-name: Docker Build
+name: Docker
 
 on:
   push:
@@ -44,6 +44,7 @@ jobs:
             type=semver,pattern={{major}}
             type=sha
             type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -83,10 +84,10 @@ jobs:
 
       - name: Run container
         run: |
-          docker run -d -p 3000:3000 --name test-nano-cli "$IMAGE"
+          docker run -d -p 3000:3000 --name test-aha "$IMAGE"
           sleep 10
           curl -f http://localhost:3000 || exit 1
 
       - name: Clean up
         if: always()
-        run: docker stop test-nano-cli && docker rm test-nano-cli
+        run: docker stop test-aha && docker rm test-aha

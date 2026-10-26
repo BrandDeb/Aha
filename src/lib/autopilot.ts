@@ -17,7 +17,7 @@
 import { promises as fs, statfsSync } from 'node:fs';
 import path from 'node:path';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
-import { NANOCLI_DIR } from './connectors/env.ts';
+import { AHA_DIR } from './connectors/env.ts';
 
 export interface AutopilotSettings {
   /** Apply safe repairs automatically (default on) */
@@ -100,9 +100,9 @@ export const record = (state: AutopilotState, entry: Omit<JournalEntry, 'at'>, n
 // State on disk (shared with the supervisor, which reads pendingVerify)
 // ---------------------------------------------------------------------------
 
-export const statePath = () => path.join(NANOCLI_DIR, 'autopilot.json');
+export const statePath = () => path.join(AHA_DIR, 'autopilot.json');
 
-const DEFAULTS: AutopilotState = { autoRepair: process.env.NANOCLI_AUTOREPAIR !== '0', autoUpdate: process.env.NANOCLI_AUTOUPDATE === '1', journal: [] };
+const DEFAULTS: AutopilotState = { autoRepair: process.env.AHA_AUTOREPAIR !== '0', autoUpdate: process.env.AHA_AUTOUPDATE === '1', journal: [] };
 
 export async function readState(): Promise<AutopilotState> {
   try {
@@ -114,7 +114,7 @@ export async function readState(): Promise<AutopilotState> {
 }
 
 export async function writeState(state: AutopilotState): Promise<void> {
-  await fs.mkdir(NANOCLI_DIR, { recursive: true });
+  await fs.mkdir(AHA_DIR, { recursive: true });
   const tmp = `${statePath()}.${process.pid}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(state, null, 2));
   await fs.rename(tmp, statePath());
@@ -131,14 +131,14 @@ export async function updateSettings(patch: Partial<AutopilotSettings>): Promise
 // ---------------------------------------------------------------------------
 
 /** server.js records when the last request that does work arrived (shared through globalThis) */
-const g = globalThis as { __nanocliLastActivity?: number };
-export const idleMs = (now = Date.now()) => now - (g.__nanocliLastActivity ?? now - LIMITS.idleForUpdateMs);
+const g = globalThis as { __ahaLastActivity?: number };
+export const idleMs = (now = Date.now()) => now - (g.__ahaLastActivity ?? now - LIMITS.idleForUpdateMs);
 
 let loop: ReturnType<typeof monitorEventLoopDelay> | null = null;
 
 function freeDisk(): number {
   try {
-    const s = statfsSync(NANOCLI_DIR);
+    const s = statfsSync(AHA_DIR);
     return s.bavail * s.bsize;
   } catch {
     return Number.MAX_SAFE_INTEGER;
@@ -149,10 +149,10 @@ export async function snapshot(): Promise<Snapshot> {
   const { folderSize } = await import('./doctor.ts');
   const { TEMP_DIR } = await import('./compiler.ts');
   const { PY_PROJECTS } = await import('./python.ts');
-  const [tempBytes, cacheBytes, envBytes] = await Promise.all([folderSize(TEMP_DIR), folderSize(path.join(NANOCLI_DIR, 'cache')), folderSize(PY_PROJECTS)]);
+  const [tempBytes, cacheBytes, envBytes] = await Promise.all([folderSize(TEMP_DIR), folderSize(path.join(AHA_DIR, 'cache')), folderSize(PY_PROJECTS)]);
   const loopDelayMs = loop ? loop.mean / 1e6 : 0;
   loop?.reset();
-  return { freeDisk: freeDisk(), tempBytes, cacheBytes, envBytes, rss: process.memoryUsage().rss, loopDelayMs, idleMs: idleMs(), supervised: process.env.NANOCLI_SUPERVISED === '1' };
+  return { freeDisk: freeDisk(), tempBytes, cacheBytes, envBytes, rss: process.memoryUsage().rss, loopDelayMs, idleMs: idleMs(), supervised: process.env.AHA_SUPERVISED === '1' };
 }
 
 const RESTART_CODE = 75;
@@ -215,7 +215,7 @@ async function verifyUpdate(): Promise<void> {
 let scheduled = false;
 
 export function scheduleAutopilot(): void {
-  if (scheduled || process.env.NANOCLI_AUTOPILOT === '0') return;
+  if (scheduled || process.env.AHA_AUTOPILOT === '0') return;
   scheduled = true;
   loop = monitorEventLoopDelay({ resolution: 50 });
   loop.enable();

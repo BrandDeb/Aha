@@ -81,10 +81,10 @@ test('events: schedule fires once for the last due minute; interval once per slo
   assert.equal(eventFor({ ...every, enabled: false }, { ...base, lastCheck: at(9, 20), now: at(9, 31) }), null, 'off');
 });
 
-test('events: changes match the glob, ignore .nanocli, and key on the content', () => {
+test('events: changes match the glob, ignore .aha, and key on the content', () => {
   const w = watcher({ trigger: { kind: 'change', glob: 'src/**' } });
   const ctx = { now: 1, lastCheck: 0, failure: null };
-  assert.equal(eventFor(w, { ...ctx, changed: ['README.md', '.nanocli/x.json'], files: {} }), null);
+  assert.equal(eventFor(w, { ...ctx, changed: ['README.md', '.aha/x.json'], files: {} }), null);
   const a = eventFor(w, { ...ctx, changed: ['src/a.ts'], files: { 'src/a.ts': 'v1' } });
   const b = eventFor(w, { ...ctx, changed: ['src/a.ts'], files: { 'src/a.ts': 'v2' } });
   assert.deepEqual(a?.paths, ['src/a.ts']);

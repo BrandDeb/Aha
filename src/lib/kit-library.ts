@@ -21,7 +21,7 @@ const apiIntegration: LibraryKit = {
     id: 'customer-api-integration',
     name: 'Customer API integration',
     version: '1.0.0',
-    publisher: 'NanoCLI',
+    publisher: 'Aha!',
     audience: 'fde',
     summary: 'Pull records from a customer’s REST API into your shape: retries, rate limits, pagination, field mapping with tests, and a dry run on sample data.',
     entry: 'src/index.js',
@@ -207,7 +207,7 @@ test('a bad record says why', () => {
 
 \`node src/index.js sync --dry-run\` runs on fixtures/ with no network. Set CUSTOMER_API_BASE_URL and CUSTOMER_API_KEY to run it against the real API. \`node --test\` runs the tests.
 
-The kit's playbook (Kit tab) walks through the engagement; .nanocli/kit.json describes it.
+The kit's playbook (Kit tab) walks through the engagement; .aha/kit.json describes it.
 `,
   },
 };
@@ -222,7 +222,7 @@ const mcpServer: LibraryKit = {
     id: 'product-mcp-server',
     name: 'MCP server for your product',
     version: '1.0.0',
-    publisher: 'NanoCLI',
+    publisher: 'Aha!',
     audience: 'isv',
     summary: 'Let AI agents (Claude, Cursor, this studio) use your product through MCP. A dependency-free server with two example tools, a self-test, and the rules for tools agents use well.',
     entry: 'server.js',
@@ -422,7 +422,7 @@ const dataPipeline: LibraryKit = {
     id: 'data-pipeline-poc',
     name: 'Data pipeline proof of concept',
     version: '1.0.0',
-    publisher: 'NanoCLI',
+    publisher: 'Aha!',
     audience: 'fde',
     summary: 'Load a customer’s CSV export into a warehouse table with validation and a rejects report. Runs on SQLite with sample data; point it at their Postgres when ready.',
     entry: 'pipeline.py',

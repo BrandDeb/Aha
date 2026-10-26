@@ -36,8 +36,8 @@ export type WorkerStatus =
   | { kind: 'idle' }
   | { kind: 'paused'; reason: string };
 
-const SETTINGS_KEY = 'nanocli:worker';
-const DONE_KEY = (project: string) => `nanocli:worker-done:${project}`;
+const SETTINGS_KEY = 'aha:worker';
+const DONE_KEY = (project: string) => `aha:worker-done:${project}`;
 const DEFAULTS: WorkerSettings = { mode: 'off', focus: '', quality: 'fast', perHour: 6 };
 /** You are typing: wait until you pause this long */
 const IDLE_MS = 12_000;

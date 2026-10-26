@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-process.env.NANOCLI_HOME = mkdtempSync(path.join(tmpdir(), 'nanocli-autopilot-'));
+process.env.AHA_HOME = mkdtempSync(path.join(tmpdir(), 'aha-autopilot-'));
 const { decideRepairs, LIMITS, record, readState, shouldAutoUpdate, updateSettings } = await import('../src/lib/autopilot.ts');
 type Snapshot = import('../src/lib/autopilot.ts').Snapshot;
 const { healScript, healStaleCode, STALE_CODE } = await import('../src/lib/self-heal.ts');
@@ -96,7 +96,7 @@ test('supervisor: a second crash can trigger a repair, then the studio starts ag
 });
 
 test('rollback: only an unverified update, only if the checkout is still that update', () => {
-  const file = path.join(process.env.NANOCLI_HOME!, 'autopilot.json');
+  const file = path.join(process.env.AHA_HOME!, 'autopilot.json');
   const from = 'a'.repeat(40);
   const to = 'b'.repeat(40);
   const calls: string[] = [];

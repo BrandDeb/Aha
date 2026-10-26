@@ -41,7 +41,7 @@ export class McpClient {
   static async connect(transport: Transport, timeoutMs = 20_000): Promise<McpClient> {
     const client = new McpClient(transport);
     try {
-      const init = (await client.request('initialize', { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: 'nanocli-studio', version: '1.0' } }, timeoutMs)) as { serverInfo?: { name?: string } };
+      const init = (await client.request('initialize', { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: 'aha', version: '1.0' } }, timeoutMs)) as { serverInfo?: { name?: string } };
       client.serverName = init?.serverInfo?.name ?? '';
       await transport.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
     } catch (error) {

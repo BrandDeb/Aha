@@ -1,5 +1,5 @@
 /**
- * NanoCLI Studio — the workspace.
+ * Aha! — the workspace.
  * Copyright (c) 2026 BrandDeb. All rights reserved. Proprietary; see LICENSE.
  */
 
