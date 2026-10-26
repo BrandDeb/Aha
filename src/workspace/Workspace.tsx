@@ -33,6 +33,7 @@ import { outputRecorder, useFailureTracker } from './debugging';
 import { useDevServer } from './devserver-client';
 import { laneOf, useProposals, verdict } from './proposals';
 import { useWorker } from './worker';
+import { useWatchers } from './watchers';
 import { useWorkspace } from './store';
 import { useToast } from './toasts';
 import { useLiveValues } from './live-client';
@@ -68,6 +69,7 @@ const Web3Panel = dynamic(() => import('./panels/Web3Panel').then((m) => m.Web3P
 const ContractsPanel = dynamic(() => import('./panels/ContractsPanel').then((m) => m.ContractsPanel), { ssr: false, loading: PanelLoading });
 const KitPanel = dynamic(() => import('./panels/KitPanel').then((m) => m.KitPanel), { ssr: false, loading: PanelLoading });
 const PipelinesPanel = dynamic(() => import('./panels/PipelinesPanel').then((m) => m.PipelinesPanel), { ssr: false, loading: PanelLoading });
+const WatchersPanel = dynamic(() => import('./panels/WatchersPanel').then((m) => m.WatchersPanel), { ssr: false, loading: PanelLoading });
 const WorkerPanel = dynamic(() => import('./panels/WorkerPanel').then((m) => m.WorkerPanel), { ssr: false, loading: PanelLoading });
 const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then((m) => m.SettingsDialog), { ssr: false });
 const CreateDialog = dynamic(() => import('./components/CreateDialog').then((m) => m.CreateDialog), { ssr: false });
@@ -116,6 +118,7 @@ const GROUPS: { id: string; label: string; panels: { id: PanelId; label: string;
       { id: 'agent', label: 'Do', hint: 'Give it a task: it works on a copy and comes back with a proposal and the proof that it works' },
       { id: 'ai', label: 'Ask', hint: 'Questions and explanations about your code; nothing changes' },
       { id: 'worker', label: 'Keep going', hint: 'It picks up the next useful task by itself while you work' },
+      { id: 'watchers', label: 'Watchers', hint: 'Agents that wake on a schedule, on changes or on failures, and say when they hold back' },
     ],
   },
   {
@@ -770,6 +773,10 @@ export function Workspace() {
     }, []),
   });
 
+  // Watchers: agents that wake on a schedule, on changes or on failures
+  const watcherFailure = useMemo(() => (failure ? { signature: failure.signature, title: failure.title } : null), [failure]);
+  const watchers = useWatchers(watcherFailure);
+
   // The morning report: built from how things stand when it opens
   const [report, setReport] = useState<MorningReport | null>(null);
   const buildMorning = () =>
@@ -1347,6 +1354,7 @@ export function Workspace() {
                 }} />}
                 {shownPanel === 'agent' && <AgentPanel />}
                 {shownPanel === 'worker' && <WorkerPanel worker={worker} />}
+                {shownPanel === 'watchers' && <WatchersPanel watchers={watchers} />}
                 {shownPanel === 'optimize' && <OptimizePanel onOpen={(file) => openLocation({ file, line: 1 })} />}
                 {shownPanel === 'web3' && <Web3Panel onOpen={(file, line) => openLocation({ file, line: line ?? 1 })} />}
                 {shownPanel === 'contracts' && <ContractsPanel onOpen={(file, line) => openLocation({ file, line: line ?? 1 })} />}

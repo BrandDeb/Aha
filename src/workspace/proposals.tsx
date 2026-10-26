@@ -91,7 +91,7 @@ export interface Proposal {
   /** Hidden from the editor tabs (still listed in the Agent tab) */
   closed?: boolean;
   /** Who started it: you, the debugger, or the worker */
-  origin?: 'you' | 'debug' | 'worker';
+  origin?: 'you' | 'debug' | 'worker' | 'watcher';
   /** The worker's task kind (todo, tests, improve…), for its track record */
   task?: string;
   /** Forked: one lane per direction, built at the same time, for you to compare and pick */

@@ -24,6 +24,10 @@ Every item is held to these. If a feature can't meet them, it changes until it c
 
 ### 1. Proactive agents: watchers
 
+> **Shipped** (first version): schedule, interval, file-change and failure triggers; suggest or start; one run per
+> event; premise check; review and daily-budget limits; the hold-back log. Still to do from this spec: the message
+> trigger (webhooks, agent channels), running with the window closed (desktop app) and money/token budgets.
+
 *Inspired by [proactiveagents.dev](https://proactiveagents.dev): agents that wake on their own instead of waiting to
 be asked, keep state between runs, and know when not to act.*
 

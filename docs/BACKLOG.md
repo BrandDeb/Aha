@@ -43,7 +43,7 @@ as a proposal with evidence, and vibe coding and hand-writing as equals.
 | Production to fix (paste a stack trace or a Sentry link, get a reproduction and a fix) | Next | |
 | Project memory and guided tour (what this codebase is, for a newcomer, in 5 stops) | Next | |
 | Supply-chain guard (new dependencies checked for typosquats, install scripts, advisories, licence) | Next | extends the risk score |
-| **Watchers: proactive agents** (time, change and message triggers; restraint log; budgets) | Now | spec in ROADMAP item 1 |
+| **Watchers: proactive agents** (schedule, interval, change and failure triggers; restraint log; budgets) | Done | background running and webhook triggers: Next |
 | **Agent channels** (proposals message each other; typed messages; access control; searchable history) | Now | spec in ROADMAP item 2 |
 
 ## 2. Table stakes (what every top editor has)

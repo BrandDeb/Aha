@@ -20,7 +20,7 @@ export interface WhyEntry {
   goal: string;
   /** What the agent said it did */
   summary?: string;
-  origin?: 'you' | 'debug' | 'worker';
+  origin?: 'you' | 'debug' | 'worker' | 'watcher';
   /** "Verified", "Breaks a contract"… at the moment it was accepted */
   verdict?: string;
   /** The second reviewer's verdict */
@@ -82,7 +82,7 @@ export function whyByLine(entries: WhyEntry[], path: string, content: string): M
   return result;
 }
 
-const ORIGIN: Record<NonNullable<WhyEntry['origin']>, string> = { you: 'you asked the agent', debug: 'the debugger', worker: 'the worker' };
+const ORIGIN: Record<NonNullable<WhyEntry['origin']>, string> = { you: 'you asked the agent', debug: 'the debugger', worker: 'the worker', watcher: 'a watcher' };
 
 export function ago(at: number, now = Date.now()): string {
   const s = Math.max(0, Math.round((now - at) / 1000));

@@ -9,7 +9,7 @@ export interface ReportProposal {
   id: string;
   goal: string;
   status: 'working' | 'review' | 'accepted' | 'discarded';
-  origin?: 'you' | 'debug' | 'worker';
+  origin?: 'you' | 'debug' | 'worker' | 'watcher';
   createdAt: number;
   /** "Verified", "Breaks a contract"… */
   headline?: string;
@@ -57,7 +57,7 @@ export function awayFor(ms: number): string {
   return `${d} day${d === 1 ? '' : 's'}`;
 }
 
-const WHO: Record<NonNullable<ReportProposal['origin']>, string> = { you: 'For you', debug: 'Debugger', worker: 'Worker' };
+const WHO: Record<NonNullable<ReportProposal['origin']>, string> = { you: 'For you', debug: 'Debugger', worker: 'Worker', watcher: 'Watcher' };
 
 export function morningReport(input: ReportInput): MorningReport {
   const sections: MorningReport['sections'] = [];

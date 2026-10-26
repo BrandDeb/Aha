@@ -97,7 +97,7 @@ A one-line tour; each links to the section with the details. The workspace is at
 | **Risk score and auto-accept** | Every proposal scored 0–100 with reasons; let the low-risk ones through ([Risk score](#risk-score-and-auto-accept)) |
 | **Fork the future** | One request built three ways at once, compared live ([Fork the future](#fork-the-future)) |
 | **Contracts and specs** | Rules that stay true; plain-English specs become property tests ([Contracts](#contracts)) |
-| **Debugging and worker** | Failures debugged on their own; an AI teammate that keeps going on the next useful task ([Agent](#agent)) |
+| **Debugging, worker and watchers** | Failures debugged on their own; an AI teammate that keeps going on the next useful task; [watchers](#watchers-agents-that-wake-on-their-own) that wake on a schedule, on changes or on failures ([Agent](#agent)) |
 | **Skills** | 46 built in (debugging, TDD, React, FastAPI, Solidity…), more from GitHub ([Skills](#skills-what-the-agent-knows-how-to-do)) |
 | **Connectors** | A catalog of 52 MCP servers plus GitHub, databases, web and your own commands ([Connectors](#connectors)) |
 | **Models** | Free tiers, local models or your own keys, with an advisor per job ([Assistant](#assistant)) |
@@ -469,6 +469,32 @@ discarded, or the same error three times in the last six or more), the worker ad
 task: the agent studies its own failures and proposes changes to `agent/prompt.md`, `agent/lessons.md`, a project skill or
 `AGENTS.md`, each tied to the evidence. It never edits your code in that task, and like everything else it is a proposal you
 review. The record stays in your browser.
+
+### Watchers: agents that wake on their own
+
+The worker picks its own tasks. A **watcher** is a task you write once plus *when* to do it, kept in the **Watchers** tab
+(Agent group):
+
+| When | For example |
+|---|---|
+| **On a schedule** | `0 8 * * 1-5`: weekdays at 08:00 (five-field cron in your local time, or `@daily`, `@hourly`, `@weekdays`) |
+| **Every…** | every 2 hours while the studio is open |
+| **When files change** | `src/**/*.{ts,tsx}`: once you pause typing, with the changed files in the brief |
+| **When it fails** | a run or test fails: find the cause, fix it, add a test that shows it |
+
+Each watcher either **suggests** its task (a notice with *Start*) or **starts** it as a background proposal you review,
+like everything else the agent does. Four presets are one click away: *Morning check*, *Fix failures*, *Keep tests in
+step* and *Tidy up*.
+
+They hold back on purpose, and say so. One event runs once (a schedule missed while the studio was closed runs once when
+you come back, not once per missed day). Before acting a watcher checks that the reason still holds: a failure that is
+already fixed, or changed files that were deleted again, is a skip. It waits while its last result still needs your
+review, and stops at its daily budget. Every run, suggestion and hold-back goes in the **What they did** log with the
+reason, and repeats fold into one line.
+
+Watchers are saved in `.nanocli/watchers.json`, so they travel with the project and its Git history. Their log stays in
+your browser. They run while the studio is open. Running in the background with the window closed (desktop app) and
+webhook triggers are on the [roadmap](docs/ROADMAP.md).
 
 ### Skills: what the agent knows how to do
 
