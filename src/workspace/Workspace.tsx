@@ -37,8 +37,10 @@ import { useWatchers } from './watchers';
 import { useChannelUpdates } from './channel-client';
 import { YOU } from '@/lib/agent/channel';
 import { useWorkspace } from './store';
+import { setLspProject, useLspStatus } from './lsp-client';
 import { continueDebugging, loadProjectBreakpoints, startDebugging, stepDebugging, stopDebugging, useDebugSession } from './debug-client';
 
+const LSP_NAMES: Record<string, string> = { python: 'Pyright', go: 'gopls', rust: 'rust-analyzer' };
 const isDebugFile = (path: string) => /\.(py|[cm]?[jt]s)$/i.test(path) && !/\.d\.ts$/.test(path);
 import { useToast } from './toasts';
 import { useLiveValues } from './live-client';
@@ -230,6 +232,7 @@ export function Workspace() {
   useEffect(() => {
     loadProjectBreakpoints(project.name);
   }, [project.name]);
+  const lspStatus = useLspStatus();
   const { onSave: ciOnSave, available: ciAvailable, on: ciOn, setOn: setCiOn } = ci;
   // A program that answered with its usage wants arguments: say so, and offer the field next to Run
   const hintArguments = useCallback(
@@ -870,6 +873,17 @@ export function Workspace() {
     [dispatch, openProposal]
   );
 
+  // Language servers work on this project: they read its files, write rename edits back and open files they point to
+  const lspProjectId = pythonProjectId(project.name);
+  useEffect(() => {
+    setLspProject({
+      id: lspProjectId,
+      files: () => projectRef.current.files,
+      write: (path, content) => dispatch({ type: 'write', path, content }),
+      open: (file, line, column) => openLocation({ file, line, column }),
+    });
+  }, [lspProjectId, dispatch, openLocation]);
+
   // ---------------------------------------------------------------------------
   // Commands & shortcuts
   // ---------------------------------------------------------------------------
@@ -1457,6 +1471,13 @@ export function Workspace() {
             </button>
           )}
           <span className="hidden px-1.5 sm:inline" title="Entry file">{project.entry || 'no entry file'}</span>
+          {Object.entries(lspStatus).map(([lang, st]) =>
+            st && st.status !== 'off' ? (
+              <span key={lang} className={`px-1.5 ${st.status === 'ready' ? 'text-accent' : st.status === 'failed' ? 'text-danger' : ''}`} title={st.message ?? 'Completion, hover, go to definition (F12), rename (F2) and problems from the language server'}>
+                {st.status === 'ready' ? '●' : st.status === 'failed' ? '✕' : '○'} {LSP_NAMES[lang] ?? lang}{st.status === 'starting' ? ' starting…' : ''}
+              </span>
+            ) : null
+          )}
           {web && devState.status !== 'none' && (
             <button onClick={() => setShowPreview((v) => !v)} className={`rounded px-1.5 hover:bg-white/[0.06] ${devState.status === 'ready' ? 'text-accent' : devState.status === 'failed' ? 'text-danger' : ''}`} title={devState.url ?? devState.error ?? ''}>
               {devState.status === 'ready' ? `● ${web.label} · ${devState.url?.replace(/^https?:\/\//, '').replace(/\/$/, '')}` : `${web.label} · ${devState.status}`}
