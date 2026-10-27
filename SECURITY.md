@@ -16,7 +16,7 @@ To report a vulnerability, use [private vulnerability reporting](https://github.
 | **Visitors of a hosted studio** (`HOST=0.0.0.0`) | Edit, compile to WASM, use the assistant within rate limits | Run code on the server (Python, other languages, dev servers, connectors, maintenance are off) |
 | **A collaborator** in a live session | Edit the project with you | Join without the invite link; send oversized or path-escaping files |
 | **The AI model / a prompt injection** in files or web pages it reads | Propose edits, read the project | Change your files without your accept, run commands or reach connectors without your approval |
-| **A malicious package** in a project you run | Whatever any `npm install` / `uv sync` can do on your machine | — this is not a sandbox; see below |
+| **A malicious package** in a project you run | Whatever any `npm install` / `uv sync` can do on your machine | Arrive unnoticed through an agent's proposal: new dependencies are checked for look-alike and made-up names, install scripts, advisories and licence, and hold auto-accept (the supply-chain guard). Once installed, this is not a sandbox; see below |
 
 **Not a sandbox.** Running a project (Python, the other languages, a web app's dev server and its packages' install
 scripts) executes that code with your user's rights, exactly as it would in a terminal. Only run projects you trust, or

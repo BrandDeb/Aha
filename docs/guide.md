@@ -354,6 +354,24 @@ contract edits, removed tests, failing checks, a reviewer's concerns, and anythi
 watchers) always wait for you, and say so on the proposal. Each auto-accept is announced, marked on the proposal (`auto-accepted (risk 8)`), and saved to History
 first, so it is one click to undo. Proposals restored from an earlier session are never accepted behind your back.
 
+#### The supply-chain guard
+
+Every dependency a proposal adds (to `package.json`, `requirements.txt`, `pyproject.toml`, `Cargo.toml`, `go.mod`,
+`Gemfile` or `composer.json`) is checked before the risk score is computed, and anything it finds holds auto-accept:
+
+| Check | Catches |
+|---|---|
+| **Look-alike names** | One letter off, two letters swapped, a separator or a look-alike character (`l0dash`) compared with the most-installed packages of npm, PyPI and crates.io: `expresss`, `crossenv`, `reqeusts` |
+| **Not on the registry** | A name the model made up. Anyone can register it later and fill it with code |
+| **Install scripts** | npm `preinstall`, `install`, `postinstall` and `prepare` scripts; a Python package with no wheel, which runs `setup.py` on install |
+| **Age and use** | First published under 30 days ago; under 200 downloads a week (npm) |
+| **Known advisories** | Advisories in [OSV](https://osv.dev) for the version written, or the latest when the spec is a range |
+| **Licence** | No open-source licence, or a strong copyleft one (GPL, AGPL, SSPL) that can oblige you to publish your code |
+
+The findings appear on the proposal under **Check the new dependencies before you accept**. The proposal then offers
+**Accept anyway** instead of **Ship**. The name checks work offline. The registry checks ask npm, PyPI and OSV through the
+studio's server, which sends them only the package names; when they can't be reached, the name checks still apply.
+
 ### Why-history
 
 Every line an accepted proposal wrote remembers why it is there. A thin accent mark sits beside those lines;

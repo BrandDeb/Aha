@@ -42,7 +42,7 @@ as a proposal with evidence, and vibe coding and hand-writing as equals.
 | Night shift (queue tasks, run overnight inside a budget) | Done | running with the window closed (desktop app) next |
 | Production to fix (paste a stack trace or a Sentry link, get a reproducing test and a fix) | Done | |
 | Project memory and guided tour (what this codebase is, for a newcomer, in 5 stops) | Next | |
-| Supply-chain guard (new dependencies checked for typosquats, install scripts, advisories, licence) | Next | extends the risk score |
+| Supply-chain guard (new dependencies checked for typosquats, install scripts, advisories, licence) | Done | extends the risk score |
 | **Watchers: proactive agents** (schedule, interval, change and failure triggers; restraint log; budgets) | Done | background running and webhook triggers: Next |
 | **Agent channels** (proposals message each other; typed messages; open / ask first / off; searchable history) | Done | a bridge to external relays: Later |
 

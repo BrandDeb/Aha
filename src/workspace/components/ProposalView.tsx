@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import { DiffView } from '@/components/CodeEditor';
 import { chipsFor, type Tone } from '@/lib/agent/evidence';
 import { riskOf, type RiskScore } from '@/lib/agent/risk';
+import { supplyChainOf, useSupplyChainVersion } from '../supply-chain-client';
 import { ChangeProof } from './ChangeProof';
 import { ForkCompare } from './ForkCompare';
 import { REVIEW_LABEL, reviewFollowUp, type Review } from '@/lib/agent/review';
@@ -207,7 +208,9 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
   const settled = proposal.status === 'accepted' || proposal.status === 'discarded';
   const evidence = lane?.evidence;
   const judged = evidence ? verdict(evidence) : null;
-  const risk = working || !files.length ? null : riskOf({ files, evidence, review: lane?.review?.status === 'done' ? lane.review : null });
+  useSupplyChainVersion();
+  const supply = working || !files.length ? null : supplyChainOf(files);
+  const risk = working || !files.length ? null : riskOf({ files, evidence, review: lane?.review?.status === 'done' ? lane.review : null, supplyChain: supply?.findings });
   const project = files.filter((f) => !f.path.startsWith('agent/') && f.path !== 'AGENTS.md');
   const problem = working ? null : problemOf(proposal.outcome?.reason === 'finished' ? undefined : proposal.outcome?.summary);
 
@@ -244,7 +247,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
             ) : !settled && files.length > 0 ? (
               <>
                 <button className="btn btn-ghost btn-sm" onClick={() => discard(proposal.id)}>Discard</button>
-                {judged?.verified && !(lane?.review?.status === 'done' && lane.review.verdict === 'block') ? (
+                {judged?.verified && !(lane?.review?.status === 'done' && lane.review.verdict === 'block') && !supply?.findings.length ? (
                   <button className="btn btn-primary btn-sm" onClick={() => accept(proposal.id)} title="Apply every change to your files. The current version is saved to History first.">
                     Ship {files.length} change{files.length > 1 ? 's' : ''}
                   </button>
@@ -274,6 +277,25 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
                   {chip.label}
                 </span>
               ))}
+          </div>
+        )}
+        {supply && (supply.findings.length > 0 || supply.pending) && (
+          <div role="note" aria-label="Supply chain" className={`rounded-xl border px-4 py-2.5 text-sm ${supply.findings.length ? 'border-amber-400/30 bg-amber-400/[0.06]' : 'border-border'}`}>
+            {supply.findings.length ? (
+              <>
+                <p className="font-medium text-gray-100">Check the new dependencies before you accept</p>
+                <ul className="mt-1 space-y-0.5 text-gray-400">
+                  {supply.findings.map((f) => (
+                    <li key={`${f.kind}:${f.name}`}>
+                      <span className="text-warn">●</span> {f.detail}
+                    </li>
+                  ))}
+                </ul>
+                {supply.pending && <p className="mt-1 text-xs text-gray-500">Still asking the registry about the rest…</p>}
+              </>
+            ) : (
+              <p className="text-xs text-gray-500">Checking {supply.checked} new dependenc{supply.checked > 1 ? 'ies' : 'y'} with the registry…</p>
+            )}
           </div>
         )}
         {problem ? (
