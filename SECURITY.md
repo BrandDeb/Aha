@@ -12,7 +12,7 @@ To report a vulnerability, use [private vulnerability reporting](https://github.
 | --- | --- | --- |
 | **You**, on your own machine | Run anything: that is the point of a local IDE | |
 | **A website you visit** while the studio runs | Load in your browser next to it | Make your studio compile, run, install, connect, update, read your files or use your keys (CSRF, DNS rebinding, clickjacking) |
-| **Someone on your network** | Reach your machine's ports | Reach the studio: it listens on `127.0.0.1` unless you set `HOST` |
+| **Someone on your network** | Reach your machine's ports | Reach the studio: it listens on `127.0.0.1` unless you set `HOST`. Reach a dev server: they listen on `127.0.0.1` too; the phone preview, while you share it, is a proxy that answers only with its random key and closes when stopped or unused |
 | **Visitors of a hosted studio** (`HOST=0.0.0.0`) | Edit, compile to WASM, use the assistant within rate limits | Run code on the server (Python, other languages, dev servers, connectors, maintenance are off) |
 | **A collaborator** in a live session | Edit the project with you | Join without the invite link; send oversized or path-escaping files |
 | **The AI model / a prompt injection** in files or web pages it reads | Propose edits, read the project | Change your files without your accept, run commands or reach connectors without your approval, or plant instructions for later tasks unseen (project memory and the agent's own notes change only through a proposal, and memory edits never auto-accept) |

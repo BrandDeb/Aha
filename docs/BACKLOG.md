@@ -37,7 +37,7 @@ as a proposal with evidence, and vibe coding and hand-writing as equals.
 | Vibe dial (from "just make it work" to "explain every line") | Done | one setting that shapes the agent's brief, review depth and how much it asks |
 | Design pass (one click: spacing, type scale, colour, contrast, empty states) | Done | the rendered page measured, a proposal with before and after screenshots |
 | Publish (one click to a public URL; CLI binaries to a release page) | Next | static export for web apps; GitHub release for CLIs |
-| Mobile preview by QR code | Next | LAN URL of the dev server as a QR; needs the desktop app or a local server |
+| Mobile preview by QR code | Done | a keyed proxy on the LAN address, as a QR; local studio and desktop app |
 | Community gallery (share a project as a remixable link) | Later | needs hosting and moderation |
 | Night shift (queue tasks, run overnight inside a budget) | Done | running with the window closed (desktop app) next |
 | Production to fix (paste a stack trace or a Sentry link, get a reproducing test and a fix) | Done | |

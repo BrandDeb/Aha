@@ -212,7 +212,13 @@ cites memory in a later proposal.
 > **Design pass shipped:** a button on the in-browser preview measures the rendered page (type scale, spacing grid,
 > WCAG contrast, empty lists) and reads the source for missing loading and empty states; the agent gets the findings
 > and a screenshot, and the proposal shows before and after with the numbers. In a browser test, a messy React page
-> went from 3 contrast failures and 7 off-grid spacing values to none. Publish and phone preview are next.
+> went from 3 contrast failures and 7 off-grid spacing values to none.
+>
+> **Phone preview shipped:** Phone in the preview bar opens a keyed proxy on the machine's network address to the dev
+> server (which stays on 127.0.0.1) and shows its QR code; pages and the hot-reload websocket pass through, everything
+> else gets a 403, and it closes when stopped, unused or the dev server stops. In a browser test, an emulated phone
+> opened the link, an edit in the studio reached it by hot reload, a visitor without the key was refused, and the link
+> died on Stop. Publish is next.
 
 - **Vibe dial:** one setting from "just make it work" to "explain every line", shaping the brief, review depth and
   how often the agent asks.
