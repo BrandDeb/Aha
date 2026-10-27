@@ -34,7 +34,7 @@ as a proposal with evidence, and vibe coding and hand-writing as equals.
 | **Remix** (a GitHub repo or a website, your way) | Done | licence shown; sites rebuilt as original |
 | AI autocomplete (any model, cached, cancel-as-you-type) | Done | |
 | Model advisor (which model for which job, and why) | Done | |
-| Vibe dial (from "just make it work" to "explain every line") | Next | one setting that shapes the agent's brief, review depth and how much it asks |
+| Vibe dial (from "just make it work" to "explain every line") | Done | one setting that shapes the agent's brief, review depth and how much it asks |
 | Design pass (one click: spacing, type scale, colour, contrast, empty states) | Next | agent skill + visual audit of the preview |
 | Publish (one click to a public URL; CLI binaries to a release page) | Next | static export for web apps; GitHub release for CLIs |
 | Mobile preview by QR code | Next | LAN URL of the dev server as a QR; needs the desktop app or a local server |

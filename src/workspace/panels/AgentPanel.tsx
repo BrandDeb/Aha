@@ -1,6 +1,7 @@
 'use client';
 
 import { AUTO_ACCEPT } from '@/lib/agent/risk';
+import { VIBES } from '@/lib/agent/vibe';
 import { useState } from 'react';
 import { maxModelCalls } from '@/lib/agent/harness';
 import { getProvider } from '@/lib/ai-providers';
@@ -16,6 +17,8 @@ export function AgentPanel() {
   const config = useAiConfig();
   const provider = getProvider(config.provider);
   const { proposals, activeId, ask, open, remove, prefs, setPrefs } = useProposals();
+  const vibeIndex = Math.max(0, VIBES.findIndex((v) => v.id === prefs.vibe));
+  const vibe = VIBES[vibeIndex];
   const [configuring, setConfiguring] = useState(false);
   const skills = useSkillIndex().index?.skills.filter((s) => s.enabled) ?? [];
   const [goal, setGoal] = useState('');
@@ -114,6 +117,28 @@ export function AgentPanel() {
               })}
             </ul>
           )}
+        </section>
+        <section className="space-y-1.5 border-t border-border px-4 py-3" aria-label="Vibe">
+          <div className="flex items-baseline justify-between gap-2">
+            <label htmlFor="vibe-dial" className="eyebrow">Vibe</label>
+            <span className="text-xs text-gray-200">{vibe.label}</span>
+          </div>
+          <input
+            id="vibe-dial"
+            type="range"
+            min={0}
+            max={VIBES.length - 1}
+            step={1}
+            value={vibeIndex}
+            onChange={(e) => setPrefs({ vibe: VIBES[Number(e.target.value)].id })}
+            aria-valuetext={vibe.label}
+            className="w-full accent-[var(--accent)]"
+          />
+          <div className="flex justify-between text-[10px] text-gray-500" aria-hidden="true">
+            <span>Just make it work</span>
+            <span>Explain every line</span>
+          </div>
+          <p className="text-[11px] leading-relaxed text-gray-500">{vibe.detail}</p>
         </section>
         <details className="group border-t border-border">
           <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-xs text-gray-400 hover:text-gray-100">

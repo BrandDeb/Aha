@@ -204,6 +204,12 @@ newcomers generated from the import graph and the why-history. *Done when* a new
 cites memory in a later proposal.
 
 ### 12. Vibe dial, design pass, publish, phone preview
+
+> **Vibe dial shipped:** four stops in the Agent tab shape the agent's brief (how much it explains, when it asks) and the
+> reviewer's depth; the middle stop changes nothing. In a browser test, the agent and the reviewer each got the
+> setting's instructions, the summary followed them, and the setting was kept across a reload. Design pass, publish and
+> phone preview are next.
+
 - **Vibe dial:** one setting from "just make it work" to "explain every line", shaping the brief, review depth and
   how often the agent asks.
 - **Design pass:** one click on the preview: spacing scale, type scale, contrast, empty and loading states, as a
