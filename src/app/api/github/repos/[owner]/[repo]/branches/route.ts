@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createBranch, getDefaultBranch, listBranches } from '@/lib/github';
 import { getToken, githubErrorResponse, isSameOrigin, unauthorized } from '@/lib/github-session';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 type Params = { params: Promise<{ owner: string; repo: string }> };
 
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   const token = getToken(request);
   if (!token) return unauthorized();
 
-  const body = await request.json().catch(() => null);
+  const body = await readJsonOrNull(request, 16_000);
   if (!body || typeof body.name !== 'string' || typeof body.from !== 'string') {
     return NextResponse.json({ error: 'name and from are required' }, { status: 400 });
   }

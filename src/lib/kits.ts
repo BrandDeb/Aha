@@ -359,14 +359,17 @@ export function kitConnector(c: KitConnector, env: Record<string, string>, id: s
 }
 
 /** What a kit's connector would run or reach, in one line, so you know before you add it */
+/** A command line as it will run: words with spaces, quotes or control characters are quoted, so padding can't hide one */
+const commandLine = (words: unknown[]) => words.map((w) => (typeof w === 'string' && /^[\w@%+=:,./${}-]+$/.test(w) ? w : JSON.stringify(String(w)))).join(' ');
+
 export function describeConnector(c: KitConnector): string {
   const cfg = c.config as Record<string, unknown>;
   const tool = cfg.tool as Record<string, unknown> | undefined;
   switch (cfg.kind) {
     case 'mcp-stdio':
-      return `Runs: ${[cfg.command, ...((cfg.args as string[]) ?? [])].join(' ')}`;
+      return `Runs on this machine: ${commandLine([cfg.command, ...((cfg.args as unknown[]) ?? [])])}`;
     case 'command':
-      return `Runs: ${[tool?.command, ...((tool?.args as string[]) ?? [])].join(' ')}`;
+      return `Runs on this machine: ${commandLine([tool?.command, ...((tool?.args as unknown[]) ?? [])])}`;
     case 'mcp-http':
     case 'postgres':
       return `Connects to: ${String(cfg.url).replace(/\/\/[^@/]*@/, '//…@')}`;

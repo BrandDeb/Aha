@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRepoFile, updateRepoFile } from '@/lib/github';
 import { getToken, githubErrorResponse, isSameOrigin, unauthorized } from '@/lib/github-session';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 const MAX_FILE_SIZE = 1024 * 1024;
 
@@ -43,10 +44,8 @@ export async function PUT(request: NextRequest, { params }: Params) {
     return unauthorized();
   }
 
-  let body: Record<string, unknown>;
-  try {
-    body = await request.json();
-  } catch {
+  const body = (await readJsonOrNull(request, 8 * 1024 * 1024)) as Record<string, unknown> | null;
+  if (!body || typeof body !== 'object') {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 

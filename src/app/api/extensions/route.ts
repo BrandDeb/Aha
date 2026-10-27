@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { strFromU8, unzipSync } from 'fflate';
 import { getBaseUrl, isSameOrigin } from '@/lib/github-session';
 import { isTrustedHost } from '@/lib/host';
 import { readPack, splitId } from '@/lib/extensions';
+import { vsixTextFiles } from '@/lib/vsix';
 import { clientKey, createRateLimiter } from '@/lib/rate-limit';
 import { readJsonLimited } from '@/lib/request-guard';
 
@@ -17,13 +17,12 @@ export const dynamic = 'force-dynamic';
 
 const OPEN_VSX = 'https://open-vsx.org/api';
 const MAX_VSIX = 40 * 1024 * 1024;
-const MAX_FILE = 4 * 1024 * 1024;
-const MAX_TEXT = 12 * 1024 * 1024;
 const limiter = createRateLimiter(40, 10 * 60 * 1000);
 
 const json = (data: unknown, status = 200) => NextResponse.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 const trusted = (request: NextRequest) => isTrustedHost(request.headers.get('host'), getBaseUrl(), process.env.ALLOWED_HOSTS);
-const SEGMENT = /^[\w.-]{1,100}$/;
+// Starts with a letter or digit, so ".." can never be a path segment
+const SEGMENT = /^[A-Za-z0-9][\w.-]{0,99}$/;
 
 interface OpenVsxExtension {
   namespace: string;
@@ -122,16 +121,7 @@ export async function POST(request: NextRequest) {
     const url = meta.files?.download;
     // Only Open VSX's own download address (it may redirect to its storage)
     if (!url || !url.startsWith(`${OPEN_VSX}/`)) return json({ error: 'Open VSX did not give a download for it' }, 502);
-    const zip = unzipSync(await download(url, signal), {
-      filter: (file) => file.name.startsWith('extension/') && !file.name.includes('/node_modules/') && file.originalSize <= MAX_FILE && (file.name === 'extension/package.json' || /\.(json|code-snippets)$/i.test(file.name)),
-    });
-    const files: Record<string, string> = {};
-    let total = 0;
-    for (const [name, data] of Object.entries(zip)) {
-      total += data.byteLength;
-      if (total > MAX_TEXT) break;
-      files[name] = strFromU8(data);
-    }
+    const files = vsixTextFiles(await download(url, signal));
     const pack = readPack(files, { namespace: meta.namespace, name: meta.name, version: meta.version });
     return json({ pack });
   } catch (error) {

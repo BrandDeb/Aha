@@ -106,6 +106,7 @@ test('GitHub sources: names, URLs, folders and single SKILL.md links', () => {
   assert.deepEqual(parseRepoSource('anthropics/skills'), { owner: 'anthropics', repo: 'skills' });
   assert.deepEqual(parseRepoSource('anthropics/skills/skills/pdf'), { owner: 'anthropics', repo: 'skills', path: 'skills/pdf' });
   assert.deepEqual(parseRepoSource('https://github.com/anthropics/skills/tree/main/skills/pdf'), { owner: 'anthropics', repo: 'skills', ref: 'main', path: 'skills/pdf' });
+  assert.equal(parseRepoSource('https://github.com/o/r/tree/--upload-pack/x'), null, 'a ref git would read as an option');
   assert.deepEqual(parseRepoSource('https://github.com/a/b/blob/v2/x/SKILL.md'), { owner: 'a', repo: 'b', ref: 'v2', path: 'x' });
   assert.deepEqual(parseRepoSource('github:a/b.git'), { owner: 'a', repo: 'b' });
   for (const bad of ['a', 'https://gitlab.com/a/b', 'a/b/../c', 'a b/c', 'ftp://github.com/a/b']) assert.equal(parseRepoSource(bad), null, bad);

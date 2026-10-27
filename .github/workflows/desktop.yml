@@ -27,6 +27,10 @@ concurrency:
   group: desktop-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only by default; the publish job asks for write access to the release itself
+permissions:
+  contents: read
+
 jobs:
   build:
     name: ${{ matrix.name }}
@@ -179,8 +183,9 @@ jobs:
   publish:
     name: Publish downloads
     needs: build
-    # Not for pull requests from forks: their builds stay workflow artifacts
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # Only reviewed code reaches the download page: main, version tags and manual runs. Pull request builds stay
+    # workflow artifacts, so an unmerged branch never replaces what users download
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -205,8 +210,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          SOURCE: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          SHA: ${{ github.sha }}
+          SOURCE: ${{ github.ref_name }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"; TITLE="Aha! $TAG"; PRE=""

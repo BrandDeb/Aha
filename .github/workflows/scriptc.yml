@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+# Read-only token: these jobs only check the code
+permissions:
+  contents: read
+
 jobs:
   templates:
     name: Compile templates (${{ matrix.os }})

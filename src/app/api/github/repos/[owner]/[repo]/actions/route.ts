@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getJobLog, listRunJobs, listWorkflowRuns, rerunFailedJobs } from '@/lib/github';
 import { getToken, githubErrorResponse, isSameOrigin, unauthorized } from '@/lib/github-session';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 type Params = { params: Promise<{ owner: string; repo: string }> };
 
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: 'Cross-origin request rejected' }, { status: 403 });
   const token = getToken(request);
   if (!token) return unauthorized();
-  const body = await request.json().catch(() => null);
+  const body = await readJsonOrNull(request, 64_000);
   const run = id(body?.run);
   if (body?.action !== 'rerun' || run === null) return NextResponse.json({ error: 'action "rerun" and a run id are required' }, { status: 400 });
   const { owner, repo } = await params;

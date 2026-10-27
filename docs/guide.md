@@ -304,8 +304,9 @@ failing check or a blocking review raises it.
 **Auto-accept** (Agent tab, off by default) lets the low-risk ones through on their own: **Very low risk**
 (score ≤ 15) or **Low risk** (≤ 25). A proposal is only accepted by itself when it is verified, scores at or under
 your threshold, the reviewer (when on) has approved, and nothing holds it back: secrets, CI, auth code, schemas,
-contract edits, removed tests, failing checks or a reviewer's concerns always wait for you, and say so on the
-proposal. Each auto-accept is announced, marked on the proposal (`auto-accepted (risk 8)`), and saved to History
+contract edits, removed tests, failing checks, a reviewer's concerns, and anything that runs by itself later
+(`package.json` scripts, `.npmrc`, git hooks, editor tasks, `build.rs`, Makefiles, `curl … | sh`, the studio's own
+watchers) always wait for you, and say so on the proposal. Each auto-accept is announced, marked on the proposal (`auto-accepted (risk 8)`), and saved to History
 first, so it is one click to undo. Proposals restored from an earlier session are never accepted behind your back.
 
 ### Why-history
@@ -999,9 +1000,9 @@ installers, highlights the one for the visitor's system and shows how to install
 with `NEXT_PUBLIC_DOWNLOADS_REPO=owner/repo`.
 
 CI (`.github/workflows/desktop.yml`) builds the macOS (Apple silicon) `.dmg` and the Windows installer on pull requests that
-touch the app, on pushes to main, on version tags, and on demand, then publishes them under those stable names: a `v*` tag
-gets its own release, and every other build replaces the files of the rolling `desktop-latest` pre-release (builds from
-forks stay workflow artifacts). Builds are unsigned unless the `APPLE_*` signing secrets are set; macOS then asks you to
+touch the app, on pushes to main, on version tags, and on demand. Builds from main, tags and manual runs are published
+under those stable names: a `v*` tag gets its own release, and the others replace the files of the rolling
+`desktop-latest` pre-release. Pull request builds stay workflow artifacts, so unmerged code never reaches the download page. Builds are unsigned unless the `APPLE_*` signing secrets are set; macOS then asks you to
 confirm the first launch (right-click → Open).
 
 ## Maintenance

@@ -51,7 +51,8 @@ export function parseRepoSource(input: string): RepoSource | null {
   if (sub.length && /^SKILL\.md$/i.test(sub[sub.length - 1])) sub = sub.slice(0, -1);
   const subPath = sub.join('/');
   if (subPath && !isSkillFilePath(subPath)) return null;
-  if (ref && !/^[\w./-]{1,200}$/.test(ref)) return null;
+  // Never starting with "-", so git can't read a ref as one of its options
+  if (ref && !/^(?!-)[\w./-]{1,200}$/.test(ref)) return null;
   return { owner, repo, ...(ref ? { ref } : {}), ...(subPath ? { path: subPath } : {}) };
 }
 
@@ -102,7 +103,7 @@ async function listWithGit(src: RepoSource, git: Git, token?: string): Promise<{
   try {
     await git(['init', '-q'], dir);
     const ref = src.ref ?? 'HEAD';
-    await git([...auth, 'fetch', '-q', '--depth', '1', '--filter=blob:none', url, ref], dir);
+    await git([...auth, 'fetch', '-q', '--depth', '1', '--filter=blob:none', '--', url, ref], dir);
     const sha = (await git(['rev-parse', 'FETCH_HEAD'], dir)).trim();
     const files = (await git(['ls-tree', '-r', '--name-only', sha], dir)).split('\n').filter(Boolean);
     return { sha, files };

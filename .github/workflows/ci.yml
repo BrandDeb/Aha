@@ -10,6 +10,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Read-only token: these jobs only check the code
+permissions:
+  contents: read
+
 jobs:
   check:
     name: Lint, typecheck, build

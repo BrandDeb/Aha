@@ -158,7 +158,8 @@ function KitView({ kit, onFocus }: { kit: Kit; onFocus: (focus: string) => void 
                     <div className="min-w-0 flex-1">
                       <div className="text-xs text-gray-200">{have ? '✓' : '○'} Connector: {c.name}</div>
                       <div className="text-[11px] text-gray-500">{c.description}</div>
-                      <div className="truncate font-mono text-[10px] text-gray-500" title={describeConnector(c)}>{describeConnector(c)}</div>
+                      {/* In full, never truncated: this is what you agree to run when you add it */}
+                      <div className={`whitespace-pre-wrap break-all font-mono text-[10px] ${describeConnector(c).startsWith('Runs on') ? 'text-warn' : 'text-gray-500'}`}>{describeConnector(c)}</div>
                     </div>
                     {!have && <button onClick={() => addConnector(i)} className="btn btn-secondary btn-sm h-6 shrink-0">Add</button>}
                   </li>
