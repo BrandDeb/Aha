@@ -3,6 +3,7 @@ import { getBaseUrl, isSameOrigin } from '@/lib/github-session';
 import { isTrustedHost } from '@/lib/host';
 import { cleanupDevProjects, isDevEnabled, isProjectId, isSyncablePath, listServers, parseFiles, startServer, stateOf, stopServer, syncServer } from '@/lib/devserver';
 import { FRAMEWORKS } from '@/lib/frameworks';
+import { closePhone, openPhone, phoneOf } from '@/lib/phone-preview';
 import { clientKey, createRateLimiter } from '@/lib/rate-limit';
 import { readJsonOrNull } from '@/lib/request-guard';
 
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
   }
   if (!isProjectId(id)) return NextResponse.json({ error: 'projectId is invalid' }, { status: 400 });
   const since = Number(request.nextUrl.searchParams.get('since')) || 0;
-  return NextResponse.json(stateOf(id, since), { headers: { 'Cache-Control': 'no-store' } });
+  return NextResponse.json({ ...stateOf(id, since), phone: phoneOf(id) }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 /**
@@ -49,7 +50,11 @@ export async function POST(request: NextRequest) {
   if (!body || !isProjectId(body.projectId)) return NextResponse.json({ error: 'projectId is missing or invalid' }, { status: 400 });
   const id = body.projectId;
 
-  if (body.action === 'stop') return NextResponse.json({ stopped: stopServer(id), ...stateOf(id) });
+  if (body.action === 'stop') {
+    closePhone(id);
+    return NextResponse.json({ stopped: stopServer(id), ...stateOf(id) });
+  }
+  if (body.action === 'phone-off') return NextResponse.json({ closed: closePhone(id), phone: null });
 
   const limiter = body.action === 'start' ? starts : syncs;
   const wait = limiter.check(clientKey(request.headers));
@@ -64,6 +69,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(stateOf(id));
   }
 
+  // Phone preview: a proxy on this machine's network address to the running dev server, behind a random key
+  if (body.action === 'phone-on') {
+    const state = stateOf(id);
+    if (state.status !== 'ready' || !state.url) return NextResponse.json({ error: 'Start the dev server first.' }, { status: 409 });
+    try {
+      return NextResponse.json({ phone: await openPhone(id, () => (stateOf(id).status === 'ready' ? (stateOf(id).url ?? null) : null)) });
+    } catch (error) {
+      return NextResponse.json({ error: (error as Error).message }, { status: (error as { status?: number }).status ?? 500 });
+    }
+  }
+
   if (body.action === 'sync') {
     const changed = parseFiles(body.changed ?? {}, { allowEmpty: true });
     if ('error' in changed) return NextResponse.json({ error: changed.error }, { status: 400 });
@@ -73,5 +89,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result, { status: 'error' in result ? 409 : 200 });
   }
 
-  return NextResponse.json({ error: 'action must be start, sync or stop' }, { status: 400 });
+  return NextResponse.json({ error: 'action must be start, sync, stop, phone-on or phone-off' }, { status: 400 });
 }

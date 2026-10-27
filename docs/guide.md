@@ -966,6 +966,19 @@ it on. At most three dev servers run at once (the least recently viewed stops fi
 20 minutes stops, and they all stop with the studio. Every starter is tested for real: installed, served and edited
 (`AHA_TEST_NETWORK=1 npm test`).
 
+**On your phone.** With the dev server running, **Phone** in the preview bar shows a QR code. Scan it with a phone on the
+same Wi-Fi: the app opens there, and edits reach it by hot reload, as they do in the studio.
+
+How it is kept private:
+- The dev server itself keeps listening on `127.0.0.1`. The phone reaches it through a small proxy on this machine's
+  network address, opened only while sharing is on.
+- The proxy answers only to a browser that opened the link with its random key; a cookie keeps the key after that.
+  Anyone else on the network gets a page asking for the code.
+- It stops when you press **Stop sharing**, after 30 minutes unused, after two hours in all, or when the dev server
+  stops.
+
+On a network that isn't a private range (some offices, Tailscale), name the address to use with `AHA_PHONE_HOST`.
+
 
 ### Full apps in every language
 
@@ -1461,6 +1474,7 @@ AHA_RUN=                 # 0 = don't run other languages, 1 = force on; unset = 
 AHA_RUN_JOBS=3           # concurrent runs
 AHA_DEV=                 # web app dev servers: 0 = off, 1 = force on; unset = on only when HOST is loopback
 AHA_DEV_SERVERS=3        # dev servers running at once
+AHA_PHONE_HOST=          # phone preview: this machine's address to use (default: its private-network address)
 AHA_TOOLCHAIN_AUTO_INSTALL=1   # 0 = never install a missing toolchain on Run
 AHA_TOOLCHAIN_AUTO_UPDATE=1    # 0 = don't apply toolchain updates on their own
 TRUST_PROXY_HOPS=1           # reverse proxies in front of the studio (rate limits use the address the last one saw)

@@ -15,6 +15,7 @@ import type { WebApp } from '@/lib/app-servers';
 import type { DevServerHandle } from '../devserver-client';
 import { locateElement, visualEditPrompt, type ElementLocation, type PickedElement } from '@/lib/visual-edit';
 import { ElementEditor } from './ElementEditor';
+import { PhoneCard } from './PhoneCard';
 
 const DEVICES = [
   { id: 'full', label: 'Full', width: null },
@@ -156,6 +157,7 @@ interface Props {
 
 export function PreviewPane({ detected, server, files, mode, browserSupport, onMode, onFailure, onWorking, onOpenLocation, onWrite, onAsk, onDesignPass, projectName, onClose }: Props) {
   const { state, log, enabled, start, stop } = server;
+  const [phoneOpen, setPhoneOpen] = useState(false);
   const [browser, setBrowser] = useState<BrowserState>({ status: 'loading' });
   const [consoleLines, setConsoleLines] = useState<ConsoleLine[]>([]);
   const consoleId = useRef(0);
@@ -257,7 +259,8 @@ export function PreviewPane({ detected, server, files, mode, browserSupport, onM
   );
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-1 flex-col border-l border-border bg-[var(--color-background)]" aria-label="Preview">
+    <section className="relative flex min-h-0 min-w-0 flex-1 flex-col border-l border-border bg-[var(--color-background)]" aria-label="Preview">
+      {phoneOpen && !inBrowser && <PhoneCard phone={server.phone} error={server.phoneError} onOpen={server.openPhone} onClose={server.closePhone} onDismiss={() => setPhoneOpen(false)} />}
       <div className="flex h-10 min-w-0 shrink-0 items-center gap-2 overflow-hidden border-b border-border bg-[var(--bar)] px-2.5">
         <span className={`h-2 w-2 shrink-0 rounded-full ${status.dot}`} aria-hidden="true" />
         <span className="shrink-0 text-xs text-gray-300" title={status.label}>{detected.label}</span>
@@ -320,6 +323,11 @@ export function PreviewPane({ detected, server, files, mode, browserSupport, onM
         {inBrowser && (
           <button onClick={() => setSnapshots((n) => n + 1)} disabled={browser.status !== 'ready'} className="btn btn-ghost btn-icon btn-sm" aria-label="Save as a page to share" title="Save as one HTML page you can send to anyone">
             ⇩
+          </button>
+        )}
+        {!inBrowser && ready && (
+          <button onClick={() => setPhoneOpen((v) => !v)} aria-pressed={phoneOpen} className={`btn btn-ghost btn-sm px-2 text-[11px] ${server.phone ? 'text-accent' : ''}`} title="Open the running app on a phone on the same Wi-Fi (QR code)">
+            {server.phone ? '● Phone' : 'Phone'}
           </button>
         )}
         {src && !inBrowser && <a href={src} target="_blank" rel="noreferrer" className="btn btn-ghost btn-icon btn-sm" aria-label="Open in a new tab" title="Open in a new tab">↗</a>}

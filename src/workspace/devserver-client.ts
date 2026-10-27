@@ -8,18 +8,21 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { DevState, LogLine } from '@/lib/devserver';
+import type { PhoneState } from '@/lib/phone-preview';
 import { GENERATED_DIRS } from '@/lib/frameworks';
 import { pythonProjectId } from './python-client';
 
-export type { DevState, LogLine };
+export type { DevState, LogLine, PhoneState };
 
 const MAX_LOG = 400;
 const syncable = (files: Record<string, string>) => Object.fromEntries(Object.entries(files).filter(([p]) => !GENERATED_DIRS.has(p.split('/')[0])));
 
-async function post(body: Record<string, unknown>): Promise<(Partial<DevState> & { error?: string }) | null> {
+type Reply = Partial<DevState> & { error?: string; phone?: PhoneState | null };
+
+async function post(body: Record<string, unknown>): Promise<Reply | null> {
   try {
     const response = await fetch('/api/devserver', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    return (await response.json()) as Partial<DevState> & { error?: string };
+    return (await response.json()) as Reply;
   } catch {
     return null;
   }
@@ -32,6 +35,11 @@ export interface DevServerHandle {
   log: LogLine[];
   start: () => void;
   stop: () => void;
+  /** Phone preview: the link (and QR code) to the dev server from a phone on the same network */
+  phone: PhoneState | null;
+  phoneError: string | null;
+  openPhone: () => void;
+  closePhone: () => void;
 }
 
 const IDLE: DevState = { status: 'none', log: [], seq: 0 };
@@ -41,6 +49,8 @@ export function useDevServer(projectName: string, files: Record<string, string>,
   const [state, setState] = useState<DevState>(IDLE);
   const [log, setLog] = useState<LogLine[]>([]);
   const [id, setId] = useState<string | null>(null);
+  const [phone, setPhone] = useState<PhoneState | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const seq = useRef(0);
   const synced = useRef<Record<string, string> | null>(null);
   const filesRef = useRef(files);
@@ -59,7 +69,8 @@ export function useDevServer(projectName: string, files: Record<string, string>,
     synced.current = null;
   }, [projectName, active]);
 
-  const absorb = useCallback((next: Partial<DevState> & { error?: string }) => {
+  const absorb = useCallback((next: Reply) => {
+    if ('phone' in next) setPhone(next.phone ?? null);
     if (!next.status) return;
     setState((prev) => ({ ...prev, ...next, log: [] }) as DevState);
     if (next.log?.length) {
@@ -101,7 +112,7 @@ export function useDevServer(projectName: string, files: Record<string, string>,
     if (!id || !live) return;
     const timer = setInterval(async () => {
       try {
-        const next = (await (await fetch(`/api/devserver?projectId=${id}&since=${seq.current}`, { cache: 'no-store' })).json()) as DevState;
+        const next = (await (await fetch(`/api/devserver?projectId=${id}&since=${seq.current}`, { cache: 'no-store' })).json()) as Reply;
         absorb(next);
       } catch {
         // the studio is restarting; try again next tick
@@ -145,5 +156,20 @@ export function useDevServer(projectName: string, files: Record<string, string>,
     void post({ action: 'stop', projectId: id }).then((result) => result && absorb(result));
   }, [id, absorb]);
 
-  return { enabled, state, log, start, stop };
+  const openPhone = useCallback(() => {
+    if (!id) return;
+    setPhoneError(null);
+    void post({ action: 'phone-on', projectId: id }).then((result) => {
+      if (!result) setPhoneError('The studio did not answer.');
+      else if (result.error) setPhoneError(result.error);
+      else setPhone(result.phone ?? null);
+    });
+  }, [id]);
+  const closePhone = useCallback(() => {
+    if (!id) return;
+    setPhone(null);
+    void post({ action: 'phone-off', projectId: id });
+  }, [id]);
+
+  return { enabled, state, log, start, stop, phone, phoneError, openPhone, closePhone };
 }
