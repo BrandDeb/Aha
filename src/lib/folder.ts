@@ -260,6 +260,31 @@ async function readFiles(folder: Folder, relatives: string[], budget: number): P
   return { files, unreadable, handled };
 }
 
+/**
+ * A small sample of the folder's files for tools that decide what a project is (which framework, which language):
+ * the front-door files, then shallow before deep, at most 300 files and 2 MB. Read fresh from disk, not from the studio.
+ */
+export async function sampleFiles(id: unknown): Promise<Record<string, string>> {
+  const folder = folderOf(id);
+  const { paths } = await listFiles(folder.root);
+  const safe = paths.filter((p) => isSafeRelativePath(p) && p.split('/').length <= 4);
+  const { files } = await readFiles(folder, priorityOrder(safe).slice(0, 300), 2 * 1024 * 1024);
+  return files;
+}
+
+/** One file's text for a tool that wants it now (a language's plan looking for its manifest), or undefined */
+export function readFolderFile(root: string, relative: string): string | undefined {
+  const full = resolveInside(root, relative);
+  if (!full) return undefined;
+  try {
+    const stat = fs.statSync(full);
+    if (!stat.isFile() || stat.size > LIMITS.fileBytes) return undefined;
+    return fs.readFileSync(full, 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
 /** Bring more of a folder's files into the studio (opening one, or loading in the background) */
 export async function readMany(id: unknown, input: unknown): Promise<{ files: Record<string, string>; unreadable: { path: string; reason: SkipReason }[]; handled: number }> {
   const folder = folderOf(id);

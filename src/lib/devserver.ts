@@ -14,8 +14,9 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { atLeast, dependencyKey, detectFramework, GENERATED_DIRS, INSTALL_ARGS, localUrlIn, packageManagerFor, type Framework } from './frameworks.ts';
-import { isRunEnabled, AHA_DIR, runEnv, which } from './polyglot.ts';
+import { isRunEnabled, AHA_DIR, folderEnv, runEnv, which } from './polyglot.ts';
 import { capture, isSafeRelativePath, killTree, runStep, writeProject } from './proc.ts';
+import { rootOf } from './folder.ts';
 import { detectAppServer, manifestKey, type AppServer } from './app-servers.ts';
 import { shellFor } from './pipelines/run.ts';
 import { refreshBinPaths } from './toolchains.ts';
@@ -70,6 +71,15 @@ interface DevServer {
   /** Bumped by every start and stop, so a start that was overtaken gives up */
   generation: number;
   install?: AbortController;
+  /**
+   * Running in the user's own folder (an opened folder, lib/folder.ts) rather than a copy: nothing is written, replaced
+   * or removed there but what the project's own tools do. The studio's files (the process id, a private HOME) live in
+   * `scratch` instead.
+   */
+  inPlace?: boolean;
+  /** The opened folder's id, when `inPlace` */
+  folder?: string;
+  scratch: string;
 }
 
 export interface DevState {
@@ -180,10 +190,11 @@ export async function binScript(dir: string, pkg: string, bin: string): Promise<
 }
 
 const PID_FILE = '.home/dev-server.pid';
+const pidFile = (server: { scratch: string }) => path.join(server.scratch, PID_FILE);
 
 /** A server left running by a studio that was killed outright: stop it, if the pid still belongs to it */
-async function reapStale(dir: string): Promise<void> {
-  const pid = Number(await fs.readFile(path.join(dir, PID_FILE), 'utf8').catch(() => ''));
+async function reapStale(scratch: string, dir: string): Promise<void> {
+  const pid = Number(await fs.readFile(path.join(scratch, PID_FILE), 'utf8').catch(() => ''));
   if (!pid || process.platform === 'win32') return;
   const { output } = await capture('ps', ['-o', 'command=', '-p', String(pid)]);
   if (!output.includes(path.join(dir, 'node_modules'))) return;
@@ -194,9 +205,11 @@ async function reapStale(dir: string): Promise<void> {
   }
 }
 
-function devEnv(dir: string, port: number, PATH?: string): Record<string, string> {
+function devEnv(dir: string, port: number, PATH?: string, inPlace = false): Record<string, string> {
+  const base = runEnv(process.env, dir, {});
   return {
-    ...runEnv(process.env, dir, {}),
+    // A copy gets a private HOME; the user's own folder gets their home and caches, as in their terminal
+    ...(inPlace ? folderEnv(base) : base),
     ...(PATH ? { PATH } : {}),
     NODE_ENV: 'development',
     PORT: String(port),
@@ -225,7 +238,7 @@ function stopChild(server: DevServer) {
     killTree(server.child);
     server.child = undefined;
   }
-  void fs.rm(path.join(server.dir, PID_FILE), { force: true });
+  void fs.rm(pidFile(server), { force: true });
 }
 
 export function stopServer(id: string): boolean {
@@ -240,15 +253,23 @@ export function stopServer(id: string): boolean {
 }
 
 /** Write the files, install when needed and start the dev server; resolves when it answers or fails */
-export async function startServer(id: string, files: Record<string, string>, options: { relaunch?: boolean } = {}): Promise<DevState> {
+export async function startServer(id: string, files: Record<string, string>, options: { relaunch?: boolean; folder?: string } = {}): Promise<DevState> {
   let server = registry.get(id);
+  const scratch = path.join(DEV_PROJECTS, id);
+  // An opened folder: run there. Resolved first, so a folder that is no longer open fails before anything starts
+  const inPlace = options.folder !== undefined;
+  const dir = inPlace ? rootOf(options.folder) : scratch;
   if (!server) {
     // Make room: the server nobody has looked at for longest goes first
     const running = [...registry.values()].filter((s) => s.status !== 'stopped' && s.status !== 'failed');
     if (running.length >= MAX_DEV_SERVERS) stopServer(running.sort((a, b) => a.lastSeen - b.lastSeen)[0].id);
-    server = { id, dir: path.join(DEV_PROJECTS, id), status: 'starting', files: {}, log: [], seq: 0, lastSeen: Date.now(), generation: 0 };
+    server = { id, dir, scratch, inPlace, status: 'starting', files: {}, log: [], seq: 0, lastSeen: Date.now(), generation: 0 };
     registry.set(id, server);
   }
+  server.dir = dir;
+  server.scratch = scratch;
+  server.inPlace = inPlace;
+  server.folder = options.folder;
   const generation = ++server.generation;
   stopChild(server);
   server.files = { ...files };
@@ -276,16 +297,17 @@ export async function startServer(id: string, files: Record<string, string>, opt
   server.label = label;
   if (!atLeast(process.versions.node, framework.minNode)) say(server, 'info', `${label} expects Node.js ${framework.minNode} or newer; this machine has ${process.versions.node}. It may still work.`);
 
-  await fs.mkdir(server.dir, { recursive: true });
-  await reapStale(server.dir);
-  await writeProject(server.dir, files, { keep: GENERATED_DIRS });
+  await fs.mkdir(server.scratch, { recursive: true });
+  await reapStale(server.scratch, server.dir);
+  // Never in the user's own folder: writeProject makes a folder match the files, which deletes what isn't in them
+  if (!server.inPlace) await writeProject(server.dir, files, { keep: GENERATED_DIRS });
   if (!current()) return stateOf(id);
 
   // Dependencies: only when they changed (or were never installed)
   const key = dependencyKey(files);
   if (server.depsKey !== key || !fsSync.existsSync(path.join(server.dir, 'node_modules'))) {
     const manager = packageManagerFor(files);
-    const env = devEnv(server.dir, 0);
+    const env = devEnv(server.dir, 0, undefined, server.inPlace);
     const tool = which(manager, env.PATH ?? env.Path ?? '') ?? (manager !== 'npm' ? which('npm', env.PATH ?? env.Path ?? '') : null);
     if (!tool) return fail(`${manager} was not found. Install Node.js (nodejs.org), which includes npm, then try again.`);
     server.status = 'installing';
@@ -314,7 +336,7 @@ export async function startServer(id: string, files: Record<string, string>, opt
   const port = await freePort();
   if (!current()) return stateOf(id);
   say(server, 'info', `${framework.bin} ${framework.args(port).join(' ')}`);
-  return launch(server, { file: process.execPath, args: [script, ...framework.args(port)], env: devEnv(server.dir, port), port, readyMs: READY_MS }, current, fail);
+  return launch(server, { file: process.execPath, args: [script, ...framework.args(port)], env: devEnv(server.dir, port, undefined, server.inPlace), port, readyMs: READY_MS }, current, fail);
 }
 
 /** Start the server process and wait until it answers HTTP (on the port asked, or the one it prints) */
@@ -334,7 +356,7 @@ async function launch(
     windowsHide: true,
   });
   server.child = child;
-  if (child.pid) void fs.mkdir(path.join(server.dir, '.home'), { recursive: true }).then(() => fs.writeFile(path.join(server.dir, PID_FILE), String(child.pid))).catch(() => {});
+  if (child.pid) void fs.mkdir(path.join(server.scratch, '.home'), { recursive: true }).then(() => fs.writeFile(pidFile(server), String(child.pid))).catch(() => {});
   // The tool may pick another port than asked (or print where it is); believe the first local URL it prints
   let printedPort: number | null = null;
   const onData = (s: 'out' | 'err') => (chunk: Buffer) => {
@@ -382,12 +404,12 @@ async function startApp(server: DevServer, app: AppServer, files: Record<string,
   server.app = app;
   server.framework = undefined;
   server.label = app.label;
-  await fs.mkdir(server.dir, { recursive: true });
-  // A restart after an edit: the edit is already on disk, and so is what the install step made
-  if (!relaunch) await writeProject(server.dir, files, { keep: new Set([...GENERATED_DIRS, ...APP_DIRS, ...APP_LOCKS]) });
+  await fs.mkdir(server.scratch, { recursive: true });
+  // A restart after an edit: the edit is already on disk, and so is what the install step made. Never in the user's own folder
+  if (!relaunch && !server.inPlace) await writeProject(server.dir, files, { keep: new Set([...GENERATED_DIRS, ...APP_DIRS, ...APP_LOCKS]) });
   if (!current()) return stateOf(server.id);
   await refreshBinPaths();
-  const env = devEnv(server.dir, 0);
+  const env = devEnv(server.dir, 0, undefined, server.inPlace);
   // uv may live in the studio's own folder rather than on PATH
   if (app.tool === 'uv') {
     const { resolveUv } = await import('./python.ts');
@@ -430,7 +452,7 @@ async function startApp(server: DevServer, app: AppServer, files: Record<string,
   const sh = shell(command);
   if ('error' in sh) return fail(sh.error);
   say(server, 'info', command);
-  return launch(server, { file: sh.file, args: sh.args, env: devEnv(server.dir, port, env.PATH), port, readyMs: APP_READY_MS }, current, fail);
+  return launch(server, { file: sh.file, args: sh.args, env: devEnv(server.dir, port, env.PATH, server.inPlace), port, readyMs: APP_READY_MS }, current, fail);
 }
 
 /** Apply edits to a running project; a dependency change reinstalls and restarts */
@@ -444,25 +466,26 @@ export async function syncServer(id: string, changed: Record<string, string>, re
   const app = server.app;
   const restart = app ? `app:${app.id}:${manifestKey(app, next)}` !== server.depsKey : dependencyKey(next) !== server.depsKey;
   server.files = next;
-  for (const [relative, content] of Object.entries(changed)) {
+  // In the user's folder the editor already saved the change there; the tools' own watchers pick it up
+  for (const [relative, content] of server.inPlace ? [] : Object.entries(changed)) {
     const target = path.resolve(server.dir, relative);
     if (!target.startsWith(server.dir + path.sep)) continue;
     await fs.mkdir(path.dirname(target), { recursive: true });
     const existing = await fs.readFile(target, 'utf8').catch(() => null);
     if (existing !== content) await fs.writeFile(target, content, 'utf8');
   }
-  for (const relative of removed) {
+  for (const relative of server.inPlace ? [] : removed) {
     const target = path.resolve(server.dir, relative);
     if (target.startsWith(server.dir + path.sep)) await fs.rm(target, { force: true });
   }
   if (restart && (server.status === 'ready' || server.status === 'starting')) {
     say(server, 'info', 'Dependencies changed: installing and restarting.');
-    void startServer(id, next);
+    void startServer(id, next, server.inPlace ? { folder: server.folder } : {});
   } else if (app?.reload === 'restart' && server.status !== 'stopped' && server.status !== 'installing' && (Object.keys(changed).length || removed.length)) {
     clearTimeout(server.restartTimer);
     server.restartTimer = setTimeout(() => {
       say(server, 'info', 'Files changed: restarting.');
-      void startServer(id, server.files, { relaunch: true });
+      void startServer(id, server.files, { relaunch: true, ...(server.inPlace ? { folder: server.folder } : {}) });
     }, 700);
   }
   return stateOf(id);

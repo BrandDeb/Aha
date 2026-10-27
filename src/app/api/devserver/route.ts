@@ -4,6 +4,7 @@ import { isTrustedHost } from '@/lib/host';
 import { cleanupDevProjects, isDevEnabled, isProjectId, isSyncablePath, listServers, parseFiles, startServer, stateOf, stopServer, syncServer } from '@/lib/devserver';
 import { FRAMEWORKS } from '@/lib/frameworks';
 import { closePhone, openPhone, phoneOf } from '@/lib/phone-preview';
+import { sampleFiles } from '@/lib/folder';
 import { clientKey, createRateLimiter } from '@/lib/rate-limit';
 import { readJsonOrNull } from '@/lib/request-guard';
 
@@ -61,6 +62,19 @@ export async function POST(request: NextRequest) {
   if (wait) return NextResponse.json({ error: `Too many requests. Try again in ${Math.ceil(wait / 60)} min.` }, { status: 429, headers: { 'Retry-After': String(wait) } });
 
   if (body.action === 'start') {
+    // An opened folder: the server runs in the folder itself, and only a sample of it is read to tell what the project is
+    if (body.folder !== undefined) {
+      if (typeof body.folder !== 'string' || !isProjectId(body.folder)) return NextResponse.json({ error: 'folder is invalid' }, { status: 400 });
+      let sample: Record<string, string>;
+      try {
+        sample = await sampleFiles(body.folder);
+      } catch (error) {
+        return NextResponse.json({ error: (error as Error).message }, { status: (error as { status?: number }).status ?? 500 });
+      }
+      void cleanupDevProjects();
+      void startServer(id, sample, { folder: body.folder }).catch((error) => console.error('Dev server failed:', error));
+      return NextResponse.json(stateOf(id));
+    }
     const files = parseFiles(body.files);
     if ('error' in files) return NextResponse.json({ error: files.error }, { status: 400 });
     void cleanupDevProjects();

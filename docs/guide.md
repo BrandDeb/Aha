@@ -858,8 +858,12 @@ works on a project where it lives. Only on your own machine, and only in a windo
   and manifests first), so a 50,000-file repository is usable in about a second. The rest of the text comes when you
   open, move or delete a file, and a background loader brings in up to 5,000 files, shallowest first, so search and the
   agent work with most of a normal project. The explorer starts with its folders closed past 1,500 files.
-- **The terminal** runs in the folder itself, with your own home folder and caches, as in your terminal. Run and the
-  dev server still work on a copy of the project for now.
+- **Run, the terminal and the dev server** work in the folder itself, with your own home folder and caches, as in your
+  terminal. Nothing is copied in or out, and the studio never deletes or rewrites files there for them: a program's
+  output lands in the folder and comes back through the outside-changes watcher. Compiled languages put their build
+  output in `.aha-out/`, which carries its own `.gitignore`. The agent still works on a private copy and hands you a
+  proposal. After changing `package.json` or another manifest, restart the dev server; edits to source files are picked
+  up by the framework's own reloading.
 - Binary files, files over 1 MB and names the studio can't use yet stay on disk, untouched.
 
 ---

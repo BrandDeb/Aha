@@ -6,6 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { browse, closeFolder, inSkippedDir, LIMITS, looksBinary, makeDir, movePath, openFolder, priorityOrder, readMany, reloadFolder, removePath, resolveInside, watchFolder, writeFile, type FolderChange } from '../src/lib/folder.ts';
 import { folderEnv, parseShellRequest, runShell } from '../src/lib/shell.ts';
+import { parseRunRequest, runLanguage } from '../src/lib/polyglot.ts';
+import { startServer, stopServer } from '../src/lib/devserver.ts';
 import { diffAgainstDisk, folderProject, moveInBaseline, nextBatch, pathsUnder } from '../src/workspace/folder-diff.ts';
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'aha-folder-')));
@@ -228,4 +230,43 @@ test('a big folder opens fast: every name at once, text for the first few', { ti
   assert.ok(JSON.stringify(f).length < 2_000_000, 'the open answer stays small');
   // Generous for slow CI machines; locally 12k files take about 100 ms (50k about 300 ms)
   assert.ok(ms < 1500, `opening ${total} files took ${Math.round(ms)} ms`);
+});
+
+test('Run works in the opened folder itself and leaves the rest of it alone', { skip: process.platform === 'win32' }, async () => {
+  const root = project('run-in-place', { 'hello.sh': 'echo "hello from $(basename "$PWD")"\necho made > made-by-run.txt\n', 'keep-me.txt': 'not part of any list the studio sent', 'docs/guide.md': '# g\n' });
+  const f = await open(root);
+  const parsed = parseRunRequest({ projectId: 'abcdefgh12', folder: f.id, entry: 'hello.sh', args: [] });
+  assert.ok(!('error' in parsed), JSON.stringify(parsed));
+  assert.deepEqual((parsed as { files: object }).files, {});
+  let output = '';
+  const result = await runLanguage(parsed as Exclude<typeof parsed, { error: string }>, { onOutput: (_s, d) => (output += d) });
+  assert.equal(result.code, 0, result.error ?? output);
+  assert.match(output, /hello from run-in-place/);
+  // What the program wrote is on disk; nothing was copied in or out, deleted or scattered around
+  assert.equal(fs.readFileSync(path.join(root, 'made-by-run.txt'), 'utf8').trim(), 'made');
+  assert.equal(fs.readFileSync(path.join(root, 'keep-me.txt'), 'utf8'), 'not part of any list the studio sent');
+  assert.ok(fs.existsSync(path.join(root, 'docs/guide.md')));
+  assert.equal(fs.existsSync(path.join(root, '.home')), false);
+  assert.deepEqual(result.changed, {});
+  assert.deepEqual(result.removed, []);
+  assert.equal(fs.readFileSync(path.join(root, '.aha-out', '.gitignore'), 'utf8'), '*\n');
+  // A folder that is not open, or a bad id, is refused before anything runs
+  assert.ok('error' in parseRunRequest({ projectId: 'abcdefgh12', folder: '../x', entry: 'hello.sh' }));
+  const gone = await runLanguage({ projectId: 'abcdefgh12', folder: 'notopen1234', entry: 'hello.sh', args: [], files: {}, env: {} }, { onOutput: () => {} });
+  assert.match(gone.error ?? '', /no longer open/);
+});
+
+test('a dev server started in the folder never writes or deletes there', async () => {
+  // Not a web app: it fails to start, which is the path that would have rewritten the folder from the files it was sent
+  const root = project('dev-in-place', { 'notes.txt': 'mine', 'src/other.txt': 'also mine' });
+  const f = await open(root);
+  const sample = { 'unrelated.txt': 'a file the studio happens to know about' };
+  const state = await startServer('devplace1234', sample, { folder: f.id });
+  assert.equal(state.status, 'failed');
+  assert.match(state.error ?? '', /No web app found/);
+  stopServer('devplace1234');
+  assert.deepEqual(fs.readdirSync(root).sort(), ['notes.txt', 'src']);
+  assert.equal(fs.readFileSync(path.join(root, 'notes.txt'), 'utf8'), 'mine');
+  assert.equal(fs.existsSync(path.join(root, 'unrelated.txt')), false);
+  assert.equal(fs.existsSync(path.join(root, '.home')), false);
 });

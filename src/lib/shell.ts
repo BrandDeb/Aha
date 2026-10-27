@@ -7,10 +7,11 @@
  * that is the user's own machine. Server only.
  */
 
-import os from 'node:os';
 import path from 'node:path';
 import { LANGUAGES } from './languages.ts';
-import { KEEP, RUN_PROJECTS, runEnv, type RunResult } from './polyglot.ts';
+import { folderEnv, KEEP, RUN_PROJECTS, runEnv, type RunResult } from './polyglot.ts';
+
+export { folderEnv };
 import { shellFor } from './pipelines/run.ts';
 import { collectFiles, createJobPool, createKeyedLock, diffFiles, isSafeRelativePath, runStep, writeProject } from './proc.ts';
 import { refreshBinPaths } from './toolchains.ts';
@@ -114,18 +115,4 @@ async function runInFolder(request: ShellRequest, hooks: { onOutput: (stream: 's
     truncated: outcome.truncated || undefined,
     error: outcome.spawnError ? `Could not start the shell: ${outcome.spawnError.message}` : outcome.aborted ? 'stopped' : undefined,
   });
-}
-
-/**
- * A scratch copy gets a private HOME and the studio's shared caches; the user's own project gets their real home and
- * caches, as in their own terminal (and nothing like `.home/` appears in it). Server secrets still stay out: the
- * variables are runEnv's allow-list.
- */
-export function folderEnv(env: Record<string, string>, host: Record<string, string | undefined> = process.env, home = os.homedir()): Record<string, string> {
-  const out: Record<string, string> = { ...env, HOME: home, USERPROFILE: home, DOTNET_CLI_HOME: home };
-  for (const key of ['GOCACHE', 'GOPATH', 'CARGO_HOME', 'npm_config_cache', 'BUN_INSTALL_CACHE_DIR', 'NUGET_PACKAGES', 'ZIG_GLOBAL_CACHE_DIR']) {
-    if (host[key] !== undefined) out[key] = host[key] as string;
-    else delete out[key];
-  }
-  return out;
 }
