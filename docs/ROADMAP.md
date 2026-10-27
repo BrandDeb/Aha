@@ -160,6 +160,11 @@ Three-way view (yours, theirs, result) with accept-per-hunk, used by Git pull an
 newer edits. *Done when* a conflicted pull resolves without leaving the studio.
 
 ### 8. Night shift
+
+> **Shipped:** a queue, a start time, per-task and whole-night budgets for time and tokens (a new token cap in the agent
+> loop), and a Night shift section first in the morning report. Three tasks became three proposals and a runaway task
+> was stopped by its token budget in a browser test. Still to do: running with the window closed (desktop app).
+
 Queue tasks before you leave; the worker runs them overnight inside a money and time budget; the morning report shows
 the results as proposals. Built on watchers (item 1) with a time trigger. *Done when* three queued tasks produce three
 proposals and a report, and the budget stops a runaway task.

@@ -45,7 +45,7 @@ export interface WorkspaceActions {
   openSettings: (tab?: SettingsTab) => void;
 }
 
-export type PanelId = 'build' | 'git' | 'ai' | 'agent' | 'history' | 'graph' | 'package' | 'python' | 'languages' | 'worker' | 'watchers' | 'channel' | 'kit' | 'ci' | 'contracts' | 'optimize' | 'web3' | 'extensions' | 'debug';
+export type PanelId = 'build' | 'git' | 'ai' | 'agent' | 'history' | 'graph' | 'package' | 'python' | 'languages' | 'worker' | 'watchers' | 'channel' | 'kit' | 'ci' | 'contracts' | 'optimize' | 'web3' | 'extensions' | 'debug' | 'night';
 
 export const ActionsContext = createContext<WorkspaceActions | null>(null);
 

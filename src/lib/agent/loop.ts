@@ -151,6 +151,8 @@ export async function runAgent(options: AgentOptions): Promise<AgentRun> {
     if (options.signal?.aborted) return finish('aborted', 'Stopped.');
     if (steps >= budget.maxSteps) return wrapUp('budget', `You have used all ${budget.maxSteps} steps. Do not call any more tools. Summarise what you changed, what works, and what is still unfinished.`);
     if (now() - started > budget.maxMillis) return wrapUp('budget', 'You have run out of time. Do not call any more tools. Summarise what you changed, what works, and what is still unfinished.');
+    // Over the token budget: stop without the wrap-up turn, which would spend more
+    if (budget.maxTokens && usage.input + usage.output >= budget.maxTokens) return finish('budget', `${lastText ? `${lastText}\n\n` : ''}Stopped: the run used its budget of ${budget.maxTokens.toLocaleString('en')} tokens.`);
     if (toolCalls >= budget.maxToolCalls) return wrapUp('budget', 'You have used the tool-call budget. Do not call any more tools. Summarise what you changed, what works, and what is still unfinished.');
 
     steps++;

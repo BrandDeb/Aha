@@ -269,6 +269,18 @@ test('loop: stops at the step budget and asks for an honest summary without tool
   assert.match((seen.at(-1)!.messages.at(-1) as { content: string }).content, /used all 3 steps/);
 });
 
+test('loop: a token budget stops a runaway run without spending a wrap-up turn', async () => {
+  const { tools } = setup();
+  // Each turn reports 400 tokens and asks for another tool call, forever
+  const { model, seen } = scripted([(i) => ({ ...callTools(call('list_files', {}, `t${i.messages.length}`)), text: 'still going', usage: { input: 300, output: 100 } })]);
+  const run = await runAgent({ goal: 'x', system: 's', tools, callModel: model, budget: { maxTokens: 1000, maxSteps: 50 } });
+  assert.equal(run.reason, 'budget');
+  assert.equal(seen.length, 3, 'stopped after the turn that crossed 1,000 tokens');
+  assert.ok(seen.every((s) => s.tools.length > 0), 'no extra turn to wrap up');
+  assert.equal(run.usage.input + run.usage.output, 1200);
+  assert.match(run.summary, /budget of 1,000 tokens/);
+});
+
 test('loop: stops at the time and tool-call budgets', async () => {
   const { tools } = setup();
   let clock = 0;

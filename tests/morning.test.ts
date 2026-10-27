@@ -44,3 +44,21 @@ test('a quiet morning says so', () => {
   assert.deepEqual(r.sections.map((s) => s.title), ['Next']);
   assert.equal(awayFor(50 * H), '2 days');
 });
+
+test('the night shift comes first, each task linked to its proposal', () => {
+  const r = morningReport({
+    since: 0,
+    now: 9 * 3_600_000,
+    proposals: [],
+    brokenContracts: [],
+    night: { headline: 'Night shift: 2 done, 1 stopped at the budget', items: [
+      { text: 'Add tests', status: 'done', detail: 'Finished', proposalId: 'p1' },
+      { text: 'Refactor', status: 'stopped', detail: 'Stopped at its budget', proposalId: 'p2' },
+      { text: 'Docs', status: 'skipped', detail: 'The night ended' },
+    ] },
+  });
+  assert.equal(r.sections[0].title, 'Night shift: 2 done, 1 stopped at the budget');
+  assert.deepEqual(r.sections[0].items.map((i) => [i.tone, i.action]), [['good', { kind: 'proposal', id: 'p1' }], ['warn', { kind: 'proposal', id: 'p2' }], ['warn', undefined]]);
+  assert.equal(r.quiet, false);
+  assert.equal(r.headline, 'Night shift: 2 done, 1 stopped at the budget.');
+});

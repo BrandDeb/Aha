@@ -95,7 +95,7 @@ export interface Proposal {
   /** Hidden from the editor tabs (still listed in the Agent tab) */
   closed?: boolean;
   /** Who started it: you, the debugger, or the worker */
-  origin?: 'you' | 'debug' | 'worker' | 'watcher';
+  origin?: 'you' | 'debug' | 'worker' | 'watcher' | 'night';
   /** The worker's task kind (todo, tests, improve…), for its track record */
   task?: string;
   /** Forked: one lane per direction, built at the same time, for you to compare and pick */
@@ -148,7 +148,7 @@ interface ProposalsValue {
   setPrefs: (patch: Partial<AgentPrefs>) => void;
   /** Start a new proposal; returns its id, or null when no model is set up */
   /** `label` is what the tab shows when the task itself is long (a debugging brief); `quiet` skips the "choose a model" toast */
-  ask: (goal: string, options?: { approaches?: number; label?: string; quiet?: boolean; background?: boolean; origin?: Proposal['origin']; task?: string; forks?: ForkDirection[]; images?: ImageInput[] }) => string | null;
+  ask: (goal: string, options?: { approaches?: number; label?: string; quiet?: boolean; background?: boolean; origin?: Proposal['origin']; task?: string; forks?: ForkDirection[]; images?: ImageInput[]; budget?: Partial<Budget> }) => string | null;
   followUp: (id: string, text: string) => void;
   stop: (id: string) => void;
   answer: (id: string, allowed: boolean, always?: boolean) => void;
@@ -328,7 +328,7 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
 
   /** One agent run on one lane; also used for follow-ups, which continue the conversation */
   const runSingle = useCallback(
-    async (id: string, laneId: string, goal: string, target: Exclude<ReturnType<typeof resolveProvider>, { error: string }>) => {
+    async (id: string, laneId: string, goal: string, target: Exclude<ReturnType<typeof resolveProvider>, { error: string }>, budget?: Partial<Budget>) => {
       const p = projectRef.current;
       const lanes = stages.current.get(id) ?? new Map<string, Stage>();
       stages.current.set(id, lanes);
@@ -356,7 +356,7 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
           system: systemPromptFor(stage.files(), skills) + (onChannel ? channelBrief(channel, id) : ''),
           tools: onChannel ? withInbox([...tools, ...channelTools(channel, id)], channel, id) : tools,
           callModel: callModelFor(target),
-          budget: BUDGETS[prefs.budget].budget,
+          budget: budget ?? BUDGETS[prefs.budget].budget,
           autoApprove: prefs.trustCommands ? ['read', 'stage', 'build', 'exec'] : ['read', 'stage', 'build'],
           history: histories.current.get(id) ?? [],
           signal: controller.signal,
@@ -568,7 +568,7 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
       if (!options.background) setActiveId(id);
       if (forks) void runForks(id, text, forks, target);
       else if (k) void runApproaches(id, text, k, target);
-      else void runSingle(id, 'main', text, target);
+      else void runSingle(id, 'main', text, target, options.budget);
       return id;
     },
     [prefs.approaches, runApproaches, runForks, runSingle, targetOrExplain]

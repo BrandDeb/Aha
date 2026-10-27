@@ -70,7 +70,7 @@ A one-line tour; each links to the section with the details. The workspace is at
 | **Risk score and auto-accept** | Every proposal scored 0–100 with reasons; let the low-risk ones through ([Risk score](#risk-score-and-auto-accept)) |
 | **Fork the future** | One request built three ways at once, compared live ([Fork the future](#fork-the-future)) |
 | **Contracts and specs** | Rules that stay true; plain-English specs become property tests ([Contracts](#contracts)) |
-| **Debugging, worker, watchers, channel** | Failures debugged on their own; an AI teammate that keeps going on the next useful task; [watchers](#watchers-agents-that-wake-on-their-own) that wake on a schedule, on changes or on failures; a [channel](#the-channel-agents-that-talk-to-each-other) where running agents coordinate ([Agent](#agent)) |
+| **Debugging, worker, watchers, channel** | Failures debugged on their own; an AI teammate that keeps going on the next useful task; [watchers](#watchers-agents-that-wake-on-their-own) that wake on a schedule, on changes or on failures; a [night shift](#night-shift-work-queued-for-while-youre-away) that works through a queue inside a budget; a [channel](#the-channel-agents-that-talk-to-each-other) where running agents coordinate ([Agent](#agent)) |
 | **Skills** | 46 built in (debugging, TDD, React, FastAPI, Solidity…), more from GitHub ([Skills](#skills-what-the-agent-knows-how-to-do)) |
 | **Connectors** | A catalog of 52 MCP servers plus GitHub, databases, web and your own commands ([Connectors](#connectors)) |
 | **Models** | Free tiers, local models or your own keys, with an advisor per job ([Assistant](#assistant)) |
@@ -512,6 +512,22 @@ reason, and repeats fold into one line.
 Watchers are saved in `.aha/watchers.json`, so they travel with the project and its Git history. Their log stays in
 your browser. They run while the studio is open. Running in the background with the window closed (desktop app) and
 webhook triggers are on the [roadmap](ROADMAP.md).
+
+### Night shift: work queued for while you're away
+
+**Night shift** (Agent tab) takes a list of tasks, one per line, and works through them while you're away, one after
+another, each as a background proposal. Pick when it starts (now, or a time such as 22:00) and the budget:
+
+| Budget | Default | What happens when it runs out |
+|---|---|---|
+| Each task, minutes | 30 | The agent wraps up and says where it got to; a task that runs past its time is stopped |
+| Each task, tokens | 400k | The run stops at once (no extra turn to summarise) and the task is marked stopped |
+| The whole night, hours | 8 | The task in progress is stopped and the rest are skipped |
+| The whole night, tokens | 2M | Each task gets at most what the night has left; when none is left the rest are skipped |
+
+Nothing is accepted for you: in the morning the **morning report** opens with the night shift, one line per task (done,
+stopped at the budget, skipped or failed, with its tokens and time), each a click from its proposal. The night runs
+while the studio is open, so leave the tab or the desktop app running.
 
 ### The channel: agents that talk to each other
 
