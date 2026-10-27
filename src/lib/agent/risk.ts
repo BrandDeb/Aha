@@ -44,6 +44,7 @@ const SENSITIVE = /(^|[/_.-])(auth|login|logout|session|crypto|password|passwd|t
 const CONFIG_ENV = /(^|\/)\.env(\.[\w-]+)?$|(^|\/)(next|vite|nuxt|svelte|astro|tsconfig|webpack)\.config\.\w+$|(^|\/)tsconfig\.json$/;
 const MIGRATION = /(^|\/)(migrations?|alembic|prisma\/migrations)\/|(^|\/)schema\.(sql|prisma)$|\.sql$/i;
 const CONTRACTS = /(^|\/)\.aha\/contracts\.json$/;
+const MEMORY = /^\.aha\/memory\.md$/;
 /**
  * Files that run by themselves later, without anyone running the project: install and build hooks, git hooks,
  * editor tasks, package-manager settings (a registry swap), and the studio's own watchers, which start agents.
@@ -179,6 +180,7 @@ export function riskOf({ files, evidence, review, supplyChain }: RiskInput): Ris
   if (autorun.length) add({ label: 'runs on its own', points: 15, detail: `Runs later without anyone running the project (hooks, tasks, installs, watchers): ${autorun.join(', ')}`, hold: true });
   const scripts = project.filter((f) => /(^|\/)package\.json$/.test(f.path) && f.kind !== 'deleted').flatMap((f) => scriptChanges(f.before, f.after));
   if (scripts.length) add({ label: 'package scripts', points: 12, detail: `Commands that run on install, build or start change: ${scripts.join(', ')}`, hold: true });
+  if (touched(MEMORY).length) add({ label: 'edits the agent\'s memory', points: 4, detail: 'What future tasks are told about this project changes (.aha/memory.md): read the new entries', hold: true });
   if (touched(CONTRACTS).length) add({ label: 'edits the contracts', points: 15, detail: 'The rules that guard the project change: check none is loosened', hold: true });
 
   // What it adds

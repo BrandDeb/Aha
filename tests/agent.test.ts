@@ -163,7 +163,7 @@ test('build and run tools use the staged files; python merges what uv changes in
   await run(tools, 'python', { action: 'add', packages: ['httpx'] });
   assert.equal(stage.read('pyproject.toml'), '[project]\n');
   assert.equal(stage.has('src/util.ts'), false);
-  assert.deepEqual(workspaceTools({ stage, entry: 'x' }).map((t) => t.name), ['update_plan', 'list_files', 'read_file', 'search', 'write_file', 'edit_file', 'delete_file']);
+  assert.deepEqual(workspaceTools({ stage, entry: 'x' }).map((t) => t.name), ['update_plan', 'remember', 'list_files', 'read_file', 'search', 'write_file', 'edit_file', 'delete_file']);
 });
 
 test('run_code runs the staged project in its language and stages what the run writes', async () => {

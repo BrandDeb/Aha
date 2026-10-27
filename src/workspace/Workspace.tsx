@@ -83,6 +83,7 @@ const KitPanel = dynamic(() => import('./panels/KitPanel').then((m) => m.KitPane
 const PipelinesPanel = dynamic(() => import('./panels/PipelinesPanel').then((m) => m.PipelinesPanel), { ssr: false, loading: PanelLoading });
 const ChannelPanel = dynamic(() => import('./panels/ChannelPanel').then((m) => m.ChannelPanel), { ssr: false, loading: PanelLoading });
 const ExtensionsPanel = dynamic(() => import('./panels/ExtensionsPanel').then((m) => m.ExtensionsPanel), { ssr: false, loading: PanelLoading });
+const TourPanel = dynamic(() => import('./panels/TourPanel').then((m) => m.TourPanel), { ssr: false, loading: PanelLoading });
 const NightShiftPanel = dynamic(() => import('./panels/NightShiftPanel').then((m) => m.NightShiftPanel), { ssr: false, loading: PanelLoading });
 const DebugPanel = dynamic(() => import('./panels/DebugPanel').then((m) => m.DebugPanel), { ssr: false, loading: PanelLoading });
 const WatchersPanel = dynamic(() => import('./panels/WatchersPanel').then((m) => m.WatchersPanel), { ssr: false, loading: PanelLoading });
@@ -153,6 +154,7 @@ const GROUPS: { id: string; label: string; panels: { id: PanelId; label: string;
     id: 'project',
     label: 'Project',
     panels: [
+      { id: 'tour', label: 'Tour', hint: 'Five stops through the codebase for someone new to it, and what the project remembers' },
       { id: 'contracts', label: 'Contracts', hint: 'Rules that stay true: the agent keeps them, every proposal is checked against them' },
       { id: 'optimize', label: 'Optimize', hint: 'SEO, answer engines, AI engines (GEO), social cards, accessibility, mobile and speed, with fixes' },
       { id: 'graph', label: 'Graph', hint: 'How the files import each other' },
@@ -645,6 +647,20 @@ export function Workspace() {
     setShowPanel(true);
   }, [setPanel, setShowPanel]);
 
+  // A project opened for the first time in this browser: offer the tour once
+  const codeFiles = useMemo(() => Object.keys(project.files).filter((f) => /\.(?:[cm]?[jt]sx?|py|go|rs|rb|java|kt|cs|swift|php|c|cc|cpp|sol)$/.test(f) && !f.startsWith('.aha/')).length, [project.files]);
+  useEffect(() => {
+    if (!hydrated || codeFiles < 2) return;
+    const key = `aha:toured:${project.name}`;
+    try {
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, '1');
+    } catch {
+      return;
+    }
+    notify({ kind: 'info', title: `New to ${project.name}?`, detail: 'Five stops through it: where it starts, what everything leans on, where the work happens, why it looks this way, how to check a change.', action: { label: 'Take the tour', run: () => openPanel('tour') } });
+  }, [hydrated, codeFiles, project.name, notify, openPanel]);
+
   // Sign in: the redirect flow where this server is set up for it (a client secret and a callback on this host), else a one-time code
   const signIn = useCallback(() => {
     fetch('/api/github/device')
@@ -915,6 +931,7 @@ export function Workspace() {
     ...(liveAvailable ? [{ id: 'view.live', category: 'Editor', title: liveOn ? 'Turn off live values' : 'Turn on live values (show what each line did)', run: () => setLiveOn(!liveOn) }] : []),
     { id: 'file.new-project', category: 'File', title: 'Create: describe an app, gallery, stack builder, templates…', keys: DEFAULT_KEYS['file.new-project'], run: () => setDialog('templates') },
     { id: 'file.import-export', category: 'File', title: 'Import & export…', keys: DEFAULT_KEYS['file.import-export'], run: () => setDialog('project') },
+    { id: 'view.tour', category: 'View', title: 'Tour this project (five stops, for newcomers)', run: () => openPanel('tour') },
     { id: 'view.morning', category: 'View', title: 'What happened while I was away (morning report)', run: openMorning },
     { id: 'view.palette', category: 'View', title: 'Command palette', keys: DEFAULT_KEYS['view.palette'], run: () => setDialog('palette') },
     { id: 'view.explorer', category: 'View', title: 'Toggle explorer', keys: DEFAULT_KEYS['view.explorer'], run: () => setShowExplorer((v) => !v) },
@@ -1436,6 +1453,7 @@ export function Workspace() {
                 {shownPanel === 'kit' && <KitPanel onFocus={(focus) => worker.setSettings({ focus })} />}
                 {shownPanel === 'history' && <HistoryPanel />}
                 {shownPanel === 'graph' && <GraphPanel />}
+                {shownPanel === 'tour' && <TourPanel onOpen={(file, line) => openLocation({ file, line })} />}
                 {shownPanel === 'package' && <PackagePanel />}
                 {shownPanel === 'python' && <PythonPanel />}
                 {shownPanel === 'languages' && <LanguagePanel key={`${project.name}:${project.entry}`} />}

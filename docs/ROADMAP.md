@@ -192,6 +192,13 @@ names), install scripts, age and downloads, known advisories (OSV), licence. Fin
 proposal adding a typosquatted package is held with the reason shown.
 
 ### 11. Project memory and guided tour
+
+> **Shipped:** `.aha/memory.md` with decisions, conventions and gotchas, written by the agent's `remember` tool as part
+> of a proposal (memory edits hold auto-accept), given to every task and cited as `[m2]`; the proposal lists what it
+> relied on. A five-stop tour built from the import graph and the why-history, offered when a project is first opened.
+> In a browser test, a new project offered its tour and each stop opened its file, one proposal recorded a convention,
+> and a later proposal was told it and cited it.
+
 `.aha/memory.md` the agent maintains (decisions, conventions, gotchas), and a five-stop tour of any codebase for
 newcomers generated from the import graph and the why-history. *Done when* a new project gets a tour and the agent
 cites memory in a later proposal.
