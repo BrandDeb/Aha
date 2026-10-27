@@ -485,6 +485,16 @@ A proposal opens in the editor area as a tab next to your files, like a small pu
   kept across reloads; the **Agent** tab lists them all, with the model and preferences (budget, approaches, whether
   commands may run without asking).
 
+- **The vibe dial** (Agent tab) sets how the agent works with you. Wherever the dial is set, the agent still checks its
+  work.
+  - **Just make it work:** it decides for you, asks only when it cannot go on without you, and reports in two lines.
+    The reviewer reports blockers and major problems only.
+  - **Balanced** (the default): it asks when a choice is yours and summarises what changed and how it checked it.
+  - **Explain:** it says what each file's change does and why, and asks before choices you would notice. The reviewer
+    also flags code that is hard to follow.
+  - **Explain every line:** it walks through every changed line in plain words, comments lines that aren't obvious,
+    and asks before each design choice. The reviewer also flags unclear names and uncommented lines.
+
 - **It edits a private copy.** Every change the agent makes is staged, builds and runs use the staged files, and
   nothing reaches your project until you accept it, per file or all at once, after reading the diff. Accepting saves a
   **History** snapshot first, so rolling back is one click. Discarding is free.

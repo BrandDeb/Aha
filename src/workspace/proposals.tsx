@@ -18,6 +18,7 @@ import { isHarnessFile, runHarnessLoop, type HarnessEvent } from '@/lib/agent/ha
 import { runAgent } from '@/lib/agent/loop';
 import { callModelFor } from '@/lib/agent/model';
 import { parseReview, REVIEW_LABEL, REVIEWER_PROMPT, reviewInput, type Review } from '@/lib/agent/review';
+import { DEFAULT_VIBE, isVibe, reviewerPromptFor, vibeBrief, type Vibe } from '@/lib/agent/vibe';
 import { autoAcceptable, riskOf } from '@/lib/agent/risk';
 import { supplyChainOf, useSupplyChainVersion } from './supply-chain-client';
 import { mergeProjects } from '@/lib/merge3';
@@ -118,6 +119,8 @@ export interface AgentPrefs {
   autoAccept: number;
   /** Agents on the project channel: talk freely, wait for your OK between agents, or work alone */
   channel: ChannelMode;
+  /** From "just make it work" to "explain every line": what the agent explains, when it asks, how deep the review goes */
+  vibe: Vibe;
 }
 
 export const BUDGETS: Record<AgentPrefs['budget'], { label: string; budget: Partial<Budget> }> = {
@@ -129,7 +132,12 @@ export const BUDGETS: Record<AgentPrefs['budget'], { label: string; budget: Part
 const STORE_KEY = 'aha:proposals';
 const PREFS_KEY = 'aha:agent-prefs';
 const MAX_KEPT = 15;
-const DEFAULT_PREFS: AgentPrefs = { budget: 'standard', trustCommands: false, approaches: 0, autoDebug: false, review: true, autoAccept: 0, channel: 'open' };
+const DEFAULT_PREFS: AgentPrefs = { budget: 'standard', trustCommands: false, approaches: 0, autoDebug: false, review: true, autoAccept: 0, channel: 'open', vibe: DEFAULT_VIBE };
+
+const withVibe = (system: string, vibe: Vibe) => {
+  const brief = vibeBrief(vibe);
+  return brief ? `${system}\n\n${brief}` : system;
+};
 
 /** Plain data the interface renders from */
 export function snapshotFiles(stage: Stage, hide: (p: string) => boolean = () => false): FileChange[] {
@@ -216,7 +224,8 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
       .map((p) => (p.status === 'working' ? { ...p, status: 'review' as const, pending: undefined, outcome: { reason: 'aborted' as const, summary: 'Stopped when the page was reloaded.' }, lanes: p.lanes.map((l) => ({ ...l, status: 'done' as const })) } : { ...p, pending: undefined }));
     // Anything started before this ran (the worker, auto-debug) stays, newest first
     setProposals((prev) => [...prev, ...restored.filter((r) => !prev.some((p) => p.id === r.id))]);
-    setPrefsState({ ...DEFAULT_PREFS, ...load<Partial<AgentPrefs>>(PREFS_KEY, {}) });
+    const stored = { ...DEFAULT_PREFS, ...load<Partial<AgentPrefs>>(PREFS_KEY, {}) };
+    setPrefsState(isVibe(stored.vibe) ? stored : { ...stored, vibe: DEFAULT_VIBE });
     setLoaded(true);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [hydrated]);
@@ -316,7 +325,7 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
         // The reviewer's own model when one is set (a different model catches different mistakes)
         const own = resolveFor(configRef.current, 'reviewer');
         const reviewer = 'error' in own || own.provider.kind === 'server' ? target : own;
-        const turn = await callModelFor(reviewer)({ system: REVIEWER_PROMPT, messages: [{ role: 'user', content: input }], tools: [], signal: controller.signal });
+        const turn = await callModelFor(reviewer)({ system: reviewerPromptFor(REVIEWER_PROMPT, prefsRef.current.vibe), messages: [{ role: 'user', content: input }], tools: [], signal: controller.signal });
         setReview({ status: 'done', ...parseReview(turn.text) });
       } catch (error) {
         setReview({ status: 'error', error: (error as Error).name === 'AbortError' ? 'The review took too long' : (error as Error).message });
@@ -354,7 +363,7 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
         const run = await runAgent({
           goal,
           ...(images ? { images } : {}),
-          system: systemPromptFor(stage.files(), skills) + (onChannel ? channelBrief(channel, id) : ''),
+          system: withVibe(systemPromptFor(stage.files(), skills), prefsRef.current.vibe) + (onChannel ? channelBrief(channel, id) : ''),
           tools: onChannel ? withInbox([...tools, ...channelTools(channel, id)], channel, id) : tools,
           callModel: callModelFor(target),
           budget: budget ?? BUDGETS[prefs.budget].budget,
@@ -411,7 +420,7 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
           try {
             const run = await runAgent({
               goal: forkGoal(goal, fork, forks),
-              system: systemPromptFor(stage.files(), skills),
+              system: withVibe(systemPromptFor(stage.files(), skills), prefsRef.current.vibe),
               tools: [...workspaceTools(host), ...skillTools(skillLibrary(skills, () => stage.files()))],
               callModel: callModelFor(target),
               budget: { maxSteps: 14, maxToolCalls: 50, maxMillis: 6 * 60_000, maxFixAttempts: 3 },
@@ -472,7 +481,7 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
           files: p.files,
           makeHost: (s) => createAgentHost({ stage: s, projectName: p.name, entry: p.entry, files: s.files(), onPlan: () => {} }),
           callModel: callModelFor(target),
-          system: (files) => systemPromptFor(files, skills),
+          system: (files) => withVibe(systemPromptFor(files, skills), prefsRef.current.vibe),
           extraTools: (s) => skillTools(skillLibrary(skills, () => s.files())),
           k,
           mode: 'parallel',

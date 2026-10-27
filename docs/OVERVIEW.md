@@ -103,14 +103,14 @@ Browser (Next.js client, React 19)            Server (Next.js routes + server.js
 - **Editor.** Monaco with TypeScript intelligence, terminal, Git, file tree, command palette, themes, VS Code themes and snippets from Open VSX, a debugger for TypeScript, JavaScript and Python, and language servers for Python, Go and Rust, and a three-way merge with a conflict editor for Git pull and proposals.
 - **Languages.** 40+ languages run in the studio; Python via uv; TypeScript to a native binary via scriptc.
 - **Web apps.** Templates, an app gallery and a stack builder, with a live preview (in the browser, or real dev servers when local).
-- **Agent.** Proposals with evidence, a second reviewer, a risk score and auto-accept, a supply-chain guard on new dependencies, fork-the-future variants, rewind, live values, why-history, project memory the agent cites, a five-stop tour for newcomers, specs to tests.
+- **Agent.** Proposals with evidence, a second reviewer, a risk score and auto-accept, a supply-chain guard on new dependencies, fork-the-future variants, rewind, live values, why-history, project memory the agent cites, a five-stop tour for newcomers, a vibe dial from "just make it work" to "explain every line", specs to tests.
 - **Autonomy.** An autonomous worker, auto-debug, production errors to a reproducing test and a fix, watchers (agents on schedules, changes and failures), a night shift (a queue run inside a budget), a channel where running agents coordinate, and a morning report.
 - **Connectors and skills.** A 52-server MCP catalog plus built-ins; ecosystem skills.
 - **Web3.** Solidity compile and analysis, an in-page chain, wallet deploys and a dapp starter.
 - **Platform.** Desktop apps, Docker, self-healing and self-updating, the docs site, the pricing page.
 
 **Next** (specs in ROADMAP.md):
-1. Vibe dial, design pass, publish and phone preview.
+1. Design pass, publish and phone preview.
 2. Extensions, round two: keybindings, language configuration, icon themes.
 3. Watchers, round two: webhooks and running with the window closed.
 
