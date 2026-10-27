@@ -55,7 +55,7 @@ as a proposal with evidence, and vibe coding and hand-writing as equals.
 | Git and GitHub (branches, pull, commit, PR-friendly) | Done | |
 | Formatting, diagnostics for TS/JS | Done | |
 | **Extensions** (VS Code-style, from Open VSX) | Done (themes, snippets) | keybindings, language configuration and icon themes next; see section 4 |
-| Debugger (breakpoints, step, watch) via the Debug Adapter Protocol | Next | Node inspector and debugpy first; Rewind covers a lot of it already |
+| Debugger (breakpoints, step, watch) | Done (TypeScript, JavaScript, Python) | conditional breakpoints, exceptions, Go and Rust next |
 | Language intelligence beyond TS (LSP: Python, Go, Rust, Solidity…) | Next | language servers on the local runtime, Monarch fallbacks in the browser |
 | Merge-conflict editor (3-way) | Next | |
 | Vim and Emacs keymaps | Next | monaco-vim; ships as an extension |
