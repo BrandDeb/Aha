@@ -89,6 +89,11 @@ plan matters until it does.
 **Done when** a 50k-file repository opens in under 2 s to first edit, a change made outside Aha shows up within a
 second, and the performance budget measures both.
 
+**Status.** Shipped: the launch key (`scripts/launch-key.js`, SECURITY.md) and `npm run open` / `aha`; opening a folder
+in place with outside changes; large repositories (every name at once, text on demand and in the background, a tree
+that starts closed). Next: Run and the dev server inside the opened folder, the File System Access API for browsers, and
+the 50k-file open time in the performance budget.
+
 ### A2. Git as the backbone
 
 **What.**
@@ -124,6 +129,27 @@ to fixes and the design pass work on their own branches and deliver PRs (or bran
 wherever you already work, and move in when Aha has earned it.
 
 **Done when** a repo edited elsewhere gets a night-shift PR with evidence and no Aha window open during review.
+
+### A5. Sign in on first launch, on macOS, Windows and Linux
+
+**Why.** An account carries your settings, plan, keys you choose to sync and team membership from one machine to the
+next, and it is what Team and Business plans (below) are billed and administered by.
+
+**What.**
+- **On first open** of the desktop app (macOS, Windows and, new, Linux) and of a fresh browser profile, the studio
+  asks you to sign in with **GitHub** or **Google**.
+  - GitHub uses the device flow the studio already has.
+  - Google uses the installed-app flow: the system browser opens, and the answer returns to a loopback address with
+    PKCE. A desktop app needs no domain for this, but it does need a Google OAuth client (*needs you*).
+- **Continue without an account** stays available for local, private use (principle 3). The studio works fully
+  offline with your own or a local model; signing in is what unlocks sync and the paid plans.
+- **Linux desktop app:** an AppImage and a `.deb` from the same Tauri build, in the release workflow next to the
+  macOS and Windows builds.
+- The session token stays in the operating system's keychain (Keychain, Credential Manager, Secret Service), never
+  in the page.
+
+**Done when** a browser test signs in with each provider against mock OAuth servers, the desktop builds for all three
+platforms show the sign-in screen on first launch, and "continue without an account" leaves no network calls behind.
 
 ---
 
@@ -390,6 +416,7 @@ lead with them:
 | Step | Ships | Why here |
 |---|---|---|
 | 1 | A1 (real projects on disk) | Nothing else works on a real repo without it |
+| 1b | A5 (sign-in on first launch, Linux desktop app) and the Team and Business plans | Accounts are what the plans, sync and seat admin hang on; companies can't adopt without them |
 | 2 | C1 (any agent, checked) and A2 (Git) | The broadest reason to try Aha, and the PR path for receipts |
 | 3 | C2 (receipts) and C3 (behaviour diff) | The launch: "AI changes that come with proof" |
 | 4 | C4 (taste) and C5 (ship-ready check) | The second launch, for people building apps from prompts |
@@ -398,6 +425,42 @@ lead with them:
 
 Each launch goes out with a public benchmark run (B4), a 60-second video of the real flow, and the receipts from the
 demo, so anyone can check the claims.
+
+---
+
+## Plans for small and medium businesses
+
+**Why.** Today there are Free, Pro (one developer) and Premium (FDE and ISV teams). A company of 5 to 250 developers has
+nothing that fits: it needs one bill, its own sign-in, controls over models and data, and a price that is clearly
+cheaper than Cursor's or Copilot's business tiers for what it gets.
+
+**The plan (proposal; prices in US dollars).**
+
+| Plan | For | Price | Adds |
+|---|---|---|---|
+| **Free** | Anyone | $0 | The whole studio, your own or local model (unchanged) |
+| **Pro** | One developer | $16/mo, $12 yearly | Unchanged |
+| **Team** | 2 to 50 developers | $24 per seat/mo, $20 yearly | Shared project memory, contracts, kits and skills; a team night shift with one budget; receipts (C2) shared in the team; sign-in with the company's Google Workspace or GitHub organisation; one invoice; admin for seats and spend caps per seat |
+| **Business** | 25 to 250 developers | $45 per seat/mo, $38 yearly | Everything in Team; SAML SSO and SCIM; audit log of what agents read, ran and sent; policies (which models, local-only mode, which connectors); the agent benchmark (B4) run on your own repository; priority support with a response-time commitment; invoice and purchase-order billing |
+| **Enterprise** | 250+ | Talk to us | Everything in Business; self-hosting; custom terms (today's Premium kit publishing for ISVs moves here and into Business) |
+
+**Principles for the price.**
+- **Bring your own key, or local models, always costs nothing extra.** Seats pay for the studio, not for tokens.
+- **Hosted model use** (optional) is billed at cost plus a stated margin, with the estimate before each task and a
+  hard cap (C7). Admins set caps per seat and per team. Nobody gets a surprise bill.
+- **Fewer seats than you think:** reviewers who only open receipts and approve proposals are free seats.
+- **Discounts:** 50% for startups under two years old and for non-profits; 20% for yearly billing (in the prices
+  above).
+- **Trial:** Team for 14 days, no card, from the pricing page.
+
+**Build.** Plans in `src/lib/pricing.ts` and the pricing page (cards, the comparison table, the FAQ); seat and plan
+checks behind sign-in (A5); checkout links per plan (`NEXT_PUBLIC_CHECKOUT_TEAM_URL`, `..._BUSINESS_URL`); an
+admin page for seats and caps.
+
+**Needs you:** a payment provider account, the final prices, and whether Premium is retired into Business or kept.
+
+**Done when** the pricing page shows the five plans with their comparison, a Team trial can be started and a seat
+added in a browser test against a mock billing provider, and caps stop a hosted-model task before it overspends.
 
 ---
 

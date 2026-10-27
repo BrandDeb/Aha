@@ -13,8 +13,13 @@ your platform (about 375 MB in `node_modules`), so there is nothing to install; 
 git clone https://github.com/BrandDeb/Aha.git
 cd Aha
 npm install
-npm run dev          # http://localhost:3000 (Next.js + collaboration server)
+npm run dev          # prints the link to open: http://localhost:3000/?aha_key=…
 ```
+
+Open the link the studio prints. It carries this launch's **launch key**: only a window opened with it can run programs
+or open files on your machine (other programs on the machine can reach the port, but not those features). Lost it? Run
+`npm run open` in the Aha folder (or `aha` anywhere, after `npm link`): it opens the running studio, or starts it first. A window opened without the
+key still edits and compiles, and says why running is off.
 
 Nothing needs configuring: the assistant runs on a model each user picks (see [Assistant](#assistant)).
 Copy `.env.example` to `.env.local` only for GitHub sign-in or a hosted default model.
@@ -25,7 +30,7 @@ Copy `.env.example` to `.env.local` only for GitHub sign-in or a hosted default 
    `sudo apt install clang lld`; Windows: use WSL). zig is bundled by `npm install`.
 2. **File → Open Folder…** and pick the cloned `Aha` folder; accept the recommended extensions.
 3. Open the terminal (<kbd>Ctrl</kbd>+<kbd>`</kbd>) and run `npm install`.
-4. Press <kbd>F5</kbd> (**Aha!: dev server**) — the browser opens at http://localhost:3000 with
+4. Press <kbd>F5</kbd> (**Aha!: dev server**) — the browser opens the studio's launch link with
    breakpoints working in `server.js` and the API routes. Or run the **Dev server** task
    (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>), or `npm run dev`.
 
@@ -837,6 +842,28 @@ that would run a program show the command before you add them; once added, every
 never carries secrets: environment values aren't part of a kit, `.env` files stay behind, and any file that looks like it
 holds a key (cloud, model, GitHub, Slack or Stripe keys, private keys, passwords in URLs) is left out and named.
 
+## Open a folder on this machine
+
+**Explorer → Open folder** (or the command *Open a folder on this machine…*, or `aha path/to/project` from a terminal)
+works on a project where it lives. Only on your own machine, and only in a window opened with the launch key.
+
+- **Saved in place.** Edits are written to the file a moment after you stop typing, through a temporary file and a
+  rename, so a crash never leaves half a file, and the file keeps its permissions. Moving or deleting in the explorer
+  moves or deletes on disk, with everything in the folder, including files the studio doesn't show.
+- **Outside changes come in.** A `git pull`, another editor or a formatter changes a file: the studio shows it within
+  a moment, and a file created outside appears in the tree.
+- **Git repositories** list what Git lists, so `.gitignore` is respected; other folders skip dependency and build
+  folders (`node_modules`, `dist`, `target`, `.venv`…). `.git` is never written to.
+- **Large repositories.** Opening sends every file name at once and the text of the first 150 (the entry file, README
+  and manifests first), so a 50,000-file repository is usable in about a second. The rest of the text comes when you
+  open, move or delete a file, and a background loader brings in up to 5,000 files, shallowest first, so search and the
+  agent work with most of a normal project. The explorer starts with its folders closed past 1,500 files.
+- **The terminal** runs in the folder itself, with your own home folder and caches, as in your terminal. Run and the
+  dev server still work on a copy of the project for now.
+- Binary files, files over 1 MB and names the studio can't use yet stay on disk, untouched.
+
+---
+
 ## Python and uv
 
 The Python tab appears for projects with `.py` files or a `pyproject.toml`. Everything goes through uv:
@@ -1263,6 +1290,11 @@ collaboration relay and forwards every other upgrade (e.g. dev HMR) to Next.js.
 
 ## API
 
+On your own machine the routes marked *local only*, and `/api/python`, `/api/run`, `/api/shell`, `/api/devserver`,
+`/api/skills`, `/api/extensions`, `/api/connectors`, `/api/remix` and `/api/autopilot`, need the launch key: the cookie
+the launch link sets, or an `X-Aha-Key` header with the key from `~/.aha/launch.json`. Without it they answer `403` (a `GET` answers `{ enabled: false, locked: true }`).
+`GET /api/launch` says whether the key is required and whether this request has it.
+
 ### `POST /api/compile`
 
 ```json
@@ -1369,6 +1401,14 @@ trusted-host and run-enabled checks apply.
 streams newline-delimited JSON like `/api/python`: `{ t: "out", s, d }` lines, then `{ t: "done", code, ms, changed, removed, skipped, timedOut?, truncated?, error? }`.
 Paths and environment variable names are validated; `PATH`, `HOME`, loader and toolchain variables (`GOPATH`, `CARGO_*`, `JAVA_*`…) can't be set.
 
+### `/api/folder` (local only)
+
+`GET` says whether folders can be opened here; `GET ?watch=<id>` is a Server-Sent Events stream of changes other programs
+make. `POST` takes `{ "action": … }`: `open` (`path` → `id`, `root`, `paths`, the text of the first files), `reload`
+(`id`), `read` (`id`, up to 1,000 `paths` → `files`, `unreadable`, `handled`), `write` (`id`, `path`, `content`), `delete`,
+`move` (`from`, `to`), `mkdir`, `close` and `browse` (`path` → the folders inside it). Paths are relative to the opened folder;
+anything that leaves it, follows a link out of it or goes into `.git` is refused. Needs the launch key.
+
 ### `/api/live` (local only)
 
 `GET` → `{ enabled }`. `POST { projectId, entry, files, args?, quick? }` runs the entry with live values and returns
@@ -1457,6 +1497,7 @@ AI_REQUESTS_PER_10_MIN=30   # per client (first X-Forwarded-For hop)
 
 # Network and Python
 HOST=127.0.0.1               # interface to listen on (0.0.0.0 only behind a proxy or in a container)
+AHA_LAUNCH_KEY=              # the launch key; unset = a new random one each start (the desktop app and supervisor set it)
 ALLOWED_HOSTS=               # extra Host names allowed for Python commands, comma separated
 AHA_PYTHON=1             # 0 turns Python (uv) off entirely
 UV_BIN=                      # path to a specific uv binary
@@ -1497,6 +1538,7 @@ SCRIPTC_LINKER=          # optional: linker driver scriptc uses for executables
 | Command | |
 |---|---|
 | `npm run dev` | Custom server in development (Next.js + collaboration), supervised: restarts after a crash |
+| `npm run open` | Open the running studio with its launch key, or start it first (`--print` prints the link). The same as `aha` after `npm link` |
 | `npm run build` | Production build |
 | `npm start` | Production server, supervised |
 | `npm run start:plain` | Production server without the supervisor (containers, process managers) |

@@ -32,6 +32,14 @@ fn free_port() -> std::io::Result<u16> {
     Ok(TcpListener::bind("127.0.0.1:0")?.local_addr()?.port())
 }
 
+/// The launch key: a random secret for this run of the app. The server answers its routes that run programs only
+/// to the window opened with it (see scripts/launch-key.js), so other programs on the machine can't use them.
+fn launch_key() -> Result<String, String> {
+    let mut bytes = [0u8; 24];
+    getrandom::fill(&mut bytes).map_err(|e| format!("No randomness for the launch key: {e}"))?;
+    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+}
+
 /// A JavaScript string literal
 fn js_string(text: &str) -> String {
     let mut out = String::from("\"");
@@ -104,7 +112,7 @@ fn server_path() -> String {
 }
 
 /// Start the studio's server (under its supervisor, which restarts it if it crashes)
-fn start_server(app: &AppHandle, port: u16) -> Result<(Child, PathBuf), String> {
+fn start_server(app: &AppHandle, port: u16, key: &str) -> Result<(Child, PathBuf), String> {
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
     let node = exe.parent().ok_or("No app folder")?.join(NODE);
     let root = app.path().resource_dir().map_err(|e| e.to_string())?.join("app");
@@ -134,6 +142,7 @@ fn start_server(app: &AppHandle, port: u16) -> Result<(Child, PathBuf), String> 
         .env("NEXT_PUBLIC_BASE_URL", format!("http://127.0.0.1:{port}"))
         .env("AHA_TEMP_DIR", &temp)
         .env("AHA_DESKTOP", "1")
+        .env("AHA_LAUNCH_KEY", key)
         // The supervisor stops the studio if the app disappears without saying so
         .env("AHA_PARENT_PID", std::process::id().to_string())
         .env("NEXT_TELEMETRY_DISABLED", "1")
@@ -259,8 +268,12 @@ pub fn run() {
                     Ok(port) => port,
                     Err(e) => return fail(format!("No free port: {e}"), None),
                 };
+                let key = match launch_key() {
+                    Ok(key) => key,
+                    Err(e) => return fail(e, None),
+                };
                 let server = handle.state::<Server>();
-                let log = match start_server(&handle, port) {
+                let log = match start_server(&handle, port, &key) {
                     Ok((child, log)) => {
                         *server.0.lock().unwrap() = Some(child);
                         log
@@ -270,7 +283,8 @@ pub fn run() {
                 if let Err(e) = wait_ready(port, &server.0) {
                     return fail(e, Some(log));
                 }
-                match Url::parse(&format!("http://127.0.0.1:{port}/")) {
+                // The server swaps the key for a cookie and drops it from the address
+                match Url::parse(&format!("http://127.0.0.1:{port}/?aha_key={key}")) {
                     Ok(url) => {
                         let _ = window.navigate(url);
                     }
@@ -292,6 +306,14 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn launch_keys_are_long_random_and_url_safe() {
+        let (a, b) = (launch_key().unwrap(), launch_key().unwrap());
+        assert_eq!(a.len(), 48);
+        assert_ne!(a, b);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+    }
 
     #[test]
     fn only_the_studio_and_loopback_stay_in_the_window() {

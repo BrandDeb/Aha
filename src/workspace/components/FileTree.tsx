@@ -1,7 +1,8 @@
 'use client';
 
 import { Fragment, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { buildTree, diffStatus, dirname, isRunnable, isValidPath, type TreeNode } from '../project';
+import { diffStatus, dirname, isRunnable, isValidPath, treeFromPaths, type TreeNode } from '../project';
+import { useUnloadedPaths } from '../folder-client';
 import { useWorkspace } from '../store';
 import { useToast } from '../toasts';
 import { useProposals } from '../proposals';
@@ -10,6 +11,11 @@ import { PanelLeftClose } from './Icons';
 type Editing =
   | { mode: 'new-file' | 'new-folder'; parent: string }
   | { mode: 'rename'; path: string };
+
+/** Past this many files the explorer starts with its folders closed: rendering every row of a big repository is slow */
+const BIG_TREE = 1500;
+
+const sameNames = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((v, i) => v === b[i]);
 
 const CHANGE_GLYPH = { added: 'A', modified: 'M', deleted: 'D' } as const;
 
@@ -22,13 +28,22 @@ export function FileTree({ errorCounts, onCollapse, collapseTitle }: { errorCoun
     openProposal(null);
   };
   const { notify } = useToast();
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Which folders the user flipped from their default: open when the project is small, closed when it is big
+  const [flipped, setFlipped] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<Editing | null>(null);
   const [draft, setDraft] = useState('');
   const [focused, setFocused] = useState<string>('');
   const treeRef = useRef<HTMLUListElement>(null);
 
-  const tree = useMemo(() => buildTree(project), [project]);
+  const unloadedPaths = useUnloadedPaths();
+  // The tree only needs the names: typing changes the files object on every keystroke but not these, so the tree is
+  // rebuilt when a name appears, goes or changes (an O(n) comparison per render instead of a rebuild)
+  const names = Object.keys(project.files);
+  const [stableNames, setStableNames] = useState(names);
+  if (!sameNames(stableNames, names)) setStableNames(names);
+  const tree = useMemo(() => treeFromPaths(stableNames.concat(unloadedPaths), project.folders), [stableNames, unloadedPaths, project.folders]);
+  const big = stableNames.length + unloadedPaths.length > BIG_TREE;
+  const collapsed = useMemo(() => ({ has: (folder: string) => (big ? !flipped.has(folder) : flipped.has(folder)) }), [big, flipped]);
   const changes = useMemo(() => (git ? diffStatus(git.base, project.files) : {}), [git, project.files]);
 
   // Flattened visible rows, for keyboard navigation
@@ -47,7 +62,7 @@ export function FileTree({ errorCounts, onCollapse, collapseTitle }: { errorCoun
   const startCreate = (mode: 'new-file' | 'new-folder', parent = focusedFolder()) => {
     setEditing({ mode, parent });
     setDraft('');
-    if (parent) setCollapsed((prev) => { const next = new Set(prev); next.delete(parent); return next; });
+    if (parent && collapsed.has(parent)) toggle(parent);
   };
 
   function focusedFolder(): string {
@@ -99,13 +114,14 @@ export function FileTree({ errorCounts, onCollapse, collapseTitle }: { errorCoun
     }
   };
 
-  const toggle = (folder: string) =>
-    setCollapsed((prev) => {
+  function toggle(folder: string) {
+    setFlipped((prev) => {
       const next = new Set(prev);
       if (next.has(folder)) next.delete(folder);
       else next.add(folder);
       return next;
     });
+  }
 
   const onKeyDown = (e: KeyboardEvent<HTMLUListElement>) => {
     if (editing) return;

@@ -41,7 +41,7 @@ const eslintConfig = defineConfig([
   },
   {
     // Plain Node.js (CommonJS) entry points
-    files: ["server.js", "scripts/supervise.js"],
+    files: ["server.js", "scripts/supervise.js", "scripts/launch-key.js", "scripts/aha.js"],
     rules: {
       "@typescript-eslint/no-require-imports": "off",
     },

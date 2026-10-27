@@ -36,6 +36,8 @@ const { EventEmitter } = require('events');
 const WebSocketServer = require('websocket').server;
 const next = require('next');
 
+const launch = require('./scripts/launch-key.js');
+
 const dev = process.env.NODE_ENV !== 'production';
 // Next.js attaches its own 'upgrade' listener to `httpServer` (or, if unset, to
 // the server of the first request it handles) and that listener closes any
@@ -152,11 +154,64 @@ function serveBrotli(req, res) {
   return false;
 }
 
+// Start server
+const PORT = process.env.PORT || 3000;
+// Loopback only by default. The studio can run Python and compile code, so it must not be
+// reachable from the rest of the network unless the operator says so (HOST=0.0.0.0).
+const HOST = process.env.HOST || '127.0.0.1';
+
+/**
+ * The launch key (scripts/launch-key.js): made by the supervisor or the desktop app so it survives restarts, or
+ * here when the server runs on its own. It is checked whenever the local features are on (the server listens on
+ * this machine only, or AHA_RUN=1). A hosted studio, where they are off, keeps its routes' own "not here" answers.
+ */
+if (!process.env.AHA_LAUNCH_KEY) process.env.AHA_LAUNCH_KEY = launch.newKey();
+const LAUNCH_KEY = process.env.AHA_LAUNCH_KEY;
+const KEY_REQUIRED = ['127.0.0.1', 'localhost', '::1'].includes(HOST.toLowerCase()) || process.env.AHA_RUN === '1';
+const LOCKED_HTML = '<!doctype html><meta name="viewport" content="width=device-width"><title>Aha!</title><body style="font:15px system-ui;padding:32px;max-width:560px;margin:auto;color:#ddd;background:#0b0b0b">That link is from an earlier launch of the studio. Open the link it printed when it started this time (<code>npm run open</code> opens it again).</body>';
+
+function reply(res, status, type, body, headers = {}) {
+  res.writeHead(status, { 'Content-Type': type, 'Content-Length': Buffer.byteLength(body), 'Cache-Control': 'no-store', ...headers });
+  res.end(body);
+}
+
+/** Check the launch key; returns true when the request has been answered here */
+function guard(req, res) {
+  const pathname = (req.url || '/').split('?')[0];
+  if (pathname === '/api/launch') {
+    const unlocked = launch.hasKey(req.headers, LAUNCH_KEY, PORT);
+    reply(res, 200, 'application/json', JSON.stringify({ required: KEY_REQUIRED, unlocked: !KEY_REQUIRED || unlocked }));
+    return true;
+  }
+  if (!KEY_REQUIRED) return false;
+  const verdict = launch.decide(req, LAUNCH_KEY, PORT);
+  if (verdict.action === 'deny') {
+    // A page asking whether a feature is on gets a plain "not for this window"; anything that would do something is refused
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      reply(res, 200, 'application/json', JSON.stringify({ enabled: false, locked: true }));
+      return true;
+    }
+    reply(res, 403, 'application/json', JSON.stringify({ error: 'This window was not opened with the studio’s launch link, so it can’t run programs or open files on this machine. Open the link the studio printed when it started (`npm run open` opens it again).', locked: true }));
+    return true;
+  }
+  if (verdict.action === 'unlock') {
+    res.writeHead(302, { Location: verdict.location, ...(verdict.cookie ? { 'Set-Cookie': verdict.cookie } : {}), 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+    res.end();
+    return true;
+  }
+  if (verdict.action === 'unlock-failed') {
+    reply(res, 403, 'text/html; charset=utf-8', LOCKED_HTML, { 'Referrer-Policy': 'no-referrer' });
+    return true;
+  }
+  return false;
+}
+
 /** Requests that do work (not static files or health checks): the autopilot only acts when there have been none for a while */
 const PASSIVE = /^\/(?:_next\/|monaco\/|esbuild\/|favicon|api\/health)/;
 
 const server = http.createServer((req, res) => {
   if (!PASSIVE.test(req.url || '/')) globalThis.__ahaLastActivity = Date.now();
+  if (guard(req, res)) return;
   if (serveBrotli(req, res)) return;
   // Handle Next.js requests
   handle(req, res);
@@ -293,12 +348,6 @@ function broadcastToProject(projectId, message, excludeClientId = null) {
   }
 }
 
-// Start server
-const PORT = process.env.PORT || 3000;
-// Loopback only by default. The studio can run Python and compile code, so it must not be
-// reachable from the rest of the network unless the operator says so (HOST=0.0.0.0).
-const HOST = process.env.HOST || '127.0.0.1';
-
 app.prepare().then(() => {
   server.on('upgrade', (req, socket, head) => {
     const { pathname } = new URL(req.url || '/', 'http://localhost');
@@ -313,7 +362,13 @@ app.prepare().then(() => {
   });
 
   server.listen(PORT, HOST, () => {
-    console.log(`> Ready on http://localhost:${PORT}`);
+    const base = process.env.NEXT_PUBLIC_BASE_URL || `http://localhost:${PORT}`;
+    if (KEY_REQUIRED) {
+      launch.writeLaunchFile({ url: base, port: Number(PORT), key: LAUNCH_KEY, pid: process.pid, startedAt: Date.now() });
+    }
+    // The link carries the launch key: opening it gives that window the right to run programs (VS Code's
+    // serverReadyAction opens it from this line)
+    console.log(`> Ready on ${KEY_REQUIRED ? launch.launchUrl(base, LAUNCH_KEY) : base}`);
     console.log(`> WebSocket available at ws://localhost:${PORT}${WS_PATH}`);
     if (process.env.AHA_PYTHON !== '0') {
       console.log('> Python (uv) is enabled: programs run on this machine. Set AHA_PYTHON=0 to turn it off.');
@@ -327,6 +382,7 @@ app.prepare().then(() => {
 // Graceful shutdown
 function shutdown() {
   console.log('Shutting down gracefully...');
+  launch.removeLaunchFile();
   wsServer.shutDown();
   server.close(() => {
     process.exit(0);

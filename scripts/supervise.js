@@ -149,7 +149,9 @@ module.exports.rollbackUnverifiedUpdate = rollbackUnverifiedUpdate;
 
 if (require.main === module) {
   const root = path.join(__dirname, '..');
-  const run = supervise({ command: process.execPath, args: [path.join(root, 'server.js')], env: process.env, onRepeatedCrash: () => rollbackUnverifiedUpdate(root) });
+  // One launch key for every restart, so an open window keeps working after the studio restarts itself
+  const env = { ...process.env, AHA_LAUNCH_KEY: process.env.AHA_LAUNCH_KEY || require('./launch-key.js').newKey() };
+  const run = supervise({ command: process.execPath, args: [path.join(root, 'server.js')], env, onRepeatedCrash: () => rollbackUnverifiedUpdate(root) });
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, run.stop);
   // Started by the desktop app: if the app goes away without stopping us (a crash, a force quit), stop too
   const parent = Number(process.env.AHA_PARENT_PID);

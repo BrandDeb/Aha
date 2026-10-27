@@ -251,8 +251,20 @@ interface WorkspaceContextValue extends EditorState {
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
+/**
+ * Listeners told about each action before it applies, with the project as it was. The folder sync uses this to
+ * move and delete on disk (a diff can't tell a move from a delete and a create).
+ */
+export const actionTaps = new Set<(action: Action, before: Project) => void>();
+
+/**
+ * Asked before an action applies: a promise means "wait for this first", then the action goes through. An opened
+ * folder uses it to read a file's text before it is opened, moved or deleted (folder-client.ts).
+ */
+export const actionGates = new Set<(action: Action, before: Project) => Promise<unknown> | null>();
+
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, undefined, initialState);
+  const [state, rawDispatch] = useReducer(reducer, undefined, initialState);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -262,13 +274,28 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     stateRef.current = state;
   }, [state]);
 
+  const dispatch = useCallback((action: Action) => {
+    const apply = () => {
+      for (const tap of actionTaps) tap(action, stateRef.current.project);
+      rawDispatch(action);
+    };
+    for (const gate of actionGates) {
+      const wait = gate(action, stateRef.current.project);
+      if (wait) {
+        void wait.then(apply, apply);
+        return;
+      }
+    }
+    apply();
+  }, []);
+
   // Hydrate from storage once on mount (storage is only readable on the client)
   useEffect(() => {
     const stored = load<EditorState>(STORAGE_KEY);
     if (isEditorState(stored)) {
-      dispatch({ type: 'replace', project: { ...stored.project, folders: stored.project.folders ?? [] }, git: stored.git ?? null });
-      for (const tab of stored.tabs) dispatch({ type: 'open', path: tab });
-      if (stored.active) dispatch({ type: 'open', path: stored.active });
+      rawDispatch({ type: 'replace', project: { ...stored.project, folders: stored.project.folders ?? [] }, git: stored.git ?? null });
+      for (const tab of stored.tabs) rawDispatch({ type: 'open', path: tab });
+      if (stored.active) rawDispatch({ type: 'open', path: stored.active });
     }
     const storedSettings = load<Partial<Settings>>(SETTINGS_KEY);
     /* eslint-disable react-hooks/set-state-in-effect -- localStorage is only readable after hydration */
@@ -289,7 +316,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   // Persist the workspace (debounced)
   useEffect(() => {
     if (!hydrated) return;
-    const timer = setTimeout(() => save(STORAGE_KEY, state), 400);
+    // A folder's files live on disk: keep only where it is, and read them again on the next visit
+    const timer = setTimeout(() => save(STORAGE_KEY, state.project.disk ? { ...state, project: { ...state.project, files: {} } } : state), 400);
     return () => clearTimeout(timer);
   }, [state, hydrated]);
 
@@ -338,7 +366,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setSnapshots((prev) => {
       const target = prev.find((s) => s.id === id);
       if (!target) return prev;
-      dispatch({ type: 'replace', project: { ...current, files: target.files, entry: target.entry } });
+      rawDispatch({ type: 'replace', project: { ...current, files: target.files, entry: target.entry } });
       return persistSnapshots([
         { id: crypto.randomUUID(), label: 'Before restore', createdAt: Date.now(), files: current.files, entry: current.entry },
         ...prev,
@@ -360,7 +388,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     saveSnapshot,
     restoreSnapshot,
     deleteSnapshot,
-  }), [state, hydrated, settings, updateSettings, snapshots, saveSnapshot, restoreSnapshot, deleteSnapshot]);
+  }), [state, dispatch, hydrated, settings, updateSettings, snapshots, saveSnapshot, restoreSnapshot, deleteSnapshot]);
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }

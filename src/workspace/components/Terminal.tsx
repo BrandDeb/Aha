@@ -8,6 +8,7 @@ import { detectLanguage } from '@/lib/languages';
 import { pythonProjectId, streamCommand, streamPython, type PythonCommand, type PythonOutcome, type PythonStream } from '../python-client';
 import { fetchLanguages } from '../run-client';
 import { useWorkspace } from '../store';
+import { launchState } from '../launch-client';
 
 type LineKind = 'in' | 'out' | 'err' | 'sys';
 interface Line {
@@ -178,11 +179,15 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
     /** A command in a real shell in the project's folder on this machine; files it changes come back */
     const runReal = async (line: string) => {
       if (!(await realShell())) {
-        err(`${line.split(/\s/)[0]}: not available here — this studio doesn't run commands on its server (try help)`);
+        const locked = (await launchState()) === 'locked';
+        err(`${line.split(/\s/)[0]}: not available here — ${locked ? 'this window wasn’t opened with the studio’s launch link (npm run open opens it)' : 'this studio doesn’t run commands on its server (try help)'}`);
         return;
       }
       await runStreamed(`$ ${line}`, async (onOutput, signal) => {
-        const done = await streamCommand('/api/shell', { projectId: pythonProjectId(p.name), files: projectRef.current.files, command: line, cwd }, onOutput, signal);
+        // An opened folder: the command runs in it, in place, and its changes arrive through the folder's watcher
+        const disk = projectRef.current.disk;
+        const body = disk ? { projectId: pythonProjectId(p.name), folder: disk.id, command: line, cwd } : { projectId: pythonProjectId(p.name), files: projectRef.current.files, command: line, cwd };
+        const done = await streamCommand('/api/shell', body, onOutput, signal);
         if (Object.keys(done.changed).length || done.removed.length) dispatch({ type: 'put', files: done.changed, removed: done.removed });
         return { ...done, ok: done.code === 0 && !done.error };
       });

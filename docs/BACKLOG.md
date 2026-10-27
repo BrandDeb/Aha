@@ -13,6 +13,32 @@ as a proposal with evidence, and vibe coding and hand-writing as equals.
 
 ---
 
+## 0. Strategy and A1 (from the October 2026 scan)
+
+Specs in [ROADMAP.md](ROADMAP.md): Tracks A and B, "Strategy, part two" and "Plans for small and medium businesses".
+
+| Item | Status | Notes |
+|---|---|---|
+| A1a. Launch key on every route that runs programs; `npm run open` / `aha` | Done (PR #42) | SECURITY.md |
+| A1b. Open a folder in place: save, watch, move, terminal in the folder, `aha <path>` | Now (PR #42) | browser test pending |
+| A1c. Large repos: lazy file contents, background index, 50k files under 2 s; File System Access API in the browser | Next | |
+| A1d. Run and the dev server in the opened folder (not a copy) | Next | |
+| A2. Git as the backbone: proposals as branches, PRs with evidence | Next | |
+| A3. Bring my setup: Cursor, VS Code, Zed, Windsurf, JetBrains (settings, keys, rules, MCP) | Next | |
+| A4. Companion mode | Next | |
+| A5. Sign in on first launch with GitHub or Google; Linux desktop app; continue without an account | Next | Google client *needs you* |
+| B1 to B6. Native core, shared index, extension host, public benchmark, private mode, table stakes | Later | |
+| C1. Any agent (Claude Code, Codex, Gemini) over ACP, sandboxed, checked by Aha | Next | |
+| C2. Receipts: replayable, tamper-evident proof attached to PRs | Next | |
+| C3. Behaviour diff: before and after runs, unexpected changes first | Next | |
+| C4. Taste: art directions, design DNA, slop score | Later | |
+| C5. Ship-ready check: simulated users; WebMCP and `llms.txt` in every app | Later | |
+| C6. `aha.new/<repo>`, Open in Aha badge, multiplayer, phone approvals | Later | hosting *needs you* |
+| C7. Price known before the work: estimate, hard cap, cost per accepted change | Later | |
+| Plans for small and medium businesses: Team and Business, admin, caps, trial | Next | payment account and final prices *need you* |
+
+---
+
 ## 1. Novel features (our edge)
 
 | Feature | Status | Notes |
@@ -127,7 +153,8 @@ and would undo the "lightweight" goal. The plan instead:
 
 | Item | Why |
 |---|---|
-| Google sign-in | needs a domain |
+| Google sign-in | a Google OAuth client (desktop needs no domain; the web needs one) |
+| Payment provider and final prices for Team and Business | SMB plans |
 | GitHub OAuth app (`AHA_GITHUB_CLIENT_ID`) | GitHub sign-in in production |
 | `NEXT_PUBLIC_SITE_URL` | canonical URLs, sitemap, OG images |
 | Tauri updater signing key | signed desktop updates |

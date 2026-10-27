@@ -81,7 +81,7 @@ cpSync(path.join(ROOT, 'public'), path.join(APP, 'public'), { recursive: true })
 for (const file of ['server.js', 'package.json', 'package-lock.json', 'LICENSE']) {
   if (existsSync(path.join(ROOT, file))) cpSync(path.join(ROOT, file), path.join(APP, file));
 }
-cpSync(path.join(ROOT, 'scripts', 'supervise.js'), path.join(APP, 'scripts', 'supervise.js'));
+for (const file of ['supervise.js', 'launch-key.js']) cpSync(path.join(ROOT, 'scripts', file), path.join(APP, 'scripts', file));
 // next.config.ts, compiled to JavaScript here, so neither TypeScript nor Next's SWC compiler has to ship
 const ts = (await import(pathToFileURL(path.join(ROOT, 'node_modules', 'typescript', 'lib', 'typescript.js')).href)).default;
 const config = ts.transpileModule(readFileSync(path.join(ROOT, 'next.config.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } });
