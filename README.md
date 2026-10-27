@@ -37,8 +37,10 @@ Requires Node.js 24 or newer. Native builds also need clang on the `PATH`; `npm 
 git clone https://github.com/BrandDeb/Aha.git
 cd Aha
 npm install
-npm run dev        # http://localhost:3000
+npm run dev        # prints the link to open, with this launch's key
 ```
+
+Only a window opened with that link can run programs or open files on your machine; `npm run open` opens it again.
 
 Nothing has to be configured: each user picks a model in the studio. Copy `.env.example` to `.env.local` only for
 GitHub sign-in or a hosted default model.

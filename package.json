@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "description": "The AI IDE that proves its work",
   "private": true,
+  "bin": {
+    "aha": "scripts/aha.js"
+  },
   "scripts": {
     "dev": "node scripts/supervise.js",
+    "open": "node scripts/aha.js",
     "prebuild": "node scripts/build-docs.mjs",
     "docs:sync": "node scripts/build-docs.mjs",
     "build": "next build",

@@ -12,6 +12,7 @@ To report a vulnerability, use [private vulnerability reporting](https://github.
 | --- | --- | --- |
 | **You**, on your own machine | Run anything: that is the point of a local IDE | |
 | **A website you visit** while the studio runs | Load in your browser next to it | Make your studio compile, run, install, connect, update, read your files or use your keys (CSRF, DNS rebinding, clickjacking) |
+| **Another program or user on your machine** | Reach the studio's port on `127.0.0.1` | Run programs, open files or change settings through it: those routes answer only to the window opened with this launch's random key (the *launch key*) |
 | **Someone on your network** | Reach your machine's ports | Reach the studio: it listens on `127.0.0.1` unless you set `HOST`. Reach a dev server: they listen on `127.0.0.1` too; the phone preview, while you share it, is a proxy that answers only with its random key and closes when stopped or unused |
 | **Visitors of a hosted studio** (`HOST=0.0.0.0`) | Edit, compile to WASM, use the assistant within rate limits | Run code on the server (Python, other languages, dev servers, connectors, maintenance are off) |
 | **A collaborator** in a live session | Edit the project with you | Join without the invite link; send oversized or path-escaping files |
@@ -30,6 +31,18 @@ host runners are not.
   languages, dev servers, connectors, doctor and updates) switches on only when it listens on loopback, and each has a
   kill switch: `AHA_PYTHON`, `AHA_RUN`, `AHA_DEV`, `AHA_CONNECTORS`.
 - The Docker image sets all of them off explicitly and runs as the unprivileged `node` user.
+
+**The launch key**
+- Each start of the studio makes a random 192-bit key. The routes that run programs, install things, open files or
+  maintain the studio (Python, other languages, the terminal, dev servers, the debugger, language servers, pipelines,
+  connectors, skills, extensions, toolchains, doctor, updates, autopilot) refuse requests without it, with `401`.
+- It reaches the browser in the link the studio prints, the desktop app opens and `aha` opens. The server swaps it for
+  an `HttpOnly`, `SameSite=Strict` cookie scoped to the port and redirects to the same page without it, so it doesn't
+  stay in the address bar or history. Scripts can send it as an `X-Aha-Key` header. Keys are compared in constant time.
+- `~/.aha/launch.json` (mode `0600`) records the running studio's address and key so `aha` can open it again; it is
+  removed on shutdown and ignored once its process has gone. The supervisor keeps one key across restarts.
+- It is checked whenever the local features are on (the server listens on loopback, or `AHA_RUN=1`). A hosted studio,
+  where they are off, needs none.
 
 **Requests from other sites**
 - State-changing routes require a same-origin `Origin` header. Browsers send it on every cross-site POST, including

@@ -13,8 +13,13 @@ your platform (about 375 MB in `node_modules`), so there is nothing to install; 
 git clone https://github.com/BrandDeb/Aha.git
 cd Aha
 npm install
-npm run dev          # http://localhost:3000 (Next.js + collaboration server)
+npm run dev          # prints the link to open: http://localhost:3000/?aha_key=…
 ```
+
+Open the link the studio prints. It carries this launch's **launch key**: only a window opened with it can run programs
+or open files on your machine (other programs on the machine can reach the port, but not those features). Lost it? Run
+`npm run open` in the Aha folder (or `aha` anywhere, after `npm link`): it opens the running studio, or starts it first. A window opened without the
+key still edits and compiles, and says why running is off.
 
 Nothing needs configuring: the assistant runs on a model each user picks (see [Assistant](#assistant)).
 Copy `.env.example` to `.env.local` only for GitHub sign-in or a hosted default model.
@@ -25,7 +30,7 @@ Copy `.env.example` to `.env.local` only for GitHub sign-in or a hosted default 
    `sudo apt install clang lld`; Windows: use WSL). zig is bundled by `npm install`.
 2. **File → Open Folder…** and pick the cloned `Aha` folder; accept the recommended extensions.
 3. Open the terminal (<kbd>Ctrl</kbd>+<kbd>`</kbd>) and run `npm install`.
-4. Press <kbd>F5</kbd> (**Aha!: dev server**) — the browser opens at http://localhost:3000 with
+4. Press <kbd>F5</kbd> (**Aha!: dev server**) — the browser opens the studio's launch link with
    breakpoints working in `server.js` and the API routes. Or run the **Dev server** task
    (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>), or `npm run dev`.
 
@@ -1263,6 +1268,11 @@ collaboration relay and forwards every other upgrade (e.g. dev HMR) to Next.js.
 
 ## API
 
+On your own machine the routes marked *local only*, and `/api/python`, `/api/run`, `/api/shell`, `/api/devserver`,
+`/api/skills`, `/api/extensions`, `/api/connectors`, `/api/remix` and `/api/autopilot`, need the launch key: the cookie
+the launch link sets, or an `X-Aha-Key` header with the key from `~/.aha/launch.json`. Without it they answer `401`.
+`GET /api/launch` says whether the key is required and whether this request has it.
+
 ### `POST /api/compile`
 
 ```json
@@ -1457,6 +1467,7 @@ AI_REQUESTS_PER_10_MIN=30   # per client (first X-Forwarded-For hop)
 
 # Network and Python
 HOST=127.0.0.1               # interface to listen on (0.0.0.0 only behind a proxy or in a container)
+AHA_LAUNCH_KEY=              # the launch key; unset = a new random one each start (the desktop app and supervisor set it)
 ALLOWED_HOSTS=               # extra Host names allowed for Python commands, comma separated
 AHA_PYTHON=1             # 0 turns Python (uv) off entirely
 UV_BIN=                      # path to a specific uv binary
@@ -1497,6 +1508,7 @@ SCRIPTC_LINKER=          # optional: linker driver scriptc uses for executables
 | Command | |
 |---|---|
 | `npm run dev` | Custom server in development (Next.js + collaboration), supervised: restarts after a crash |
+| `npm run open` | Open the running studio with its launch key, or start it first (`--print` prints the link). The same as `aha` after `npm link` |
 | `npm run build` | Production build |
 | `npm start` | Production server, supervised |
 | `npm run start:plain` | Production server without the supervisor (containers, process managers) |

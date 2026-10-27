@@ -51,6 +51,7 @@ import { firstError } from '@/lib/live/rewind';
 import { useContracts } from './contracts-client';
 import { useAutocomplete } from './autocomplete';
 import { usePersistedFlag } from './layout';
+import { useLaunchState } from './launch-client';
 import { Box, Branch, Code, Command as CommandIcon, Files, FilePlus, Gear, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, Search, Sparkle, Wrench } from './components/Icons';
 import type { CreateTab } from './components/CreateDialog';
 import { useCiOnSave } from './ci-on-save';
@@ -206,6 +207,7 @@ export function Workspace() {
   const ws = useWorkspace();
   const { project, tabs, active, split, git, settings, dispatch, hydrated, updateSettings, saveSnapshot } = ws;
   const { notify } = useToast();
+  const launch = useLaunchState();
   const proposals = useProposals();
   const { open: openProposal, close: closeProposal } = proposals;
   const askRef = useRef<HTMLInputElement | null>(null);
@@ -1166,6 +1168,14 @@ export function Workspace() {
             )}
           </div>
         </header>
+        {launch === 'locked' && (
+          <div role="alert" className="flex shrink-0 items-center gap-2 border-b border-border bg-[color-mix(in_srgb,var(--color-warn)_12%,transparent)] px-4 py-1.5 text-xs text-gray-200" data-zen-hide>
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warn" aria-hidden="true" />
+            <span>
+              This window wasn’t opened with the studio’s launch link, so it can’t run programs or open files on this machine. Open the link the studio printed when it started (<code className="font-mono">npm run open</code> opens it again).
+            </span>
+          </div>
+        )}
 
         <div className="flex min-h-0 flex-1">
           {/* Explorer */}
