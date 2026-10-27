@@ -8,7 +8,7 @@ import { breadcrumbLd, faqLd, pageMeta, siteUrl, softwareLd } from '@/lib/site';
 
 export const metadata: Metadata = pageMeta({
   title: 'Pricing',
-  description: 'Free for the whole studio with your own model. Pro adds the autonomous worker, automatic debugging and the native app. Premium is for forward-deployed, ISV and platform teams.',
+  description: 'Free for the whole studio with your own model. Pro adds the autonomous worker and the native app. Team and Business give companies one bill, their own sign-in and control over what agents can do.',
   path: '/pricing',
 });
 
@@ -22,7 +22,8 @@ export default function PricingPage() {
   // NEXT_PUBLIC_ variables are inlined at build time, so each is read by name
   const env = {
     NEXT_PUBLIC_CHECKOUT_PRO_URL: process.env.NEXT_PUBLIC_CHECKOUT_PRO_URL,
-    NEXT_PUBLIC_CHECKOUT_PREMIUM_URL: process.env.NEXT_PUBLIC_CHECKOUT_PREMIUM_URL,
+    NEXT_PUBLIC_CHECKOUT_TEAM_URL: process.env.NEXT_PUBLIC_CHECKOUT_TEAM_URL,
+    NEXT_PUBLIC_CHECKOUT_BUSINESS_URL: process.env.NEXT_PUBLIC_CHECKOUT_BUSINESS_URL,
     NEXT_PUBLIC_SALES_URL: process.env.NEXT_PUBLIC_SALES_URL,
   };
   const checkouts = Object.fromEntries(PLANS.map((p) => [p.id, checkoutFor(p, env)]));
@@ -39,7 +40,7 @@ export default function PricingPage() {
           <div className="eyebrow text-accent">Pricing</div>
           <h1 className="display mx-auto mt-4 max-w-3xl text-[clamp(2.5rem,6vw,4.25rem)] text-gray-100">Free to build. Pay when the AI works for you.</h1>
           <p className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-gray-400">
-            The whole studio is free with your own model. Pro lets the agent work on its own while you code. Premium is for teams who take it into the field.
+            The whole studio is free with your own model. Pro lets the agent work on its own while you code. Team and Business give a company one bill, its own sign-in and control over what agents can do.
           </p>
         </section>
 
@@ -51,24 +52,24 @@ export default function PricingPage() {
         <section className="mx-auto max-w-6xl px-4 py-24" aria-labelledby="compare">
           <h2 id="compare" className="text-2xl font-semibold tracking-tight text-gray-100 md:text-3xl">Compare plans</h2>
           <div className="mt-8 overflow-x-auto rounded-xl border border-border">
-            <table className="w-full min-w-[40rem] text-left text-sm">
+            <table className="w-full min-w-[56rem] text-left text-sm">
               <thead className="bg-[var(--bar)] text-gray-300">
                 <tr>
-                  <th scope="col" className="w-1/2 px-4 py-3 font-medium"><span className="sr-only">Feature</span></th>
+                  <th scope="col" className="w-[34%] px-4 py-3 font-medium"><span className="sr-only">Feature</span></th>
                   {PLANS.map((p) => <th key={p.id} scope="col" className="px-4 py-3 font-medium">{p.name}</th>)}
                 </tr>
               </thead>
               {COMPARISON.map((group) => (
                 <tbody key={group.group} className="divide-y divide-border border-t border-border">
                   <tr>
-                    <th colSpan={4} scope="colgroup" className="bg-white/[0.02] px-4 pt-5 pb-2 text-xs font-medium uppercase tracking-wider text-gray-500">{group.group}</th>
+                    <th colSpan={6} scope="colgroup" className="bg-white/[0.02] px-4 pt-5 pb-2 text-xs font-medium uppercase tracking-wider text-gray-500">{group.group}</th>
                   </tr>
                   {group.rows.map((row) => (
                     <tr key={row.label}>
                       <th scope="row" className="px-4 py-3 font-normal text-gray-300">{row.label}</th>
-                      <td className="px-4 py-3"><Cell value={row.free} /></td>
-                      <td className="px-4 py-3"><Cell value={row.pro} /></td>
-                      <td className="px-4 py-3"><Cell value={row.premium} /></td>
+                      {row.cells.map((value, i) => (
+                        <td key={PLANS[i].id} className="px-4 py-3"><Cell value={value} /></td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>

@@ -1293,7 +1293,7 @@ Maintenance only works when the studio listens on your own machine (the default)
 |---|---|
 | `/` | Workspace |
 | `/landing` | Product page |
-| `/pricing` | Plans (Free, Pro, Premium) and a comparison; edit them in `src/lib/pricing.ts` |
+| `/pricing` | Plans (Free, Pro, Team, Business, Enterprise), a comparison and a seat calculator; edit them in `src/lib/pricing.ts` |
 | `/docs` | Developer docs, made from this guide (`docs/guide.md`): one page per section, with search |
 | `/llms.txt`, `/llms-full.txt` | The site and its docs as plain text for language models |
 | `/sitemap.xml`, `/robots.txt`, `/manifest.webmanifest` | For search engines, crawlers and installing the app |

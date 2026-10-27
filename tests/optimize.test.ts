@@ -59,7 +59,8 @@ test('site: llms.txt, structured data and the sitemap describe the real site', (
   const full = llmsTxt('https://nano.example', docs, FAQS, PLANS, true);
   assert.ok(full.length > txt.length * 3 && full.includes(FAQS[0].answer));
   const sw = softwareLd('https://nano.example', PLANS) as { offers: { price: string }[] };
-  assert.deepEqual(sw.offers.map((o) => o.price), PLANS.map((p) => String(p.monthly ?? 0)));
+  assert.deepEqual(sw.offers.map((o) => o.price), PLANS.filter((p) => !p.contact).map((p) => String(p.monthly ?? 0)));
+  assert.match(txt, /- Enterprise: contact us/);
   assert.equal((faqLd(FAQS) as { mainEntity: unknown[] }).mainEntity.length, FAQS.length);
   assert.ok(!ldJson({ x: '</script><script>alert(1)</script>' }).includes('</script>'));
   assert.equal(publicPages(docs).length, 5 + docs.length);

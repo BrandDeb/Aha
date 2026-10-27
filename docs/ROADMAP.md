@@ -464,6 +464,11 @@ admin page for seats and caps.
 
 **Needs you:** a payment provider account, the final prices, and whether Premium is retired into Business or kept.
 
+**Status.** The pricing page shows the five plans with a comparison and a seat calculator. A signed-in account can start
+the 14-day Team trial and add and remove seats at `/billing`, against a stand-in provider (`src/lib/billing.ts`, state in
+`~/.aha/billing.json`). Premium is retired on the page, as proposed. Still to do: a real payment provider, caps that
+stop a hosted-model task, and the Team features marked "Soon" on the page.
+
 **Done when** the pricing page shows the five plans with their comparison, a Team trial can be started and a seat
 added in a browser test against a mock billing provider, and caps stop a hosted-model task before it overspends.
 
