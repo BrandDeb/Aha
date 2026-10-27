@@ -174,6 +174,21 @@ test('fetchPublic (private allowed): bodies, gzip, size caps, redirects, POST bo
   }
 });
 
+test('fetchPublic: a redirect to another site keeps only headers that describe the request', async () => {
+  let got: http.IncomingHttpHeaders = {};
+  const other = await serve((req, res) => ((got = req.headers), res.end('ok')));
+  const first = await serve((_req, res) => res.writeHead(302, { Location: `${other.url}/landing` }).end());
+  try {
+    const headers = { Authorization: 'Bearer a', 'Api-Key': 'k1', 'Private-Token': 'k2', 'X-Goog-Api-Key': 'k3', Accept: 'application/json', 'Content-Type': 'application/json' };
+    assert.equal((await fetchPublic(`${first.url}/start`, { allowPrivate: true, headers })).body.toString(), 'ok');
+    assert.deepEqual([got.authorization, got['api-key'], got['private-token'], got['x-goog-api-key']], [undefined, undefined, undefined, undefined]);
+    assert.equal(got.accept, 'application/json');
+  } finally {
+    first.close();
+    other.close();
+  }
+});
+
 test('htmlToText keeps structure and links, drops scripts and styles, decodes entities', () => {
   const page = htmlToText(
     `<html><head><title>Docs &amp; Guides</title><style>p{color:red}</style></head><body>

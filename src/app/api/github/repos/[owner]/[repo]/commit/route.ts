@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { commitFiles } from '@/lib/github';
 import { getToken, githubErrorResponse, isSameOrigin, unauthorized } from '@/lib/github-session';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 const MAX_CHANGES = 200;
 const MAX_TOTAL_SIZE = 4 * 1024 * 1024;
@@ -19,7 +20,7 @@ export async function POST(
   const token = getToken(request);
   if (!token) return unauthorized();
 
-  const body = await request.json().catch(() => null);
+  const body = await readJsonOrNull(request, 24 * 1024 * 1024);
   if (!body || typeof body.branch !== 'string' || typeof body.message !== 'string' || !body.message.trim()) {
     return NextResponse.json({ error: 'branch and message are required' }, { status: 400 });
   }

@@ -41,11 +41,17 @@ const SENSITIVE = /(^|[/_.-])(auth|login|logout|session|crypto|password|passwd|t
 const CONFIG_ENV = /(^|\/)\.env(\.[\w-]+)?$|(^|\/)(next|vite|nuxt|svelte|astro|tsconfig|webpack)\.config\.\w+$|(^|\/)tsconfig\.json$/;
 const MIGRATION = /(^|\/)(migrations?|alembic|prisma\/migrations)\/|(^|\/)schema\.(sql|prisma)$|\.sql$/i;
 const CONTRACTS = /(^|\/)\.aha\/contracts\.json$/;
+/**
+ * Files that run by themselves later, without anyone running the project: install and build hooks, git hooks,
+ * editor tasks, package-manager settings (a registry swap), and the studio's own watchers, which start agents.
+ */
+const AUTORUN = /(^|\/)(\.npmrc|\.yarnrc(\.yml)?|\.pnpmfile\.c?js|\.husky\/|\.git\/hooks\/|\.githooks\/|\.pre-commit-config\.ya?ml|lefthook\.ya?ml|\.vscode\/(tasks|launch|settings)\.json|\.devcontainer\/|\.envrc|build\.rs|setup\.py|conftest\.py|Makefile|justfile|Taskfile\.ya?ml)$|(^|\/)(\.husky|\.git\/hooks|\.githooks|\.devcontainer)\/|(^|\/)\.aha\/(watchers|kit|skills)(\.json|\/)/i;
 const SECRET = /\b(api[_-]?key|secret|password|passwd|private[_-]?key|access[_-]?token|auth[_-]?token)\b\s*[:=]\s*['"`][^'"`\s]{8,}['"`]|\b(sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|xox[bp]-[A-Za-z0-9-]{10,})\b/i;
 
 /** Things that are fine in their place but deserve a look when a change adds them */
 const DANGEROUS: { label: string; re: RegExp }[] = [
   { label: 'eval / new Function', re: /\beval\s*\(|new\s+Function\s*\(/ },
+  { label: 'downloads and runs code', re: /\b(curl|wget)\b[^|\n]*\|\s*(sudo\s+)?(ba|z)?sh\b|\b(ba|z)?sh\s+<\(\s*(curl|wget)\b|\b(iwr|Invoke-WebRequest)\b[^|\n]*\|\s*(iex|Invoke-Expression)\b/i },
   { label: 'shell commands', re: /child_process|\bexecSync?\s*\(|\bspawnSync?\s*\(|subprocess\.|os\.system\s*\(|Runtime\.getRuntime\(\)\.exec|\bshell_exec\s*\(/ },
   { label: 'raw HTML', re: /dangerouslySetInnerHTML|\.innerHTML\s*=|v-html=|\{@html\s/ },
   { label: 'destructive SQL', re: /\b(DROP\s+(TABLE|DATABASE|COLUMN)|TRUNCATE\s+TABLE)\b|\bDELETE\s+FROM\s+\w+\s*(;|$|['"`])/i },
@@ -94,12 +100,28 @@ export function dependencyChanges(path: string, before: string, after: string): 
   };
 }
 
+/** package.json scripts the change adds or rewrites (install hooks run on the next install) */
+function scriptChanges(before: string, after: string): string[] {
+  const read = (text: string): Record<string, unknown> => {
+    try {
+      const scripts = (JSON.parse(text || '{}') as { scripts?: unknown }).scripts;
+      return scripts && typeof scripts === 'object' ? (scripts as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  };
+  const a = read(before);
+  const b = read(after);
+  return Object.keys(b).filter((k) => a[k] !== b[k]);
+}
+
 const testCount = (text: string) => (text.match(/\b(it|test)\s*\(|^\s*def test_|^\s*func Test|#\[test\]|@Test\b/gm) ?? []).length;
 
 export function riskOf({ files, evidence, review }: RiskInput): RiskScore {
   const factors: RiskFactor[] = [];
   const add = (f: RiskFactor) => factors.push(f);
-  const project = files.filter((f) => !f.path.startsWith('.aha/why'));
+  // The why-history is the studio's own notes about the change, not part of it
+  const project = files.filter((f) => f.path !== '.aha/why.json');
   if (!project.length) return { score: 0, level: 'low', factors: [{ label: 'No changes', points: 0, detail: 'Nothing in the project changes' }] };
   const docsOnly = project.every((f) => DOCS.test(f.path));
 
@@ -134,6 +156,10 @@ export function riskOf({ files, evidence, review }: RiskInput): RiskScore {
   if (config.length) add({ label: 'configuration', points: 6, detail: config.join(', ') });
   const migrations = touched(MIGRATION);
   if (migrations.length) add({ label: 'database schema', points: 15, detail: `Migrations and schemas change real data: ${migrations.join(', ')}`, hold: true });
+  const autorun = touched(AUTORUN);
+  if (autorun.length) add({ label: 'runs on its own', points: 15, detail: `Runs later without anyone running the project (hooks, tasks, installs, watchers): ${autorun.join(', ')}`, hold: true });
+  const scripts = project.filter((f) => /(^|\/)package\.json$/.test(f.path) && f.kind !== 'deleted').flatMap((f) => scriptChanges(f.before, f.after));
+  if (scripts.length) add({ label: 'package scripts', points: 12, detail: `Commands that run on install, build or start change: ${scripts.join(', ')}`, hold: true });
   if (touched(CONTRACTS).length) add({ label: 'edits the contracts', points: 15, detail: 'The rules that guard the project change: check none is loosened', hold: true });
 
   // What it adds
@@ -146,7 +172,7 @@ export function riskOf({ files, evidence, review }: RiskInput): RiskScore {
     for (const d of DANGEROUS) if (added.some((l) => d.re.test(l))) found.set(d.label, [...(found.get(d.label) ?? []), f.path]);
   }
   if (secretFiles.length) add({ label: 'a secret in the code', points: 30, detail: `Looks like a key or password written into ${secretFiles.join(', ')}: keep it in an environment variable`, hold: true });
-  if (found.size) add({ label: [...found.keys()].join(', '), points: Math.min(25, found.size * 10), detail: [...found].map(([k, v]) => `${k} in ${v.join(', ')}`).join('; '), hold: found.has('destructive SQL') || found.has('shell commands') || found.has('eval / new Function') });
+  if (found.size) add({ label: [...found.keys()].join(', '), points: Math.min(25, found.size * 10), detail: [...found].map(([k, v]) => `${k} in ${v.join(', ')}`).join('; '), hold: found.has('destructive SQL') || found.has('shell commands') || found.has('eval / new Function') || found.has('downloads and runs code') });
 
   // Tests
   const testFiles = project.filter((f) => TEST.test(f.path));

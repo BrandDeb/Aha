@@ -3,6 +3,7 @@ import { getBaseUrl, isSameOrigin } from '@/lib/github-session';
 import { isTrustedHost } from '@/lib/host';
 import { isPipelineRunEnabled, parsePipelineRunRequest, runPipeline } from '@/lib/pipelines/run';
 import { clientKey, createRateLimiter } from '@/lib/rate-limit';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
   if (wait) return NextResponse.json({ error: `Too many pipeline runs. Try again in ${Math.ceil(wait / 60)} min.` }, { status: 429, headers: { 'Retry-After': String(wait) } });
   if (Number(request.headers.get('content-length')) > 12 * 1024 * 1024) return NextResponse.json({ error: 'Request is too large' }, { status: 413 });
 
-  const parsed = parsePipelineRunRequest(await request.json().catch(() => null));
+  const parsed = parsePipelineRunRequest(await readJsonOrNull(request, 12 * 1024 * 1024));
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const encoder = new TextEncoder();

@@ -13,6 +13,8 @@ test('cross-site guard: scripts and the studio pass, other sites do not', () => 
   assert.ok(!isNotCrossSite(req({ host: '127.0.0.1:3000', origin: 'https://evil.example' }), base), 'text/plain CSRF carries the attacker Origin');
   assert.ok(!isNotCrossSite(req({ host: '127.0.0.1:3000', 'sec-fetch-site': 'cross-site' }), base), 'Origin stripped, fetch metadata still says cross-site');
   assert.ok(!isNotCrossSite(req({ host: '127.0.0.1:3000', origin: 'null' }), base), 'sandboxed frames send Origin: null');
+  assert.ok(!isNotCrossSite(req({ host: 'evil.example:3000', origin: 'http://evil.example:3000' }), base), 'DNS rebinding: Origin and Host agree, but the name is not ours');
+  assert.ok(isNotCrossSite(req({ host: 'localhost:3000', origin: 'http://localhost:3000' }), base));
 });
 
 test('bounded JSON bodies: oversize and chunked uploads stop early', async () => {

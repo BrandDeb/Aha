@@ -4,6 +4,7 @@ import { AI_MODEL, SYSTEM_PROMPT, buildMessages, parseAiRequest } from '@/lib/ai
 import { getBaseUrl, isSameOrigin } from '@/lib/github-session';
 import { isTrustedHost } from '@/lib/host';
 import { clientKey, createRateLimiter } from '@/lib/rate-limit';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 /** Each request spends the operator's API credits; cap it per client */
 const limiter = createRateLimiter(Number(process.env.AI_REQUESTS_PER_10_MIN) || 30, 10 * 60 * 1000);
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const parsed = parseAiRequest(await request.json().catch(() => null));
+  const parsed = parseAiRequest(await readJsonOrNull(request, 24 * 1024 * 1024));
   if ('error' in parsed) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
   }

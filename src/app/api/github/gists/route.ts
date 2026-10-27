@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createGist } from '@/lib/github';
 import { getToken, githubErrorResponse, isSameOrigin, unauthorized } from '@/lib/github-session';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 /**
  * Export project files to a secret gist: POST { description, files } -> { id, html_url }
@@ -12,7 +13,7 @@ export async function POST(request: NextRequest) {
   const token = getToken(request);
   if (!token) return unauthorized();
 
-  const body = await request.json().catch(() => null);
+  const body = await readJsonOrNull(request, 12 * 1024 * 1024);
   const files = body?.files;
   if (!files || typeof files !== 'object' || Array.isArray(files) || Object.keys(files).length === 0) {
     return NextResponse.json({ error: 'files are required' }, { status: 400 });

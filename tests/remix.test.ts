@@ -84,6 +84,23 @@ test('fetching tries HEAD, then main and master; a missing repository says so', 
   await assert.rejects(fetchRepo({ kind: 'repo', owner: 'o', repo: 'gone' }, async () => new Response('', { status: 404 })), /is it public/);
 });
 
+test('a gzip bomb and an endless download are refused, not held in memory', async () => {
+  // 300 MB of zeros gzips to about 300 KB: over the 256 MB the tarball may expand to
+  const bomb = gzipSync(new Uint8Array(300 * 1024 * 1024));
+  assert.ok(bomb.length < 1024 * 1024);
+  assert.throws(() => snapshotFromTarball(new Uint8Array(bomb)), /too big/);
+  // A streamed body with no Content-Length that keeps going
+  let sent = 0;
+  const endless = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      sent += 1024 * 1024;
+      controller.enqueue(new Uint8Array(1024 * 1024));
+    },
+  });
+  await assert.rejects(fetchRepo({ kind: 'repo', owner: 'o', repo: 'r', ref: 'main' }, async () => new Response(endless)), /over 40 MB/);
+  assert.ok(sent <= 42 * 1024 * 1024, `stopped reading at ${sent}`);
+});
+
 test('a site becomes an outline, and the brief asks for an original rebuild', () => {
   const html = '<html><head><title>Acme Pricing</title></head><body><nav><a href="/">Home</a><a href="/docs">Docs</a></nav><h1>Simple <b>pricing</b></h1><h2>Starter</h2><p>Free forever.</p><h2>Pro</h2></body></html>';
   const o = outlineOf(html, 'https://acme.test/pricing');

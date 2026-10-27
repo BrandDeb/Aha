@@ -82,6 +82,32 @@ host runners are not.
 - `npm audit --omit=dev` runs in CI. Self-update only fast-forwards from the configured remote and rolls back on a
   failed build.
 
+## Audit, 27 October 2026
+
+| Finding | Severity | Fix |
+| --- | --- | --- |
+| Agent auto-accept let through changes that run by themselves later: a new `postinstall` script, `.npmrc` (registry swap), git hooks, `.vscode/tasks.json`, `build.rs`, a watcher that starts agents, `curl … \| sh`. A prompt-injected agent could get code run on the next install with no review | High | These always hold auto-accept, with the reason on the proposal; the why-history exclusion is narrowed to `.aha/why.json` |
+| Extension install: a .vsix of many small zero-filled files passed the per-file limit and inflated to gigabytes (1.2 MB → 1.2 GB measured; 40 MB would crash the server). Anyone can publish to Open VSX | High | Total size and entry count checked from the zip directory before inflating (`src/lib/vsix.ts`) |
+| Remix: the GitHub tarball was read with no size cap (codeload sends no `Content-Length`) and gunzipped with no output limit | High | Streamed download capped at 40 MB; gunzip capped at 256 MB |
+| 18 routes read JSON with `request.json()`: a chunked body has no `Content-Length`, so the size check never ran (400 MB body → 1.7 GB server memory measured) | Medium | Every route reads through the bounded reader (`readJsonOrNull`); the same body now peaks at 190 MB and is refused |
+| `/api/compile`, `/api/coverage` and the GitHub routes accepted DNS-rebinding requests (Origin and Host both `evil.example`) | Medium | The shared same-origin checks also require a trusted `Host` |
+| Kit connectors that run a program showed their command on one truncated line: padding could hide the real command behind an innocent description | Medium | The full command is shown, quoted, in warning colour, before you add it |
+| Agent web fetch kept headers such as `Api-Key` or `Private-Token` on a redirect to another site | Low | Only request-describing headers (`Accept`, `Content-Type`…) follow a cross-site redirect |
+| Desktop builds of pull requests from branches of this repository replaced the public downloads before review | Low | Only `main`, version tags and manual runs publish; pull request builds stay artifacts |
+| Workflows without a `permissions` block got the repository's default token | Low | `contents: read` by default; only the publish job writes |
+| Skill refs starting with `-` reached `git fetch`, where git reads them as options (none exploitable with the allowed characters) | Low | Refs can't start with `-`; `--` before the URL |
+
+Checked and holding: every state-changing route against forged, `null`, missing and rebinding origins and cross-site
+`text/plain` (all refused); the WebSocket; SSRF protection (DNS pinned, private, metadata, mapped and NAT64 ranges);
+command execution (argument arrays, no shell); path validation on every file map written to disk; zip slip; OAuth state;
+the in-browser preview's opaque origin; the desktop app's native-API lockdown; `npm audit` (0 issues). A Playwright
+sweep opened every panel with XSS payloads in the project name, files, README links, watchers, contracts and extension
+recommendations, and typed payloads into every field and the terminal: no script ran, no dialog opened, no console
+errors, no prototype pollution.
+
+Open: any process on the machine can call the local server (curl can send any `Origin`), so on a computer shared with
+other accounts one of them could use the terminal. A per-launch secret for the routes that run programs would close it.
+
 ## Audit, 22 October 2026
 
 | Finding | Severity | Fix |

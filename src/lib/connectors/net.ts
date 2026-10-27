@@ -162,6 +162,8 @@ function once(url: URL, target: { address: string; family: number }, options: Fe
   });
 }
 
+const SAFE_ON_REDIRECT = new Set(['accept', 'accept-language', 'content-type', 'user-agent', 'cache-control']);
+
 /** GET (or POST) a public URL, following redirects only to other public URLs */
 export async function fetchPublic(rawUrl: string, options: FetchOptions = {}): Promise<FetchedResponse> {
   const maxBytes = options.maxBytes ?? 2 * 1024 * 1024;
@@ -179,8 +181,9 @@ export async function fetchPublic(rawUrl: string, options: FetchOptions = {}): P
     const location = response.headers.location;
     if (response.status >= 300 && response.status < 400 && location) {
       const next = new URL(location, url);
-      // Credentials must not follow a redirect to another site
-      if (next.origin !== url.origin && options.headers) options = { ...options, headers: Object.fromEntries(Object.entries(options.headers).filter(([k]) => !/^(authorization|cookie|x-.*(key|token).*)$/i.test(k))) };
+      // Credentials must not follow a redirect to another site. They hide under any name (Api-Key, Private-Token,
+      // X-Goog-Api-Key…), so only headers that describe the request itself go along
+      if (next.origin !== url.origin && options.headers) options = { ...options, headers: Object.fromEntries(Object.entries(options.headers).filter(([k]) => SAFE_ON_REDIRECT.has(k.toLowerCase()))) };
       url = next;
       continue;
     }

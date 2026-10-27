@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { refuseMaintenance } from '@/lib/maintenance-guard';
 import { clientKey, createRateLimiter } from '@/lib/rate-limit';
 import { applyUpdate, getUpdateStatus, type UpdateStatus } from '@/lib/updater';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
   if (refused) return refused;
   const wait = limiter.check(clientKey(request.headers));
   if (wait) return NextResponse.json({ error: 'Too many requests.' }, { status: 429, headers: { 'Retry-After': String(wait) } });
-  const body = (await request.json().catch(() => null)) as { action?: unknown } | null;
+  const body = (await readJsonOrNull(request, 4_000)) as { action?: unknown } | null;
 
   if (body?.action === 'restart') {
     if (process.env.AHA_SUPERVISED !== '1') {

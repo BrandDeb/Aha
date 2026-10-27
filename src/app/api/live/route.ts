@@ -4,6 +4,7 @@ import { isTrustedHost } from '@/lib/host';
 import { parseLiveRequest, runLive } from '@/lib/live/run';
 import { isRunEnabled } from '@/lib/polyglot';
 import { clientKey, createRateLimiter } from '@/lib/rate-limit';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
   if (!isRunEnabled()) return NextResponse.json({ error: 'Live values run your program on this server, which only happens when it listens on your own machine (or AHA_RUN=1).' }, { status: 503 });
   const wait = limiter.check(clientKey(request.headers));
   if (wait) return NextResponse.json({ error: `Too many runs. Try again in ${Math.ceil(wait / 60)} min.` }, { status: 429 });
-  const body = await request.json().catch(() => null);
+  const body = await readJsonOrNull(request, 12 * 1024 * 1024);
   const parsed = parseLiveRequest(body);
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
   const controller = new AbortController();

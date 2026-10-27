@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GitHubApiError, type GitHubUser } from './github';
 import { secureCookies, webFlowFor } from './github-device';
+import { isTrustedHost } from './host';
 
 /**
  * Session cookies: httpOnly, and Secure when the page is served over HTTPS. Over plain HTTP (localhost,
@@ -47,8 +48,9 @@ export function isSameOrigin(request: NextRequest): boolean {
   const origin = request.headers.get('origin');
   if (!origin) return false;
   try {
-    const originHost = new URL(origin).host;
-    return originHost === request.headers.get('host') || origin === new URL(getBaseUrl()).origin;
+    const host = request.headers.get('host');
+    // Origin and Host agree on a DNS-rebinding page too (evil.example pointed at 127.0.0.1), so the name must be ours
+    return (new URL(origin).host === host && isTrustedHost(host, getBaseUrl(), process.env.ALLOWED_HOSTS)) || origin === new URL(getBaseUrl()).origin;
   } catch {
     return false;
   }

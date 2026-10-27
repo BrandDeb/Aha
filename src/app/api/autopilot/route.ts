@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { refuseMaintenance } from '@/lib/maintenance-guard';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const refused = refuseMaintenance(request, true);
   if (refused) return refused;
-  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  const body = (await readJsonOrNull(request, 4_000)) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   const { readState, tick, updateSettings } = await import('@/lib/autopilot');
   if (body.action === 'run') {

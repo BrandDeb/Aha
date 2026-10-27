@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getGitHubUser } from '@/lib/github';
 import { githubClientId, pollDeviceFlow, startDeviceFlow } from '@/lib/github-device';
 import { cookieOptions, isSameOrigin, setSession, webFlowAvailable } from '@/lib/github-session';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: 'Cross-origin request rejected' }, { status: 403 });
   const clientId = githubClientId();
   if (!clientId) return NextResponse.json({ error: 'GitHub sign-in isn’t set up on this server (no GITHUB_CLIENT_ID).' }, { status: 503 });
-  const body = await request.json().catch(() => null);
+  const body = await readJsonOrNull(request, 16_000);
 
   if (body?.action === 'start') {
     const started = await startDeviceFlow(clientId);

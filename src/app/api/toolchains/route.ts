@@ -4,6 +4,7 @@ import { isTrustedHost } from '@/lib/host';
 import { clearLanguageStatuses, isRunEnabled } from '@/lib/polyglot';
 import { clientKey, createRateLimiter } from '@/lib/rate-limit';
 import { getToolchainState, installFor, listInstalled, MANAGED, miseVersion, updateAll, upgradeMajor, writeState } from '@/lib/toolchains';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
   if (!isSameOrigin(request)) return NextResponse.json({ error: 'Cross-origin request rejected' }, { status: 403 });
   if (!trusted(request)) return NextResponse.json({ error: 'Toolchains are only managed for localhost or the site in NEXT_PUBLIC_BASE_URL.' }, { status: 403 });
   if (!isRunEnabled()) return NextResponse.json({ error: 'Installing toolchains is off: the studio only does it when it runs on your own machine.' }, { status: 503 });
-  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  const body = (await readJsonOrNull(request, 16_000)) as Record<string, unknown> | null;
   if (!body || typeof body.action !== 'string') return NextResponse.json({ error: 'action is required' }, { status: 400 });
 
   if (body.action === 'settings') {

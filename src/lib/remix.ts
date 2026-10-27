@@ -15,7 +15,7 @@ export { guessEntry, parseRemixSource, remixBrief, remixName, type RemixSource, 
 /** Files a remix never copies: dependencies, build output, version control, and anything that isn't text */
 const SKIP = /(^|\/)(node_modules|\.git|dist|build|out|\.next|\.nuxt|target|vendor|\.venv|venv|__pycache__|coverage|\.cache)\//;
 const BINARY = /\.(png|jpe?g|gif|webp|ico|icns|bmp|tiff?|pdf|zip|gz|tgz|bz2|xz|7z|rar|jar|war|class|exe|dll|so|dylib|a|o|obj|wasm|woff2?|ttf|otf|eot|mp3|mp4|mov|avi|webm|ogg|wav|flac|psd|sketch|fig|db|sqlite3?|lockb)$/i;
-export const REMIX_LIMITS = { files: 400, fileBytes: 256 * 1024, totalBytes: 6 * 1024 * 1024 };
+export const REMIX_LIMITS = { files: 400, fileBytes: 256 * 1024, totalBytes: 6 * 1024 * 1024, downloadBytes: 40 * 1024 * 1024, tarBytes: 256 * 1024 * 1024 };
 
 /** Regular files of a tar archive, with long names (ustar prefix and pax headers) put back together */
 export function readTar(tar: Uint8Array): { path: string; data: Uint8Array }[] {
@@ -55,7 +55,14 @@ export interface RepoSnapshot {
 
 /** The text files of a repository tarball (codeload's "<repo>-<ref>/" top folder removed), within the limits */
 export function snapshotFromTarball(tgz: Uint8Array): RepoSnapshot {
-  const entries = readTar(new Uint8Array(gunzipSync(tgz)));
+  let tar: Buffer;
+  try {
+    // A small download can inflate to gigabytes (files of zeros compress to almost nothing): stop well before that
+    tar = gunzipSync(tgz, { maxOutputLength: REMIX_LIMITS.tarBytes });
+  } catch {
+    throw new Error('That repository is too big to remix here.');
+  }
+  const entries = readTar(new Uint8Array(tar));
   const files: Record<string, string> = {};
   const skipped: string[] = [];
   let total = 0;
@@ -80,14 +87,33 @@ export function snapshotFromTarball(tgz: Uint8Array): RepoSnapshot {
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
+/** A response body, refused once it passes `max` bytes (codeload streams without a Content-Length) */
+async function readCapped(response: Response, max: number): Promise<Uint8Array> {
+  const tooBig = () => new Error(`That repository is too big to remix here (over ${Math.round(max / 1024 / 1024)} MB compressed).`);
+  if (Number(response.headers.get('content-length') ?? 0) > max) throw tooBig();
+  if (!response.body) return new Uint8Array(await response.arrayBuffer());
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel().catch(() => {});
+      throw tooBig();
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
+}
+
 /** Download a public repository at a ref (or its default branch) as text files */
 export async function fetchRepo(source: Extract<RemixSource, { kind: 'repo' }>, fetchImpl: Fetch = fetch): Promise<RepoSnapshot & { ref: string }> {
   const tryRef = async (ref: string) => {
     const r = await fetchImpl(`https://codeload.github.com/${source.owner}/${source.repo}/tar.gz/${ref.split('/').map(encodeURIComponent).join('/')}`, { signal: AbortSignal.timeout(60_000) });
     if (!r.ok) return null;
-    const size = Number(r.headers.get('content-length') ?? 0);
-    if (size > 40 * 1024 * 1024) throw new Error('That repository is too big to remix here (over 40 MB compressed).');
-    return { ref, snap: snapshotFromTarball(new Uint8Array(await r.arrayBuffer())) };
+    return { ref, snap: snapshotFromTarball(await readCapped(r, REMIX_LIMITS.downloadBytes)) };
   };
   const got = source.ref ? await tryRef(source.ref) : ((await tryRef('HEAD')) ?? (await tryRef('main')) ?? (await tryRef('master')));
   if (!got) throw new Error(`Couldn't download ${source.owner}/${source.repo}${source.ref ? ` at ${source.ref}` : ''}: is it public, and spelled right?`);

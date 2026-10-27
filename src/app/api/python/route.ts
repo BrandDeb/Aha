@@ -3,6 +3,7 @@ import { getBaseUrl, isSameOrigin } from '@/lib/github-session';
 import { isTrustedHost } from '@/lib/host';
 import { cleanupPythonProjects, getPythonStatus, installManagedUv, isPythonEnabled, parsePythonRequest, runPython } from '@/lib/python';
 import { clientKey, createRateLimiter } from '@/lib/rate-limit';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Request is too large' }, { status: 413 });
   }
 
-  const parsed = parsePythonRequest(await request.json().catch(() => null));
+  const parsed = parsePythonRequest(await readJsonOrNull(request, 12 * 1024 * 1024));
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   void cleanupPythonProjects();

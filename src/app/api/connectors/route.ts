@@ -4,6 +4,7 @@ import { parseConnector } from '@/lib/connectors/types';
 import { getBaseUrl, getToken, isSameOrigin } from '@/lib/github-session';
 import { isTrustedHost } from '@/lib/host';
 import { clientKey, createRateLimiter } from '@/lib/rate-limit';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
   if (wait) return NextResponse.json({ error: `Too many connector calls. Try again in ${Math.ceil(wait / 60)} min.` }, { status: 429, headers: { 'Retry-After': String(wait) } });
   if (Number(request.headers.get('content-length')) > 512 * 1024) return NextResponse.json({ error: 'Request is too large' }, { status: 413 });
 
-  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  const body = (await readJsonOrNull(request, 512 * 1024)) as Record<string, unknown> | null;
   if (!body || (body.action !== 'tools' && body.action !== 'call')) return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
   const connector = parseConnector(body.connector);
   if ('error' in connector) return NextResponse.json({ error: connector.error }, { status: 400 });

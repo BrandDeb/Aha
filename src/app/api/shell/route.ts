@@ -4,6 +4,7 @@ import { isTrustedHost } from '@/lib/host';
 import { isRunEnabled } from '@/lib/polyglot';
 import { parseShellRequest, runShell } from '@/lib/shell';
 import { clientKey, createRateLimiter } from '@/lib/rate-limit';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
   if (wait) return NextResponse.json({ error: `Too many commands. Try again in ${Math.ceil(wait / 60)} min.` }, { status: 429, headers: { 'Retry-After': String(wait) } });
   if (Number(request.headers.get('content-length')) > 12 * 1024 * 1024) return NextResponse.json({ error: 'Request is too large' }, { status: 413 });
 
-  const parsed = parseShellRequest(await request.json().catch(() => null));
+  const parsed = parseShellRequest(await readJsonOrNull(request, 12 * 1024 * 1024));
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
   const encoder = new TextEncoder();

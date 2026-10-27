@@ -4,6 +4,7 @@ import { isTrustedHost } from '@/lib/host';
 import { cleanupDevProjects, isDevEnabled, isProjectId, isSyncablePath, listServers, parseFiles, startServer, stateOf, stopServer, syncServer } from '@/lib/devserver';
 import { FRAMEWORKS } from '@/lib/frameworks';
 import { clientKey, createRateLimiter } from '@/lib/rate-limit';
+import { readJsonOrNull } from '@/lib/request-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Dev servers are off on this server: they only run when the studio listens on your own machine (or AHA_DEV=1).' }, { status: 503 });
   }
   if (Number(request.headers.get('content-length')) > 14 * 1024 * 1024) return NextResponse.json({ error: 'Request is too large' }, { status: 413 });
-  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  const body = (await readJsonOrNull(request, 14 * 1024 * 1024)) as Record<string, unknown> | null;
   if (!body || !isProjectId(body.projectId)) return NextResponse.json({ error: 'projectId is missing or invalid' }, { status: 400 });
   const id = body.projectId;
 
