@@ -91,8 +91,8 @@ second, and the performance budget measures both.
 
 **Status.** Shipped: the launch key (`scripts/launch-key.js`, SECURITY.md) and `npm run open` / `aha`; opening a folder
 in place with outside changes; large repositories (every name at once, text on demand and in the background, a tree
-that starts closed). Next: Run and the dev server inside the opened folder, the File System Access API for browsers, and
-the 50k-file open time in the performance budget.
+that starts closed); Run, the terminal and the dev server in the folder itself, never rewriting it. Next: the File System
+Access API for browsers, and the 50k-file open time in the performance budget.
 
 ### A2. Git as the backbone
 

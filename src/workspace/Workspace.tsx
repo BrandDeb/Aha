@@ -269,7 +269,7 @@ export function Workspace() {
     },
     [notify]
   );
-  const devServer = useDevServer(project.name, project.files, !!web);
+  const devServer = useDevServer(project.name, project.files, !!web, project.disk?.id);
   // Vite-style apps can also run entirely in the browser (esbuild-wasm): the only way where dev servers are off
   const inBrowser = useMemo(() => (web?.kind === 'framework' ? browserPreviewSupport(project.files) : null), [web, project.files]);
   const [previewChoice, setPreviewChoice] = useState<'server' | 'browser' | null>(null);
@@ -497,7 +497,7 @@ export function Workspace() {
   const runLanguage = useCallback<WorkspaceActions['runLanguage']>(async (options, onOutput = () => {}, signal) => {
     const p = projectRef.current;
     const recorded = outputRecorder();
-    const outcome = await runProject(p.name, p.files, options, (stream, text) => {
+    const outcome = await runProject(p.name, p.files, p.disk ? { ...options, folder: p.disk.id } : options, (stream, text) => {
       if (stream !== 'info') recorded.push(text);
       onOutput(stream, text);
     }, signal);

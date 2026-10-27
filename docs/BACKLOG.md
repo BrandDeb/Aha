@@ -20,9 +20,9 @@ Specs in [ROADMAP.md](ROADMAP.md): Tracks A and B, "Strategy, part two" and "Pla
 | Item | Status | Notes |
 |---|---|---|
 | A1a. Launch key on every route that runs programs; `npm run open` / `aha` | Done (PR #42) | SECURITY.md |
-| A1b. Open a folder in place: save, watch, move, terminal in the folder, `aha <path>` | Now (PR #42) | browser test pending |
-| A1c. Large repos: lazy file contents, background index, 50k files under 2 s; File System Access API in the browser | Next | |
-| A1d. Run and the dev server in the opened folder (not a copy) | Next | |
+| A1b. Open a folder in place: save, watch, move, terminal in the folder, `aha <path>` | Done (PR #42) | browser-tested |
+| A1c. Large repos: every name at once, text on demand and in the background; 50k files open in about 0.7 s in the browser | Done (PR #42) | File System Access API for browsers and the open time in the CI budget still to do |
+| A1d. Run, the terminal and the dev server in the opened folder (not a copy), never rewriting it | Done | dev server tested on the failure path only; a framework start in place not yet run end to end |
 | A2. Git as the backbone: proposals as branches, PRs with evidence | Next | |
 | A3. Bring my setup: Cursor, VS Code, Zed, Windsurf, JetBrains (settings, keys, rules, MCP) | Next | |
 | A4. Companion mode | Next | |

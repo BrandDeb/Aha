@@ -44,7 +44,7 @@ export interface DevServerHandle {
 
 const IDLE: DevState = { status: 'none', log: [], seq: 0 };
 
-export function useDevServer(projectName: string, files: Record<string, string>, active: boolean): DevServerHandle {
+export function useDevServer(projectName: string, files: Record<string, string>, active: boolean, folder?: string): DevServerHandle {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [state, setState] = useState<DevState>(IDLE);
   const [log, setLog] = useState<LogLine[]>([]);
@@ -57,6 +57,10 @@ export function useDevServer(projectName: string, files: Record<string, string>,
   useEffect(() => {
     filesRef.current = files;
   }, [files]);
+  const folderRef = useRef(folder);
+  useEffect(() => {
+    folderRef.current = folder;
+  }, [folder]);
 
   // The id is per project name and lives in localStorage, so it is read after mount
   useEffect(() => {
@@ -139,12 +143,14 @@ export function useDevServer(projectName: string, files: Record<string, string>,
 
   const start = useCallback(() => {
     if (!id) return;
+    // An opened folder: the server runs in the folder itself, where the editor already saves, so nothing is sent or synced
+    const inFolder = folderRef.current;
     const now = syncable(filesRef.current);
-    synced.current = now;
+    synced.current = inFolder ? null : now;
     setLog([]);
     seq.current = 0;
     setState({ status: 'starting', log: [], seq: 0 });
-    void post({ action: 'start', projectId: id, files: now }).then((result) => {
+    void post(inFolder ? { action: 'start', projectId: id, folder: inFolder } : { action: 'start', projectId: id, files: now }).then((result) => {
       if (!result) setState({ status: 'failed', error: 'The studio did not answer.', log: [], seq: 0 });
       else if (result.error && !result.status) setState({ status: 'failed', error: result.error, log: [], seq: 0 });
       else absorb(result);

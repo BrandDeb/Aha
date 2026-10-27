@@ -14,6 +14,8 @@ export interface RunOptions {
   entry: string;
   args?: string[];
   stdin?: string;
+  /** An opened folder's id (see folder-client.ts): the program runs in the folder itself, and no files are sent */
+  folder?: string;
 }
 
 export type RunOutcome = PythonDone & { ok: boolean; language?: string };
@@ -28,7 +30,7 @@ export async function runProject(
 ): Promise<RunOutcome> {
   const done = await streamCommand(
     '/api/run',
-    { projectId: pythonProjectId(projectName), language: options.language, entry: options.entry, args: options.args ?? [], stdin: options.stdin, files, env: getPythonEnv() },
+    { projectId: pythonProjectId(projectName), language: options.language, entry: options.entry, args: options.args ?? [], stdin: options.stdin, env: getPythonEnv(), ...(options.folder ? { folder: options.folder } : { files }) },
     onOutput,
     signal
   );

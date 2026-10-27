@@ -11,6 +11,7 @@ import fsSync from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { listensOnLoopbackOnly } from './host.ts';
+import { listFiles, readFolderFile, rootOf } from './folder.ts';
 import { detectLanguage, getLanguage, LANGUAGES, OUT_DIR, type Language, type LangStep } from './languages.ts';
 import { capture, collectFiles, createJobPool, createKeyedLock, diffFiles, isSafeRelativePath, runStep, writeProject } from './proc.ts';
 import { applyManaged, getToolchainState, installFor, MANAGED, refreshBinPaths } from './toolchains.ts';
@@ -50,6 +51,8 @@ export interface RunRequest {
   files: Record<string, string>;
   env: Record<string, string>;
   stdin?: string;
+  /** An opened folder (lib/folder.ts): the program runs in it, in place, and `files` is empty */
+  folder?: string;
 }
 
 const PROJECT_ID = /^[A-Za-z0-9_-]{8,40}$/;
@@ -63,19 +66,23 @@ export function parseRunRequest(body: unknown): RunRequest | { error: string } {
   if (typeof input.entry !== 'string' || !isSafeRelativePath(input.entry)) return { error: 'entry must be a file path inside the project' };
   if (input.language !== undefined && (typeof input.language !== 'string' || !getLanguage(input.language))) return { error: 'Unknown language' };
 
-  if (!input.files || typeof input.files !== 'object' || Array.isArray(input.files)) return { error: 'files must be an object of path -> content' };
-  const entries = Object.entries(input.files as Record<string, unknown>);
-  if (!entries.length || entries.length > MAX_RUN_FILES) return { error: `A project can have 1 to ${MAX_RUN_FILES} files` };
+  const folder = input.folder === undefined ? undefined : typeof input.folder === 'string' && PROJECT_ID.test(input.folder) ? input.folder : null;
+  if (folder === null) return { error: 'folder is invalid' };
   const files: Record<string, string> = {};
-  let total = 0;
-  for (const [name, content] of entries) {
-    if (!isSafeRelativePath(name)) return { error: `Invalid file path: ${name.slice(0, 80)}` };
-    if (typeof content !== 'string') return { error: `File content must be a string: ${name}` };
-    total += Buffer.byteLength(content, 'utf8');
-    files[name] = content;
+  if (!folder) {
+    if (!input.files || typeof input.files !== 'object' || Array.isArray(input.files)) return { error: 'files must be an object of path -> content' };
+    const entries = Object.entries(input.files as Record<string, unknown>);
+    if (!entries.length || entries.length > MAX_RUN_FILES) return { error: `A project can have 1 to ${MAX_RUN_FILES} files` };
+    let total = 0;
+    for (const [name, content] of entries) {
+      if (!isSafeRelativePath(name)) return { error: `Invalid file path: ${name.slice(0, 80)}` };
+      if (typeof content !== 'string') return { error: `File content must be a string: ${name}` };
+      total += Buffer.byteLength(content, 'utf8');
+      files[name] = content;
+    }
+    if (total > MAX_RUN_BYTES) return { error: `Project exceeds ${MAX_RUN_BYTES / 1024 / 1024} MB` };
+    if (!(input.entry in files)) return { error: 'entry must name a file in the project' };
   }
-  if (total > MAX_RUN_BYTES) return { error: `Project exceeds ${MAX_RUN_BYTES / 1024 / 1024} MB` };
-  if (!(input.entry in files)) return { error: 'entry must name a file in the project' };
 
   const rawArgs = input.args ?? [];
   if (!Array.isArray(rawArgs) || rawArgs.length > 50 || rawArgs.some((a) => typeof a !== 'string' || a.length > 1000 || a.includes('\0'))) return { error: 'args must be a list of short strings' };
@@ -92,7 +99,7 @@ export function parseRunRequest(body: unknown): RunRequest | { error: string } {
     }
   }
   if (input.stdin !== undefined && (typeof input.stdin !== 'string' || input.stdin.length > MAX_STDIN)) return { error: 'stdin must be text up to 100 KB' };
-  return { language: input.language as string | undefined, projectId: input.projectId, entry: input.entry, args: rawArgs as string[], files, env, stdin: input.stdin as string | undefined };
+  return { language: input.language as string | undefined, projectId: input.projectId, entry: input.entry, args: rawArgs as string[], files, env, stdin: input.stdin as string | undefined, ...(folder ? { folder } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +143,20 @@ export function runEnv(host: Record<string, string | undefined>, projectDir: str
   });
   // Toolchains the studio installed (mise) come after the system's own
   return { ...applyManaged(base, (bin, systemPath) => which(bin, systemPath) !== null), ...user };
+}
+
+/**
+ * A scratch copy gets a private HOME and the studio's shared caches; the user's own project gets their real home and
+ * caches, as in their own terminal (and nothing like `.home/` appears in it). Server secrets still stay out: the
+ * variables are runEnv's allow-list.
+ */
+export function folderEnv(env: Record<string, string>, host: Record<string, string | undefined> = process.env, home = os.homedir()): Record<string, string> {
+  const out: Record<string, string> = { ...env, HOME: home, USERPROFILE: home, DOTNET_CLI_HOME: home };
+  for (const key of ['GOCACHE', 'GOPATH', 'CARGO_HOME', 'npm_config_cache', 'BUN_INSTALL_CACHE_DIR', 'NUGET_PACKAGES', 'ZIG_GLOBAL_CACHE_DIR']) {
+    if (host[key] !== undefined) out[key] = host[key] as string;
+    else delete out[key];
+  }
+  return out;
 }
 
 /** The first executable named `bin` on PATH (or null); no process is started */
@@ -250,26 +271,40 @@ export function installHint(language: Language): string {
 
 export async function runLanguage(request: RunRequest, hooks: RunHooks): Promise<RunResult> {
   const started = Date.now();
-  const paths = Object.keys(request.files);
+  // An opened folder: the program runs in the user's own folder. What is there is read from disk, nothing is copied in
+  // or out, and what the program changes reaches the studio through the folder's watcher
+  const inFolder = request.folder !== undefined;
+  let folderRoot: string | null = null;
+  if (inFolder) {
+    try {
+      folderRoot = rootOf(request.folder);
+    } catch (error) {
+      return { code: null, ms: 0, changed: {}, removed: [], skipped: [], error: error instanceof Error ? error.message : 'That folder is not open' };
+    }
+  }
+  const paths = folderRoot ? (await listFiles(folderRoot)).paths : Object.keys(request.files);
   const language = request.language ? getLanguage(request.language) : detectLanguage(request.entry, paths);
   const result = (partial: Partial<RunResult>): RunResult => ({ language: language?.id, code: null, ms: Date.now() - started, changed: {}, removed: [], skipped: [], ...partial });
   if (!language) return result({ error: `The studio doesn’t know how to run ${path.basename(request.entry)}.` });
 
   return pool.run(() =>
-    lock(request.projectId, async () => {
-      const projectDir = path.join(RUN_PROJECTS, request.projectId);
+    lock(folderRoot ?? request.projectId, async () => {
+      const projectDir = folderRoot ?? path.join(RUN_PROJECTS, request.projectId);
       // Plus the folders this language's tools generate (Foundry's out/, Gleam's build/…)
       const keep = new Set([...KEEP, ...(language.buildDirs ?? [])]);
-      await writeProject(projectDir, request.files, { keep });
+      // Never in the user's folder: writeProject makes a folder match the files, which deletes what isn't in them
+      if (!folderRoot) await writeProject(projectDir, request.files, { keep });
       await refreshBinPaths();
-      await fs.mkdir(path.join(projectDir, '.home'), { recursive: true });
+      // The user's folder gets no `.home`; it does get the build output folder, kept out of Git by its own .gitignore
+      if (!folderRoot) await fs.mkdir(path.join(projectDir, '.home'), { recursive: true });
       await fs.mkdir(path.join(projectDir, OUT_DIR), { recursive: true });
+      if (folderRoot) await fs.writeFile(path.join(projectDir, OUT_DIR, '.gitignore'), '*\n').catch(() => {});
       for (const shared of ['go-build', 'gopath', 'cargo', 'npm', 'bun', 'nuget', 'zig']) await fs.mkdir(path.join(CACHE, shared), { recursive: true });
 
       const plan = language.plan({
         entry: request.entry,
         paths,
-        read: (p) => request.files[p],
+        read: (p) => (folderRoot ? readFolderFile(folderRoot, p) : request.files[p]),
         hasDir: (name) => fsSync.existsSync(path.join(projectDir, name)),
         args: request.args,
         windows: process.platform === 'win32',
@@ -278,14 +313,15 @@ export async function runLanguage(request: RunRequest, hooks: RunHooks): Promise
 
       // Every tool this plan needs must be installed before anything runs. Missing ones the studio
       // can provide are installed now (once; later runs reuse them), unless that is switched off.
-      let env = runEnv(process.env, projectDir, request.env);
+      const envFor = () => (folderRoot ? folderEnv(runEnv(process.env, projectDir, request.env)) : runEnv(process.env, projectDir, request.env));
+      let env = envFor();
       const missing = () => plan.find((step) => step.tool && !resolveTool(step.tool, env.PATH ?? env.Path ?? ''));
       if (missing() && MANAGED[language.id] && (await getToolchainState()).autoInstall) {
         hooks.onOutput('info', `${language.name} isn’t installed yet: installing it for the studio (first run only).\n`);
         const installed = await installFor(language.id, (text) => hooks.onOutput('info', text), hooks.signal);
         if (!installed.ok) return result({ error: `${installed.error}\n\n${installHint(language)}` });
         statusCache.delete(language.id);
-        env = runEnv(process.env, projectDir, request.env);
+        env = envFor();
       }
       const resolved: { step: LangStep; file: string; prefix: string[] }[] = [];
       for (const step of plan) {
@@ -322,6 +358,14 @@ export async function runLanguage(request: RunRequest, hooks: RunHooks): Promise
         if (last.code !== 0 || last.aborted || last.timedOut || last.truncated) break;
       }
 
+      if (folderRoot) {
+        return result({
+          code: last?.code ?? null,
+          timedOut: last?.timedOut || undefined,
+          truncated: last?.truncated || undefined,
+          error: last?.spawnError ? `Could not start ${language.name}: ${last.spawnError.message}` : last?.aborted ? 'stopped' : undefined,
+        });
+      }
       const { files: after, skipped } = await collectFiles(projectDir, {
         skipDirs: keep,
         maxFiles: MAX_RUN_FILES,
