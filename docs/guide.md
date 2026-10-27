@@ -1270,7 +1270,7 @@ collaboration relay and forwards every other upgrade (e.g. dev HMR) to Next.js.
 
 On your own machine the routes marked *local only*, and `/api/python`, `/api/run`, `/api/shell`, `/api/devserver`,
 `/api/skills`, `/api/extensions`, `/api/connectors`, `/api/remix` and `/api/autopilot`, need the launch key: the cookie
-the launch link sets, or an `X-Aha-Key` header with the key from `~/.aha/launch.json`. Without it they answer `401`.
+the launch link sets, or an `X-Aha-Key` header with the key from `~/.aha/launch.json`. Without it they answer `403` (a `GET` answers `{ enabled: false, locked: true }`).
 `GET /api/launch` says whether the key is required and whether this request has it.
 
 ### `POST /api/compile`

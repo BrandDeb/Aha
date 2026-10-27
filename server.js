@@ -186,7 +186,12 @@ function guard(req, res) {
   if (!KEY_REQUIRED) return false;
   const verdict = launch.decide(req, LAUNCH_KEY, PORT);
   if (verdict.action === 'deny') {
-    reply(res, 401, 'application/json', JSON.stringify({ error: 'This window was not opened with the studio’s launch link, so it can’t run programs or open files on this machine. Open the link the studio printed when it started (`npm run open` opens it again).', locked: true }));
+    // A page asking whether a feature is on gets a plain "not for this window"; anything that would do something is refused
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      reply(res, 200, 'application/json', JSON.stringify({ enabled: false, locked: true }));
+      return true;
+    }
+    reply(res, 403, 'application/json', JSON.stringify({ error: 'This window was not opened with the studio’s launch link, so it can’t run programs or open files on this machine. Open the link the studio printed when it started (`npm run open` opens it again).', locked: true }));
     return true;
   }
   if (verdict.action === 'unlock') {

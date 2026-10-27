@@ -48,7 +48,7 @@ function hasKey(headers, key, port) {
 /**
  * What to do with a request:
  *   { action: 'pass' }                         nothing to check, or it has the key
- *   { action: 'deny' }                         a guarded route without the key
+ *   { action: 'deny' }                         a guarded route without the key (server.js: "off" for GET, 403 otherwise)
  *   { action: 'unlock', location, cookie? }    a page opened with the key in its link: set the cookie, drop the key
  *   { action: 'unlock-failed', location }      a link with a wrong key (an old one from an earlier launch)
  */

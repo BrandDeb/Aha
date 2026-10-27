@@ -35,7 +35,7 @@ host runners are not.
 **The launch key**
 - Each start of the studio makes a random 192-bit key. The routes that run programs, install things, open files or
   maintain the studio (Python, other languages, the terminal, dev servers, the debugger, language servers, pipelines,
-  connectors, skills, extensions, toolchains, doctor, updates, autopilot) refuse requests without it, with `401`.
+  connectors, skills, extensions, toolchains, doctor, updates, autopilot) refuse requests without it: `403`, or `{ enabled: false, locked: true }` when a page only asks whether the feature is on.
 - It reaches the browser in the link the studio prints, the desktop app opens and `aha` opens. The server swaps it for
   an `HttpOnly`, `SameSite=Strict` cookie scoped to the port and redirects to the same page without it, so it doesn't
   stay in the address bar or history. Scripts can send it as an `X-Aha-Key` header. Keys are compared in constant time.
