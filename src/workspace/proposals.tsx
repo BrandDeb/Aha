@@ -19,6 +19,7 @@ import { runAgent } from '@/lib/agent/loop';
 import { callModelFor } from '@/lib/agent/model';
 import { parseReview, REVIEW_LABEL, REVIEWER_PROMPT, reviewInput, type Review } from '@/lib/agent/review';
 import { autoAcceptable, riskOf } from '@/lib/agent/risk';
+import { mergeProjects } from '@/lib/merge3';
 import { forkGoal, forkLaneId, type ForkDirection } from '@/lib/forks';
 import { linesWritten, recordWhy, WHY_FILE } from '@/lib/why';
 import { contractsOf } from '@/lib/contracts';
@@ -37,6 +38,7 @@ import { buildConnectorTools } from './connectors-client';
 import { getConnectors } from './connectors-config';
 import { useWorkspace } from './store';
 import { useToast } from './toasts';
+import { openConflicts } from './conflicts';
 
 export interface LogEntry {
   id: number;
@@ -618,9 +620,26 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
       const stage = laneStage(proposal);
       if (!stage) return;
       const current = projectRef.current.files;
-      const conflicts = stage.conflicts(current);
-      const chosen = (paths ?? Object.keys(stage.changes())).filter((p) => !conflicts.includes(p));
-      if (conflicts.length) notify({ kind: 'info', title: `${conflicts.length} file${conflicts.length > 1 ? 's' : ''} skipped`, detail: `${conflicts.join(', ')} changed since the agent started. Review them by hand.` });
+      const wanted = paths ?? Object.keys(stage.changes());
+      const conflicts = stage.conflicts(current).filter((p) => wanted.includes(p));
+      const chosen = wanted.filter((p) => !conflicts.includes(p));
+      // Files you edited since the agent started: merged with its version; where you both changed the same lines,
+      // the conflict editor asks
+      if (conflicts.length) {
+        const before = stage.serialize().before;
+        const pick = (source: (p: string) => string | null | undefined) => Object.fromEntries(conflicts.flatMap((p) => { const v = source(p); return typeof v === 'string' ? [[p, v]] : []; }));
+        const merge = mergeProjects(pick((p) => before[p]), pick((p) => current[p]), pick((p) => stage.read(p)));
+        const write = (resolved: Record<string, string>) => {
+          saveSnapshot(`Before merging: ${proposal.goal.slice(0, 40)}`);
+          const files = { ...Object.fromEntries(conflicts.filter((p) => p in merge.files).map((p) => [p, merge.files[p]])), ...resolved };
+          dispatch({ type: 'put', files, removed: merge.removed });
+          for (const p of conflicts) stage.revert(p);
+          update(id, (p) => ({ ...p, status: stage.size ? p.status : 'accepted', lanes: p.lanes.map((l) => (l.id === p.laneId ? { ...l, files: snapshotFiles(stage, isHarnessFile), saved: stage.serialize() } : l)) }));
+          notify({ kind: 'success', title: `Merged ${conflicts.length} file${conflicts.length > 1 ? 's' : ''} with your edits`, detail: 'The previous version is in History.' });
+        };
+        if (!merge.conflicts.length) write({});
+        else openConflicts({ title: `Merge the agent's changes with your edits`, theirs: 'the agent', conflicts: merge.conflicts, onApply: write });
+      }
       if (!chosen.length) return;
       const { files, removed } = stage.toPut(chosen);
       // Why-history: the lines this writes remember the goal they served

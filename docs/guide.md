@@ -79,7 +79,7 @@ A one-line tour; each links to the section with the details. The workspace is at
 
 | Feature | What it does |
 |---|---|
-| **Git and GitHub** | Pull, diff, branch, commit and push without overwriting newer work ([Signing in with GitHub](#signing-in-with-github)) |
+| **Git and GitHub** | Pull (a three-way merge with a conflict editor), diff, branch, commit and push without overwriting newer work ([Pulling](#pulling-and-when-both-sides-changed)) |
 | **Pipelines** | GitHub Actions or GitLab CI written, run here and watched ([DevOps](#devops-pipelines-in-the-studio)) |
 | **Optimize** | SEO, answer engines, social cards, accessibility and speed, with fixes ([Optimize](#optimize-seo-aeo-geo-and-the-rest)) |
 | **Field kits** | A project, its playbook, checks and house rules in one file ([Field kits](#field-kits)) |
@@ -998,6 +998,19 @@ numbers, types, functions and tags match the original; finer distinctions that n
 `this` versus other variables) do not carry over yet.
 
 ---
+
+### Pulling, and when both sides changed
+
+**Pull** on the branch you are working on merges it into your changes, the way `git pull` does: files only the branch
+changed take its version, files only you changed keep yours, and a file you both changed in different places gets
+both. Where you both changed the same lines, the **conflict editor** opens: each conflict shows your version and the
+branch's side by side, to keep yours, theirs or both (or all of one side for the file), and the result underneath can
+be edited by hand. **Apply merge** is enabled once no conflict is left; **Cancel** leaves your workspace as it was.
+Afterwards the workspace is on the branch's newest commit, so **Commit & push** works straight away. Pulling a
+different repository or branch still replaces the workspace (saved to History first).
+
+Proposals use the same merge. A file you edited after the agent started is merged with the agent's version when it is
+accepted: changes in different places combine, and the conflict editor opens where you both changed the same lines.
 
 ## Signing in with GitHub
 
