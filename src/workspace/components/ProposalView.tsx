@@ -294,7 +294,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
                 {supply.pending && <p className="mt-1 text-xs text-gray-500">Still asking the registry about the rest…</p>}
               </>
             ) : (
-              <p className="text-xs text-gray-500">Checking {supply.checked} new dependenc{supply.checked > 1 ? 'ies' : 'y'} with the registry…</p>
+              <p className="text-xs text-gray-500">{supply.checked ? `Checking ${supply.checked} new dependenc${supply.checked > 1 ? 'ies' : 'y'} with the registry…` : 'Checking the dependencies…'}</p>
             )}
           </div>
         )}
