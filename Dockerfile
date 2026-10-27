@@ -4,7 +4,7 @@
 # Stage 1: Build the Next.js application, on the build machine's own architecture.
 # The build output (.next) is plain JavaScript and the same for every platform; building it under emulation
 # (arm64 on an amd64 runner) crashed the build workers with SIGILL, so it is built once, natively.
-FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -28,7 +28,7 @@ RUN npm run build
 # the target's packages (--cpu/--libc pick its optional binaries, such as scriptc's compiler) with install scripts
 # off, and the one script that matters, scriptc's (it only copies its compiler into place), runs on its own.
 # bufferutil and utf-8-validate are not compiled; both fall back to plain JavaScript.
-FROM --platform=$BUILDPLATFORM node:24-alpine AS deps
+FROM --platform=$BUILDPLATFORM node:26-alpine AS deps
 ARG TARGETARCH
 
 WORKDIR /app
@@ -43,7 +43,7 @@ RUN set -e; \
   rm -rf node_modules/@zigc
 
 # Stage 2: Production image
-FROM node:24-alpine AS runner
+FROM node:26-alpine AS runner
 
 WORKDIR /app
 
