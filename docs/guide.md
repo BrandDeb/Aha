@@ -51,6 +51,7 @@ A one-line tour; each links to the section with the details. The workspace is at
 | **Build** | scriptc's nine outputs: native, WASM, LLVM IR, assembly, WAT, object, library… with timings and coverage |
 | **Live values** | Every line shows what it did as you type: values, returns, prints, errors; dead code fades ([Live values](#live-values)) |
 | **Rewind** | Scrub through a run and see every variable at each moment ([Rewind](#rewind)) |
+| **Language intelligence** | Completion, hover, go to definition, rename and problems for Python, Go and Rust from real language servers ([Language intelligence](#language-intelligence-python-go-rust)) |
 | **Debugger** | Breakpoints, stepping, the call stack, variables, watches and hover values for TypeScript, JavaScript and Python ([The debugger](#the-debugger)) |
 | **40+ languages** | Go, Rust, Python, Java, C#, Ruby, Zig, Swift… run here, toolchains installed on demand ([Other languages](#other-languages)) |
 | **Python (uv)** | Run, add and lock packages with uv, from a panel or the terminal ([Python and uv](#python-and-uv)) |
@@ -222,6 +223,31 @@ TypeScript runs through Node's type stripping, so lines match what you see and i
 find their `.ts` file. Python runs under debugpy, which uv adds for the run without changing your project. The
 debugger runs your program on the machine the studio runs on, so like Run it works in the local studio and the
 desktop app (or with `AHA_RUN=1`); the debugger itself only listens on 127.0.0.1.
+
+### Language intelligence (Python, Go, Rust)
+
+TypeScript and JavaScript are understood in the browser. For Python, Go and Rust the studio starts a real
+language server the first time you open a file in that language, and the editor gets what VS Code gets from it:
+
+| | |
+|---|---|
+| Completion | As you type, from the server (members after `.`, imports, keywords) |
+| Hover | The signature and documentation of what is under the mouse |
+| Go to definition | **F12** or Ctrl/⌘-click; a definition in another file opens in its tab |
+| References | **Shift+F12** |
+| Rename | **F2** renames everywhere the server finds it, across files |
+| Problems | Type and syntax errors underlined as you type |
+
+| Language | Server | Where it comes from |
+|---|---|---|
+| Python | Pyright | `basedpyright-langserver` or `pyright-langserver` from your PATH; otherwise installed on first use (the npm package, run with the studio's own Node) |
+| Go | gopls | From your PATH; otherwise `go install` on first use (needs Go) |
+| Rust | rust-analyzer | From your PATH (`rustup component add rust-analyzer`) |
+
+The status bar shows each server: ○ starting, ● ready, ✕ with the reason on hover. Servers run on the machine
+the studio runs on, so like Run they work in the local studio and the desktop app (or with `AHA_RUN=1`); each one
+gets a copy of the project's files for its language, can't be asked about files outside the project, and stops
+after 10 idle minutes.
 
 ## Contracts
 
@@ -1161,6 +1187,15 @@ state; then `POST { id, action }` with `continue`, `pause`, `stop`, `step` (`kin
 (`file`, `lines`), `frame` (`frameId`), `children` (`ref`) or `evaluate` (`expression`). `GET ?id=…&since=N`
 returns the status, the stack, the selected frame's scopes and the output after `N`. Same checks as `/api/run`.
 At most three sessions; an idle one ends after 15 minutes.
+
+### `/api/lsp` (local only)
+
+`POST { action: 'start', projectId, language, files }` starts (or reuses) the server for a language (`python`,
+`go`, `rust`) and returns `{ id, capabilities }`, installing it on first use. Then `POST { id, action: 'request',
+method, params }` for completion, hover, signature help, definition, references, document symbols and rename;
+`POST { id, action: 'notify', method, params }` for `didOpen`, `didChange`, `didClose` and `didSave`; and
+`GET ?id=…&since=N` waits up to 20 seconds for diagnostics. Other methods, and files outside the project, are
+refused. Same checks as `/api/run`; at most four servers at once.
 
 ### `/api/connectors`
 

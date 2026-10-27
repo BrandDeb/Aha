@@ -56,7 +56,7 @@ as a proposal with evidence, and vibe coding and hand-writing as equals.
 | Formatting, diagnostics for TS/JS | Done | |
 | **Extensions** (VS Code-style, from Open VSX) | Done (themes, snippets) | keybindings, language configuration and icon themes next; see section 4 |
 | Debugger (breakpoints, step, watch) | Done (TypeScript, JavaScript, Python) | conditional breakpoints, exceptions, Go and Rust next |
-| Language intelligence beyond TS (LSP: Python, Go, Rust, Solidity…) | Next | language servers on the local runtime, Monarch fallbacks in the browser |
+| Language intelligence beyond TS (LSP: Python, Go, Rust) | Done | Solidity, code actions and formatting next |
 | Merge-conflict editor (3-way) | Next | |
 | Vim and Emacs keymaps | Next | monaco-vim; ships as an extension |
 | Remote development (SSH / containers / Codespaces-style) | Later | desktop app first |

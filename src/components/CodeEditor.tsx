@@ -10,6 +10,7 @@ import { NODE_TYPES } from '@/lib/monaco-node-types';
 import { DEFAULT_APPEARANCE, accentTokens, syntaxColors } from '@/workspace/appearance';
 import { liveView } from '@/lib/live/display';
 import { attachExtensions, currentEditorTheme, useEditorTheme } from '@/workspace/extensions-client';
+import { attachLsp } from '@/workspace/lsp-client';
 import { currentDebugSession, evaluateExpression, pausedLineIn, toggleBreakpoint, useBreakpoints, useDebugSession } from '@/workspace/debug-client';
 import type { LiveResult } from '@/lib/live/shared';
 
@@ -305,6 +306,7 @@ export const configureMonaco: BeforeMount = (monaco) => {
   monacoInstance = monaco;
   defineThemes(monaco);
   attachExtensions(monaco);
+  attachLsp(monaco);
 };
 
 function editorOptions(fontSize: number, extensions: EditorExtensions) {

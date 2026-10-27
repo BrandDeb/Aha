@@ -140,6 +140,12 @@ editor gutter, local studio only. Rewind already covers "what happened"; this ad
 breakpoint in a TS and a Python program stops, steps and shows locals in a browser test.
 
 ### 6. Language intelligence beyond TypeScript (LSP)
+
+> **Shipped:** Python (Pyright), Go (gopls) and Rust (rust-analyzer): completion, hover, go to definition (across
+> files, in tabs), references, rename across files and diagnostics. Servers come from the PATH or install on first
+> use. Bridged over HTTP with a long poll rather than a WebSocket, so it uses the same checks as every other route.
+> Rename and go-to-definition pass a browser test in Python and Go. Next: Solidity, code actions and formatting.
+
 Language servers (pyright/basedpyright, gopls, rust-analyzer, solidity-ls) started on demand on the local runtime and
 bridged to Monaco over a WebSocket: completion, hover, go to definition, rename, diagnostics. *Done when* rename and
 go-to-definition work in Python and Go projects.
