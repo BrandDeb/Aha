@@ -25,7 +25,7 @@ export default function FAQPage() {
   return (
     <div className="app-bg min-h-screen">
       <SiteHeader active="/faq">
-        <Link href="/" className="btn btn-primary btn-sm">Open editor</Link>
+        <Link href="/" prefetch={false} className="btn btn-primary btn-sm">Open editor</Link>
       </SiteHeader>
 
       <main id="main" className="mx-auto max-w-3xl px-4 pt-16 pb-24">

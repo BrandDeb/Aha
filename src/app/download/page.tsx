@@ -14,7 +14,7 @@ export default function DownloadPage() {
   return (
     <div className="min-h-screen">
       <SiteHeader active="/download">
-        <Link href="/" className="btn btn-primary btn-sm">Open the studio</Link>
+        <Link href="/" prefetch={false} className="btn btn-primary btn-sm">Open the studio</Link>
       </SiteHeader>
       <main id="main" className="mx-auto max-w-6xl px-4 py-16" aria-labelledby="download-title">
         <Downloads heading="Aha! for your desktop." />

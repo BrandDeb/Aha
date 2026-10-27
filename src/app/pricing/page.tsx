@@ -31,7 +31,7 @@ export default function PricingPage() {
     <div className="min-h-screen">
       <JsonLd data={[softwareLd(siteUrl(), PLANS), faqLd(PRICING_FAQ.map((f) => ({ question: f.q, answer: f.a }))), breadcrumbLd(siteUrl(), [{ name: 'Home', path: '/landing' }, { name: 'Pricing', path: '/pricing' }])]} />
       <SiteHeader active="/pricing">
-        <Link href="/" className="btn btn-primary btn-sm">Open the studio</Link>
+        <Link href="/" prefetch={false} className="btn btn-primary btn-sm">Open the studio</Link>
       </SiteHeader>
 
       <main id="main">
