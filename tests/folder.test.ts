@@ -126,6 +126,7 @@ test('changes other programs make are reported; the studio’s own writes are no
   const root = project('watched', { 'a.txt': 'one' });
   const f = await open(root);
   const changes: FolderChange[] = [];
+  const seen = (): FolderChange[] => changes;
   const stop = watchFolder(f.id, (c) => changes.push(c), () => {});
   const settle = () => new Promise((r) => setTimeout(r, 600));
   await settle();
@@ -137,12 +138,12 @@ test('changes other programs make are reported; the studio’s own writes are no
   fs.writeFileSync(path.join(root, 'lib/b.txt'), 'new');
   fs.writeFileSync(path.join(root, 'node_modules.txt'), 'a file, not the folder');
   await settle();
-  const changed = Object.assign({}, ...changes.map((c) => c.changed));
+  const changed = Object.assign({}, ...seen().map((c) => c.changed));
   assert.equal(changed['a.txt'], 'three');
   assert.equal(changed['lib/b.txt'], 'new');
   fs.rmSync(path.join(root, 'lib'), { recursive: true });
   await settle();
-  assert.ok(changes.some((c) => c.removed.includes('lib/b.txt')), JSON.stringify(changes));
+  assert.ok(seen().some((c) => c.removed.includes('lib/b.txt')), JSON.stringify(changes));
   stop();
 });
 

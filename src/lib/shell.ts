@@ -122,10 +122,10 @@ async function runInFolder(request: ShellRequest, hooks: { onOutput: (stream: 's
  * variables are runEnv's allow-list.
  */
 export function folderEnv(env: Record<string, string>, host: Record<string, string | undefined> = process.env, home = os.homedir()): Record<string, string> {
-  const out = { ...env, HOME: home, USERPROFILE: home, DOTNET_CLI_HOME: home };
+  const out: Record<string, string> = { ...env, HOME: home, USERPROFILE: home, DOTNET_CLI_HOME: home };
   for (const key of ['GOCACHE', 'GOPATH', 'CARGO_HOME', 'npm_config_cache', 'BUN_INSTALL_CACHE_DIR', 'NUGET_PACKAGES', 'ZIG_GLOBAL_CACHE_DIR']) {
     if (host[key] !== undefined) out[key] = host[key] as string;
-    else delete (out as Record<string, string | undefined>)[key];
+    else delete out[key];
   }
   return out;
 }
