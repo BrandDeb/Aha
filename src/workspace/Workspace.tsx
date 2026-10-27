@@ -58,6 +58,8 @@ import { describeContracts } from '@/lib/contracts';
 import { describeWhy, parseWhy, whyByLine, WHY_FILE } from '@/lib/why';
 import { AWAY_MS, morningReport, type MorningReport } from '@/lib/morning';
 import { MorningReportDialog } from './components/MorningReportDialog';
+import { TraceFixDialog } from './components/TraceFixDialog';
+import { useConnectors } from './connectors-config';
 
 const SEEN_KEY = 'aha:last-seen';
 import { liveSummary } from '@/lib/live/display';
@@ -286,7 +288,7 @@ export function Workspace() {
   const [terminalHeight, setTerminalHeight] = useState(220);
   const [zen, setZen] = useState(false);
   const [awaySince, setAwaySince] = useState<number | null>(null);
-  const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project' | 'signin' | 'welcome' | 'morning'>(null);
+  const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project' | 'signin' | 'welcome' | 'morning' | 'trace'>(null);
   const [createStart, setCreateStart] = useState<{ tab: CreateTab; filter?: 'all' | 'typescript' | 'web' | 'python' | 'other' }>({ tab: 'describe' });
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
   const { status: update, refresh: refreshUpdate } = useUpdateStatus();
@@ -757,6 +759,7 @@ export function Workspace() {
   // ---------------------------------------------------------------------------
 
   const { failure, lastGood, dismiss: dismissFailure } = tracker;
+  const connectors = useConnectors();
   const [debugProposals, setDebugProposals] = useState<Record<string, string>>({});
   const startDebug = useCallback(
     (auto = false) => {
@@ -926,6 +929,7 @@ export function Workspace() {
       openPanel('debug');
       void startDebugging({ projectId: pythonProjectId(project.name), entry, files: project.files, env: getPythonEnv() });
     } },
+    { id: 'debug.trace', category: 'Debug', title: 'Fix a production error (paste a stack trace or Sentry link)', run: () => setDialog('trace') },
     { id: 'debug.stop', category: 'Debug', title: 'Stop debugging', keys: DEFAULT_KEYS['debug.stop'], enabled: debugStatus === 'running' || debugStatus === 'paused', run: () => void stopDebugging() },
     { id: 'debug.over', category: 'Debug', title: 'Step over', keys: DEFAULT_KEYS['debug.over'], enabled: debugStatus === 'paused', run: () => void stepDebugging('over') },
     { id: 'debug.into', category: 'Debug', title: 'Step into', keys: DEFAULT_KEYS['debug.into'], enabled: debugStatus === 'paused', run: () => void stepDebugging('into') },
@@ -1409,7 +1413,7 @@ export function Workspace() {
                 </div>
               )}
               <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto">
-                {shownPanel === 'debug' && <DebugPanel onOpen={(file, line) => openLocation({ file, line })} />}
+                {shownPanel === 'debug' && <DebugPanel onOpen={(file, line) => openLocation({ file, line })} onTrace={() => setDialog('trace')} />}
                 {shownPanel === 'build' && (
                   <BuildPanel result={lastBuild} building={building} coverage={coverage} analyzing={analyzing} onCoverage={() => void analyze()} lastRun={lastRun} />
                 )}
@@ -1590,6 +1594,16 @@ export function Workspace() {
             setDialog(null);
             setAwaySince(null);
           }}
+        />
+      )}
+      {dialog === 'trace' && (
+        <TraceFixDialog
+          files={project.files}
+          connectors={connectors}
+          onFix={(brief, trace) => {
+            if (!proposals.ask(brief, { approaches: 0, label: `Fix: ${trace.title.slice(0, 90)}`, origin: 'debug' })) openPanel('agent');
+          }}
+          onClose={() => setDialog(null)}
         />
       )}
       {dialog === 'welcome' && (

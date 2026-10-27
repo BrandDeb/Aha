@@ -461,6 +461,25 @@ fix arrives as a proposal with its evidence ("Verified · ran ✓"), and nothing
 Turn on **Debug failures automatically** in the Agent tab and a debugging proposal starts on its own for each new failure
 (once per distinct failure, one at a time). If it needs to run something, the bar says **Approve to continue**.
 
+#### Errors from production
+
+**Fix a production error** (Debug tab, or the command palette) takes what production gave you: a Node.js stack trace, a
+Python traceback, a log excerpt or a Sentry issue link. Before you send it, the dialog shows what it read: the error, the
+frames that are in this project (paths from the server, such as `/var/task/src/stats.js`, are matched to your files) and
+the name of the test it will ask for.
+
+The agent then works test first:
+
+1. It writes a test beside the code that failed (`src/stats.test.js` with `node:test`, or `test_stats.py` with
+   `unittest`) that calls it the way production did.
+2. It runs the test and shows it failing with the same error. A test that passes doesn't reproduce the bug, so it keeps
+   going until one fails.
+3. It fixes the root cause, runs the same test again and shows it passing.
+
+The result is a proposal with the fix and the test, so the error can't come back unnoticed. With the
+[Sentry connector](#connectors) connected, a pasted issue link is enough: the agent reads the full event (stack, request,
+release) through it. Without it, the agent works from the text you pasted.
+
 ### The worker: an AI teammate that codes alongside you
 
 The **Worker** tab turns the agent into a colleague who keeps going while you code. It looks at the project the way a good
