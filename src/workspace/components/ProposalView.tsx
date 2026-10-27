@@ -7,7 +7,7 @@
  * a lane you can switch between before accepting one.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DiffView } from '@/components/CodeEditor';
 import { chipsFor, type Tone } from '@/lib/agent/evidence';
 import { riskOf, type RiskScore } from '@/lib/agent/risk';
@@ -15,6 +15,10 @@ import { supplyChainOf, useSupplyChainVersion } from '../supply-chain-client';
 import { citedMemory, MEMORY_FILE, parseMemory } from '@/lib/memory';
 import { ChangeProof } from './ChangeProof';
 import { ForkCompare } from './ForkCompare';
+import { BrowserPreview } from './PreviewPane';
+import { compareScores, parseReport, scoreOf, type DesignScore } from '@/lib/design-pass';
+import { browserPreviewSupport } from '@/lib/browser-preview';
+import { Stage } from '@/lib/agent/stage';
 import { REVIEW_LABEL, reviewFollowUp, type Review } from '@/lib/agent/review';
 import { problemOf } from '@/lib/agent/problems';
 import type { ToolCall } from '@/lib/agent/types';
@@ -52,6 +56,66 @@ function RiskChip({ risk }: { risk: RiskScore }) {
         ))}
       </ul>
     </details>
+  );
+}
+
+const noop = () => {};
+
+/**
+ * The design pass's before and after: the screenshot the pass started from, and the proposal's own version built
+ * off screen at the same width, measured and captured once the work is ready
+ */
+function DesignCompare({ design, project, saved, measure, onAfter }: { design: NonNullable<Proposal['design']>; project: Record<string, string>; saved: Proposal['lanes'][number]['saved'] | undefined; measure: boolean; onAfter: (image: string | null, score: DesignScore) => void }) {
+  // The project with this proposal's changes, when the preview can build it in the browser
+  const files = useMemo(() => (saved?.edits.length && browserPreviewSupport(project).ok ? Stage.restore(project, saved).files() : null), [project, saved]);
+  const [ready, setReady] = useState(false);
+  const [designs, setDesigns] = useState(0);
+  // Give the page a moment after it builds (fonts, CSS runtimes) before measuring it
+  useEffect(() => {
+    if (!ready || !measure) return;
+    const timer = setTimeout(() => setDesigns(1), 900);
+    return () => clearTimeout(timer);
+  }, [ready, measure]);
+  const lines = design.afterScore ? compareScores(design.score, design.afterScore) : [];
+  const shot = (src: string | null | undefined, label: string) => (
+    <figure className="min-w-0 flex-1">
+      <figcaption className="mb-1 text-[11px] text-gray-500">{label}</figcaption>
+      {/* eslint-disable-next-line @next/next/no-img-element -- a data: URL screenshot; there is nothing to optimise */}
+      {src ? <img src={src} alt={`${label}: the page`} className="w-full rounded-md border border-border bg-white" /> : <div className="flex aspect-video items-center justify-center rounded-md border border-dashed border-border text-[11px] text-gray-500">{src === null ? 'Could not capture the page' : 'Measured when the work is ready…'}</div>}
+    </figure>
+  );
+  return (
+    <section aria-label="Design pass" className="max-w-4xl space-y-2 rounded-lg border border-border p-3">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 className="text-xs text-gray-300">Design pass</h3>
+        <span className="text-[11px] text-gray-500">{design.findings.join(' · ')}</span>
+      </div>
+      <div className="flex gap-3">
+        {shot(design.before, 'Before')}
+        {shot(design.after, 'After')}
+      </div>
+      {lines.length > 0 && <p className="font-mono text-[11px] text-gray-400" aria-label="Measured before and after">{lines.join(' · ')}</p>}
+      {measure && files && (
+        <div aria-hidden="true" style={{ position: 'fixed', left: -20000, top: 0, width: design.width || 1024, height: 800 }}>
+          <BrowserPreview
+            files={files}
+            reloads={0}
+            width={null}
+            picking={false}
+            snapshots={0}
+            onState={(s) => setReady(s.status === 'ready')}
+            onConsole={noop}
+            onPicked={noop}
+            onSnapshot={noop}
+            designs={designs}
+            onDesign={(raw, image) => {
+              const report = parseReport(raw);
+              onAfter(image, report ? scoreOf(report) : { fontSizes: 0, offGridSpacing: 0, contrastFailures: 0, emptyLists: 0 });
+            }}
+          />
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -194,7 +258,7 @@ function SecondOpinion({ review, settled, onPick, onSend }: { review: Review; se
 }
 
 export function ProposalView({ proposal }: { proposal: Proposal }) {
-  const { stop, answer, accept, discard, selectLane, followUp, close } = useProposals();
+  const { stop, answer, accept, discard, selectLane, followUp, close, setDesignAfter } = useProposals();
   const workspace = useWorkspace();
   const { settings } = workspace;
   const actions = useActions();
@@ -213,6 +277,7 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
   const supply = working || !files.length ? null : supplyChainOf(files);
   const risk = working || !files.length ? null : riskOf({ files, evidence, review: lane?.review?.status === 'done' ? lane.review : null, supplyChain: supply?.findings });
   const project = files.filter((f) => !f.path.startsWith('agent/') && f.path !== 'AGENTS.md');
+  // The design pass's after: the project with this proposal's changes, when the preview can build it in the browser
   // Memory the summary cites: what the project remembered (and what this proposal adds to it)
   const memoryText = files.find((f) => f.path === MEMORY_FILE)?.after ?? workspace.project.files[MEMORY_FILE];
   const cited = working ? [] : citedMemory(proposal.outcome?.summary, parseMemory(memoryText));
@@ -325,6 +390,15 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
           </div>
         ) : (
           proposal.outcome && !working && <p className="max-w-4xl whitespace-pre-wrap text-sm leading-relaxed text-gray-300">{proposal.outcome.summary}</p>
+        )}
+        {proposal.design && (
+          <DesignCompare
+            design={proposal.design}
+            project={workspace.project.files}
+            saved={lane?.saved}
+            measure={!working && proposal.design.after === undefined}
+            onAfter={(image, score) => setDesignAfter(proposal.id, image, score)}
+          />
         )}
         {cited.length > 0 && (
           <div role="note" aria-label="Memory used" className="max-w-4xl rounded-lg border border-border px-3 py-2 text-xs text-gray-400">

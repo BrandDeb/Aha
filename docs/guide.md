@@ -57,6 +57,7 @@ A one-line tour; each links to the section with the details. The workspace is at
 | **Python (uv)** | Run, add and lock packages with uv, from a panel or the terminal ([Python and uv](#python-and-uv)) |
 | **Web apps** | Vite, Next.js, Nuxt, SvelteKit, Astro… with live preview, in the browser or on a dev server ([Web apps](#web-apps-and-live-preview)) |
 | **Click to edit** | Pick an element in the running app: edit its text and classes in the source, or ask for a change ([Web apps](#web-apps-and-live-preview)) |
+| **Design pass** | One click measures type scale, spacing, contrast and empty and loading states; the fix comes back with before and after screenshots ([Web apps](#web-apps-and-live-preview)) |
 | **Extensions** | VS Code colour themes and snippets from Open VSX, read and never run ([Extensions](#extensions)) |
 | **Smart contracts** | Solidity compiled in the browser, deployed to an in-page chain or your wallet, every function a form ([Smart contracts](#smart-contracts-deploy--run)) |
 
@@ -943,6 +944,21 @@ column; Vue, Svelte and plain HTML are found by their text and classes) and a ca
 Text that is an expression (`{count}`) is left to the agent; only literal text and plain class strings are edited in
 place. **⇩** saves the built app as a single HTML page you can send to anyone: it opens in any browser, no studio needed
 (packages load from esm.sh).
+
+**Design pass.** In the in-browser preview, press **✦ Design pass**. The studio measures the page as it renders:
+
+- **Type scale:** the font sizes text uses; more than six, or two within 2px of each other, is flagged.
+- **Spacing:** the margins, padding and gaps in use, flagged when they are off a 4px grid.
+- **Contrast:** every piece of text against what is actually behind it, held to WCAG AA (4.5:1, or 3:1 for large text).
+- **Empty lists:** lists and tables on screen with nothing in them.
+
+It also reads the source for data that loads with nothing shown meanwhile (no loading state) and lists with nothing for
+when they have no items (no empty state).
+
+If everything holds, it says so. Otherwise the findings go to the agent with a screenshot of the page, and the proposal
+shows **Before** and **After** side by side. The after is the proposal's own version, built off screen at the same
+width and measured the same way, with what changed beneath ("contrast failures: 3 → 0"). Pictures from other sites are
+blank in the screenshots; the measurements don't depend on them.
 
 Like **Other languages** below, this runs your project's code (and its packages' install scripts) on the machine hosting
 the studio, so it is on only when the studio listens on that machine alone. `AHA_DEV=0` turns it off and `=1` forces
