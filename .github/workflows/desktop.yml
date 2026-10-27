@@ -213,7 +213,7 @@ jobs:
           [ -n "$ok" ] || { echo "::error::The installed app's server did not start"; exit 1; }
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aha-${{ matrix.target }}
           path: ${{ matrix.artifact }}
@@ -234,7 +234,7 @@ jobs:
       group: desktop-publish
       cancel-in-progress: false
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: aha-*
           path: built
