@@ -184,7 +184,10 @@ export function Terminal({ user, registerRunner }: { user?: string; registerRunn
         return;
       }
       await runStreamed(`$ ${line}`, async (onOutput, signal) => {
-        const done = await streamCommand('/api/shell', { projectId: pythonProjectId(p.name), files: projectRef.current.files, command: line, cwd }, onOutput, signal);
+        // An opened folder: the command runs in it, in place, and its changes arrive through the folder's watcher
+        const disk = projectRef.current.disk;
+        const body = disk ? { projectId: pythonProjectId(p.name), folder: disk.id, command: line, cwd } : { projectId: pythonProjectId(p.name), files: projectRef.current.files, command: line, cwd };
+        const done = await streamCommand('/api/shell', body, onOutput, signal);
         if (Object.keys(done.changed).length || done.removed.length) dispatch({ type: 'put', files: done.changed, removed: done.removed });
         return { ...done, ok: done.code === 0 && !done.error };
       });

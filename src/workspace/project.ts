@@ -12,6 +12,8 @@ export interface Project {
   folders: string[];
   /** File compiled by Build/Run */
   entry: string;
+  /** A folder on this machine the project is opened from (lib/folder.ts): edits are saved there, in place */
+  disk?: { id: string; root: string };
 }
 
 export interface TreeNode {

@@ -7,12 +7,14 @@
  * that is the user's own machine. Server only.
  */
 
+import os from 'node:os';
 import path from 'node:path';
 import { LANGUAGES } from './languages.ts';
 import { KEEP, RUN_PROJECTS, runEnv, type RunResult } from './polyglot.ts';
 import { shellFor } from './pipelines/run.ts';
 import { collectFiles, createJobPool, createKeyedLock, diffFiles, isSafeRelativePath, runStep, writeProject } from './proc.ts';
 import { refreshBinPaths } from './toolchains.ts';
+import { rootOf } from './folder.ts';
 
 export interface ShellRequest {
   projectId: string;
@@ -20,6 +22,8 @@ export interface ShellRequest {
   command: string;
   /** Directory inside the project to run in ('' for the root) */
   cwd: string;
+  /** An opened folder (lib/folder.ts): the command runs in it, in place, and nothing is copied either way */
+  folder?: string;
 }
 
 const PROJECT_ID = /^[A-Za-z0-9_-]{8,40}$/;
@@ -35,6 +39,10 @@ export function parseShellRequest(body: unknown): ShellRequest | { error: string
   if (typeof input.command !== 'string' || !input.command.trim() || input.command.length > 4000 || input.command.includes('\0')) return { error: 'command must be a line of text' };
   const cwd = typeof input.cwd === 'string' ? input.cwd.replace(/^\/+|\/+$/g, '') : '';
   if (cwd && !isSafeRelativePath(cwd)) return { error: 'cwd must be a folder inside the project' };
+  if (typeof input.folder === 'string') {
+    if (!/^[A-Za-z0-9_-]{8,40}$/.test(input.folder)) return { error: 'folder is invalid' };
+    return { projectId: input.projectId, files: {}, command: input.command, cwd, folder: input.folder };
+  }
   if (!input.files || typeof input.files !== 'object' || Array.isArray(input.files)) return { error: 'files must be an object of path -> content' };
   const entries = Object.entries(input.files as Record<string, unknown>);
   if (entries.length > MAX_FILES) return { error: `A project can have up to ${MAX_FILES} files` };
@@ -55,7 +63,8 @@ const lock = createKeyedLock();
 export async function runShell(request: ShellRequest, hooks: { onOutput: (stream: 'stdout' | 'stderr' | 'info', text: string) => void; signal?: AbortSignal }): Promise<RunResult> {
   const started = Date.now();
   return pool.run(() =>
-    lock(request.projectId, async () => {
+    lock(request.folder ?? request.projectId, async () => {
+      if (request.folder) return runInFolder(request, hooks, started);
       const dir = path.join(RUN_PROJECTS, request.projectId);
       // Dependencies, build output and caches stay in the folder; they are never sent back as project files
       const keep = new Set([...KEEP, ...LANGUAGES.flatMap((l) => l.buildDirs ?? []), 'dist', 'build', '.next', '.aha-ci']);
@@ -81,4 +90,42 @@ export async function runShell(request: ShellRequest, hooks: { onOutput: (stream
       });
     })
   );
+}
+
+/** A command in an opened folder: the files are already there, and the folder's watcher reports what it changes */
+async function runInFolder(request: ShellRequest, hooks: { onOutput: (stream: 'stdout' | 'stderr' | 'info', text: string) => void; signal?: AbortSignal }, started: number): Promise<RunResult> {
+  const result = (partial: Partial<RunResult>): RunResult => ({ code: null, ms: Date.now() - started, changed: {}, removed: [], skipped: [], ...partial });
+  let dir: string;
+  try {
+    dir = rootOf(request.folder);
+  } catch (error) {
+    return result({ error: error instanceof Error ? error.message : 'That folder is not open' });
+  }
+  await refreshBinPaths();
+  const env: Record<string, string> = { ...folderEnv(runEnv(process.env, dir, {})), TERM: 'dumb', AHA_TERMINAL: '1' };
+  const shell = shellFor(undefined, request.command, env.PATH ?? env.Path ?? '');
+  if ('error' in shell) return result({ error: shell.error });
+  const cwd = path.resolve(dir, request.cwd);
+  if (!(cwd === dir || cwd.startsWith(dir + path.sep))) return result({ error: 'cwd is outside the project' });
+  const outcome = await runStep({ file: shell.file, args: shell.args, cwd, env, timeoutMs: TIMEOUT_MS, budget: { left: MAX_OUTPUT }, maxOutputBytes: MAX_OUTPUT, onOutput: hooks.onOutput, signal: hooks.signal });
+  return result({
+    code: outcome.code,
+    timedOut: outcome.timedOut || undefined,
+    truncated: outcome.truncated || undefined,
+    error: outcome.spawnError ? `Could not start the shell: ${outcome.spawnError.message}` : outcome.aborted ? 'stopped' : undefined,
+  });
+}
+
+/**
+ * A scratch copy gets a private HOME and the studio's shared caches; the user's own project gets their real home and
+ * caches, as in their own terminal (and nothing like `.home/` appears in it). Server secrets still stay out: the
+ * variables are runEnv's allow-list.
+ */
+export function folderEnv(env: Record<string, string>, host: Record<string, string | undefined> = process.env, home = os.homedir()): Record<string, string> {
+  const out = { ...env, HOME: home, USERPROFILE: home, DOTNET_CLI_HOME: home };
+  for (const key of ['GOCACHE', 'GOPATH', 'CARGO_HOME', 'npm_config_cache', 'BUN_INSTALL_CACHE_DIR', 'NUGET_PACKAGES', 'ZIG_GLOBAL_CACHE_DIR']) {
+    if (host[key] !== undefined) out[key] = host[key] as string;
+    else delete (out as Record<string, string | undefined>)[key];
+  }
+  return out;
 }

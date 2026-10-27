@@ -52,6 +52,8 @@ import { useContracts } from './contracts-client';
 import { useAutocomplete } from './autocomplete';
 import { usePersistedFlag } from './layout';
 import { useLaunchState } from './launch-client';
+import { foldersAvailable, useFolderSync } from './folder-client';
+import { OpenFolderDialog } from './components/OpenFolderDialog';
 import { Box, Branch, Code, Command as CommandIcon, Files, FilePlus, Gear, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, Search, Sparkle, Wrench } from './components/Icons';
 import type { CreateTab } from './components/CreateDialog';
 import { useCiOnSave } from './ci-on-save';
@@ -208,6 +210,15 @@ export function Workspace() {
   const { project, tabs, active, split, git, settings, dispatch, hydrated, updateSettings, saveSnapshot } = ws;
   const { notify } = useToast();
   const launch = useLaunchState();
+  const adoptFolder = useFolderSync({ project, hydrated, tabs, active, dispatch, notify });
+  const [canOpenFolders, setCanOpenFolders] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void foldersAvailable().then((ok) => live && setCanOpenFolders(ok));
+    return () => {
+      live = false;
+    };
+  }, []);
   const proposals = useProposals();
   const { open: openProposal, close: closeProposal } = proposals;
   const askRef = useRef<HTMLInputElement | null>(null);
@@ -292,7 +303,7 @@ export function Workspace() {
   const [terminalHeight, setTerminalHeight] = useState(220);
   const [zen, setZen] = useState(false);
   const [awaySince, setAwaySince] = useState<number | null>(null);
-  const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project' | 'signin' | 'welcome' | 'morning' | 'trace'>(null);
+  const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project' | 'signin' | 'welcome' | 'morning' | 'trace' | 'folder'>(null);
   const [createStart, setCreateStart] = useState<{ tab: CreateTab; filter?: 'all' | 'typescript' | 'web' | 'python' | 'other' }>({ tab: 'describe' });
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
   const { status: update, refresh: refreshUpdate } = useUpdateStatus();
@@ -933,6 +944,7 @@ export function Workspace() {
     ...(liveAvailable ? [{ id: 'view.live', category: 'Editor', title: liveOn ? 'Turn off live values' : 'Turn on live values (show what each line did)', run: () => setLiveOn(!liveOn) }] : []),
     { id: 'file.new-project', category: 'File', title: 'Create: describe an app, gallery, stack builder, templates…', keys: DEFAULT_KEYS['file.new-project'], run: () => setDialog('templates') },
     { id: 'file.import-export', category: 'File', title: 'Import & export…', keys: DEFAULT_KEYS['file.import-export'], run: () => setDialog('project') },
+    ...(canOpenFolders ? [{ id: 'file.open-folder', category: 'File', title: 'Open a folder on this machine…', run: () => setDialog('folder') }] : []),
     { id: 'view.tour', category: 'View', title: 'Tour this project (five stops, for newcomers)', run: () => openPanel('tour') },
     { id: 'view.morning', category: 'View', title: 'What happened while I was away (morning report)', run: openMorning },
     { id: 'view.palette', category: 'View', title: 'Command palette', keys: DEFAULT_KEYS['view.palette'], run: () => setDialog('palette') },
@@ -970,7 +982,7 @@ export function Workspace() {
     { id: 'collab.toggle', category: 'Collaboration', title: collab ? 'Leave live session' : 'Start live session', run: () => setCollab((v) => !v) },
     { id: 'prefs.settings', category: 'Preferences', title: 'Settings', keys: DEFAULT_KEYS['prefs.settings'], run: () => { setSettingsTab('general'); setDialog('settings'); } },
     { id: 'prefs.maintenance', category: 'Preferences', title: 'Updates and health checks', run: () => { setSettingsTab('maintenance'); setDialog('settings'); } },
-  ], [compileOrRun, runApp, web, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, openMorning, setShowExplorer, setShowPanel, collab, liveAvailable, liveOn, setLiveOn, ciAvailable, ciOn, setCiOn, debugStatus, project.entry, project.files, project.name, notify]);
+  ], [compileOrRun, runApp, web, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, openMorning, setShowExplorer, setShowPanel, collab, liveAvailable, liveOn, setLiveOn, ciAvailable, ciOn, setCiOn, debugStatus, project.entry, project.files, project.name, notify, canOpenFolders]);
 
   const bindings = useMemo(() => {
     const map: Record<string, string> = { ...DEFAULT_KEYS, ...settings.keybindings };
@@ -1194,7 +1206,8 @@ export function Workspace() {
                 <FileTree errorCounts={errorCounts} onCollapse={() => setShowExplorer(false)} collapseTitle={`Collapse the explorer (${formatCombo(bindings['view.explorer'] ?? '', isMac)})`} />
                 <div className="flex items-center gap-1 border-t border-border p-2">
                   <button onClick={() => setDialog('templates')} className="btn btn-ghost btn-sm flex-1">Create</button>
-                  <button onClick={() => setDialog('project')} className="btn btn-ghost btn-sm flex-1">Import / export</button>
+                  {canOpenFolders && <button onClick={() => setDialog('folder')} className="btn btn-ghost btn-sm flex-1">Open folder</button>}
+                  <button onClick={() => setDialog('project')} className="btn btn-ghost btn-sm flex-1" title="Import & export">{canOpenFolders ? 'Import' : 'Import / export'}</button>
                 </div>
               </>
             ) : (
@@ -1523,6 +1536,7 @@ export function Workspace() {
               ⑂ {git.branch}{Object.keys(changes).length ? ` · ${Object.keys(changes).length} changed` : ''}
             </button>
           )}
+          {project.disk && <span className="hidden max-w-[28ch] truncate px-1.5 sm:inline" title={`Saved in place: ${project.disk.root}`}>⌂ {project.disk.root}</span>}
           <span className="hidden px-1.5 sm:inline" title="Entry file">{project.entry || 'no entry file'}</span>
           {Object.entries(lspStatus).map(([lang, st]) =>
             st && st.status !== 'off' ? (
@@ -1666,6 +1680,16 @@ export function Workspace() {
       {viewer && <ArtifactDialog result={viewer} theme={settings.theme} onClose={() => setViewer(null)} />}
       <ConflictHost />
       {dialog === 'project' && <ProjectDialog user={user} onClose={() => setDialog(null)} />}
+      {dialog === 'folder' && (
+        <OpenFolderDialog
+          onOpened={(opened) => {
+            if (!project.disk) saveSnapshot('Before opening a folder');
+            adoptFolder(opened);
+            notify({ kind: 'success', title: `Opened ${opened.name}`, detail: `${Object.keys(opened.files).length} files · edits save in place` });
+          }}
+          onClose={() => setDialog(null)}
+        />
+      )}
       {dialog === 'signin' && (
         <SignInDialog
           onClose={() => setDialog(null)}

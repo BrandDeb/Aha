@@ -4,6 +4,7 @@
  * see launch-key.js); if not, starts it under its supervisor first and waits until it is ready.
  *
  *   aha            open the studio in your browser
+ *   aha <folder>   open a folder on this machine in it (aha . for the current one); edits save in place
  *   aha --print    print the link instead of opening it
  */
 
@@ -43,12 +44,32 @@ async function waitForStudio() {
   return null;
 }
 
+/** Ask the running studio to open a folder; its id goes in the link (the path never does) */
+async function openFolder(info, folder) {
+  const response = await fetch(new URL('/api/folder', info.url), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Aha-Key': info.key },
+    body: JSON.stringify({ action: 'open', path: folder }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `The studio answered ${response.status}`);
+  return data;
+}
+
 async function main(argv) {
   const print = argv.includes('--print');
-  const unknown = argv.filter((a) => a !== '--print');
-  if (unknown.length) {
-    console.error(`Unknown option: ${unknown[0]}\nUsage: aha [--print]`);
+  const rest = argv.filter((a) => a !== '--print');
+  const unknown = rest.filter((a) => a.startsWith('-'));
+  if (unknown.length || rest.length > 1) {
+    console.error(`${unknown.length ? `Unknown option: ${unknown[0]}` : 'Give one folder'}\nUsage: aha [folder] [--print]`);
     return 2;
+  }
+  // `npm run open -- .` runs from the studio's folder; npm says where it was typed
+  const here = process.env.npm_lifecycle_event === 'open' && process.env.INIT_CWD ? process.env.INIT_CWD : process.cwd();
+  const folder = rest[0] ? path.resolve(here, rest[0]) : null;
+  if (folder && !fs.existsSync(folder)) {
+    console.error(`There is no folder at ${folder}`);
+    return 1;
   }
   let info = launch.readLaunchFile();
   if (!info) {
@@ -60,7 +81,17 @@ async function main(argv) {
       return 1;
     }
   }
-  const url = launch.launchUrl(info.url, info.key);
+  let url = launch.launchUrl(info.url, info.key);
+  if (folder) {
+    try {
+      const opened = await openFolder(info, folder);
+      url += `&folder=${encodeURIComponent(opened.id)}`;
+      console.log(`Opening ${opened.root} (${Object.keys(opened.files).length} files)`);
+    } catch (error) {
+      console.error(`Couldn't open ${folder}: ${error.message}`);
+      return 1;
+    }
+  }
   if (print) console.log(url);
   else openInBrowser(url);
   return 0;
