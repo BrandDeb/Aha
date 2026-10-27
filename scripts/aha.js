@@ -86,7 +86,7 @@ async function main(argv) {
     try {
       const opened = await openFolder(info, folder);
       url += `&folder=${encodeURIComponent(opened.id)}`;
-      console.log(`Opening ${opened.root} (${Object.keys(opened.files).length} files)`);
+      console.log(`Opening ${opened.root} (${opened.paths.length} files)`);
     } catch (error) {
       console.error(`Couldn't open ${folder}: ${error.message}`);
       return 1;

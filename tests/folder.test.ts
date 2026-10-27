@@ -4,9 +4,9 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { browse, closeFolder, inSkippedDir, LIMITS, looksBinary, makeDir, movePath, openFolder, reloadFolder, removePath, resolveInside, watchFolder, writeFile, type FolderChange } from '../src/lib/folder.ts';
+import { browse, closeFolder, inSkippedDir, LIMITS, looksBinary, makeDir, movePath, openFolder, priorityOrder, readMany, reloadFolder, removePath, resolveInside, watchFolder, writeFile, type FolderChange } from '../src/lib/folder.ts';
 import { folderEnv, parseShellRequest, runShell } from '../src/lib/shell.ts';
-import { diffAgainstDisk, folderProject, moveInBaseline } from '../src/workspace/folder-diff.ts';
+import { diffAgainstDisk, folderProject, moveInBaseline, nextBatch, pathsUnder } from '../src/workspace/folder-diff.ts';
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'aha-folder-')));
 const opened: string[] = [];
@@ -63,8 +63,15 @@ test('a plain folder: text files load, dependencies and binaries stay out', asyn
   assert.equal(f.root, root);
   assert.equal(f.name, 'plain');
   assert.equal(f.git, false);
+  // Every name the studio can use is listed; text comes for the ones it can read, and binary or large files are
+  // found out when they are asked for
+  assert.deepEqual(f.paths, ['big.txt', 'logo.png', 'README.md', 'src/main.ts'].sort());
   assert.deepEqual(Object.keys(f.files).sort(), ['README.md', 'src/main.ts']);
-  assert.deepEqual(f.skipped.map((s) => `${s.path}:${s.reason}`).sort(), ['big.txt:large', 'has space.txt:name', 'logo.png:binary']);
+  assert.deepEqual(f.skipped.map((s) => `${s.path}:${s.reason}`), ['has space.txt:name']);
+  const more = await readMany(f.id, ['logo.png', 'big.txt', 'README.md']);
+  assert.deepEqual(more.unreadable.map((u) => `${u.path}:${u.reason}`).sort(), ['big.txt:large', 'logo.png:binary']);
+  assert.deepEqual(Object.keys(more.files), ['README.md']);
+  assert.equal(more.handled, 3);
   // Opening it again gives the same folder
   assert.equal((await openFolder(root)).id, f.id);
   assert.equal((await reloadFolder(f.id)).files['src/main.ts'], 'console.log(1)\n');
@@ -180,4 +187,45 @@ test('saving: only what changed since the baseline, and moves keep the baseline 
   moveInBaseline(base, 'dir', 'lib/dir');
   assert.deepEqual([...base.keys()].sort(), ['a.ts', 'b.ts', 'lib/dir/c.ts']);
   assert.deepEqual(diffAgainstDisk({ 'a.ts': '1', 'b.ts': '2', 'lib/dir/c.ts': '3' }, base), { write: {}, remove: [] });
+});
+
+test('the front door loads first: entry, README, manifests, then shallow before deep', () => {
+  const order = priorityOrder(['z/deep/a/b.ts', 'src/util.ts', 'package.json', 'src/main.ts', 'README.md', 'docs/guide.md', 'a.txt']);
+  assert.deepEqual(order.slice(0, 3), ['src/main.ts', 'README.md', 'package.json']);
+  assert.deepEqual(order.slice(3), ['a.txt', 'docs/guide.md', 'src/util.ts', 'z/deep/a/b.ts']);
+  const unloaded = new Set(['b', 'c', 'e']);
+  assert.deepEqual(nextBatch(['a', 'b', 'c', 'd', 'e'], unloaded, 2), ['b', 'c']);
+  assert.deepEqual(pathsUnder(['a/x', 'a/y/z', 'ab/x', 'a'], 'a'), ['a/x', 'a/y/z', 'a']);
+});
+
+test('reading more is limited to safe paths and sensible sizes', async () => {
+  const root = project('reads', { 'a.txt': 'a', 'dir/b.txt': 'b' });
+  fs.symlinkSync(tmp, path.join(root, 'out'));
+  const f = await open(root);
+  assert.deepEqual((await readMany(f.id, ['dir/b.txt'])).files, { 'dir/b.txt': 'b' });
+  await assert.rejects(readMany(f.id, ['../x']), /Invalid path/);
+  await assert.rejects(readMany(f.id, ['out/anything']), /outside the folder/);
+  await assert.rejects(readMany(f.id, 'a.txt'), /at most/);
+  await assert.rejects(readMany(f.id, new Array(LIMITS.readFiles + 1).fill('a.txt')), /at most/);
+  await assert.rejects(readMany('nope', ['a.txt']), (e: Error & { status?: number }) => e.status === 404);
+});
+
+test('a big folder opens fast: every name at once, text for the first few', { timeout: 60_000 }, async () => {
+  const root = path.join(tmp, 'big');
+  const total = 12_000;
+  for (let i = 0; i < total; i++) {
+    const dir = path.join(root, `pkg${i % 60}`, `m${i % 7}`);
+    if (i < 420) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `f${i}.ts`), `export const v = ${i};\n`);
+  }
+  fs.writeFileSync(path.join(root, 'README.md'), '# big\n');
+  const started = performance.now();
+  const f = await open(root);
+  const ms = performance.now() - started;
+  assert.equal(f.paths.length, total + 1);
+  assert.equal(Object.keys(f.files).length, LIMITS.firstBatchFiles);
+  assert.ok('README.md' in f.files, 'the README is in the first batch');
+  assert.ok(JSON.stringify(f).length < 2_000_000, 'the open answer stays small');
+  // Generous for slow CI machines; locally 12k files take about 100 ms (50k about 300 ms)
+  assert.ok(ms < 1500, `opening ${total} files took ${Math.round(ms)} ms`);
 });

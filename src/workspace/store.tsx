@@ -257,6 +257,12 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
  */
 export const actionTaps = new Set<(action: Action, before: Project) => void>();
 
+/**
+ * Asked before an action applies: a promise means "wait for this first", then the action goes through. An opened
+ * folder uses it to read a file's text before it is opened, moved or deleted (folder-client.ts).
+ */
+export const actionGates = new Set<(action: Action, before: Project) => Promise<unknown> | null>();
+
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [state, rawDispatch] = useReducer(reducer, undefined, initialState);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -269,8 +275,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [state]);
 
   const dispatch = useCallback((action: Action) => {
-    for (const tap of actionTaps) tap(action, stateRef.current.project);
-    rawDispatch(action);
+    const apply = () => {
+      for (const tap of actionTaps) tap(action, stateRef.current.project);
+      rawDispatch(action);
+    };
+    for (const gate of actionGates) {
+      const wait = gate(action, stateRef.current.project);
+      if (wait) {
+        void wait.then(apply, apply);
+        return;
+      }
+    }
+    apply();
   }, []);
 
   // Hydrate from storage once on mount (storage is only readable on the client)

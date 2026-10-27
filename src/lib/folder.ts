@@ -16,15 +16,24 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { isSafeRelativePath } from './proc.ts';
+import { priorityOrder } from './folder-order.ts';
+
+export { priorityOrder };
 
 /** Folders never listed or watched: installed dependencies, build output, tools' own state */
 export const SKIP_DIRS = new Set(['.git', 'node_modules', '.next', '.nuxt', '.svelte-kit', '.turbo', '.cache', '.venv', 'venv', '__pycache__', '.pytest_cache', '.mypy_cache', 'target', 'dist', 'build', 'out', 'coverage', '.gradle', '.idea', '.vs', 'vendor', '.dart_tool', '.terraform']);
 
 export const LIMITS = {
-  /** Paths listed (the tree); A1's large-repo work raises this */
+  /** Paths listed (the tree) */
   listed: 200_000,
-  /** Files whose text is loaded into the studio */
+  /** Files whose text is held in the studio at once; the rest of the tree opens on demand */
   loaded: 5_000,
+  /** What opening a folder sends along with the file list: enough to start editing, nothing more */
+  firstBatchFiles: 150,
+  firstBatchBytes: 1024 * 1024,
+  /** One read request */
+  readFiles: 1_000,
+  readBytes: 6 * 1024 * 1024,
   fileBytes: 1024 * 1024,
   totalBytes: 48 * 1024 * 1024,
   openFolders: 8,
@@ -36,11 +45,16 @@ export interface OpenedFolder {
   id: string;
   root: string;
   name: string;
+  /** Every file in the folder the studio can name, sorted: the tree shows these at once */
+  paths: string[];
+  /** The text of the first few, in the order a person starts reading (see priorityOrder); `read` brings the rest */
   files: Record<string, string>;
-  /** Listed but not loaded, with why: too large, binary, past the limits, or a name the studio can't use */
-  skipped: { path: string; reason: 'binary' | 'large' | 'limit' | 'name' }[];
+  /** Files left out of `paths`, with why: names the studio can't use yet */
+  skipped: { path: string; reason: SkipReason }[];
   git: boolean;
 }
+
+export type SkipReason = 'binary' | 'large' | 'limit' | 'name';
 
 export interface FolderChange {
   changed: Record<string, string>;
@@ -203,37 +217,57 @@ export async function openFolder(input: unknown): Promise<OpenedFolder> {
   return { ...(await loadFiles(folder)), id: folder.id, root, name: path.basename(root) };
 }
 
-async function loadFiles(folder: Folder): Promise<Omit<OpenedFolder, 'id' | 'root' | 'name'>> {
-  const { paths, git } = await listFiles(folder.root);
-  const files: Record<string, string> = {};
+async function loadFiles(folder: Folder): Promise<Pick<OpenedFolder, 'paths' | 'files' | 'skipped' | 'git'>> {
+  const { paths: listed, git } = await listFiles(folder.root);
   const skipped: OpenedFolder['skipped'] = [];
-  let total = 0;
-  let loaded = 0;
+  const paths: string[] = [];
+  for (const relative of listed) {
+    if (isSafeRelativePath(relative)) paths.push(relative);
+    else if (skipped.length < 200) skipped.push({ path: relative, reason: 'name' });
+  }
   folder.known.clear();
-  for (const relative of paths) {
-    if (!isSafeRelativePath(relative)) {
-      skipped.push({ path: relative, reason: 'name' });
-      continue;
-    }
-    if (loaded >= LIMITS.loaded || total >= LIMITS.totalBytes) {
-      skipped.push({ path: relative, reason: 'limit' });
-      continue;
-    }
-    const read = await readText(path.join(folder.root, ...relative.split('/')));
-    if ('text' in read) {
-      if (total + read.text.length > LIMITS.totalBytes) {
-        skipped.push({ path: relative, reason: 'limit' });
-        continue;
+  // The tree is the whole list; the text of the first few is enough to start, and the rest comes by `readFiles`
+  const first = priorityOrder(paths).slice(0, LIMITS.firstBatchFiles);
+  const { files } = await readFiles(folder, first, LIMITS.firstBatchBytes);
+  return { paths, files, skipped, git };
+}
+
+/**
+ * Read files for the studio: text only, in the order given, until the byte budget is spent. Files that are binary or
+ * too large come back as `unreadable`; paths past the budget are simply not in the answer, so the caller asks again.
+ */
+async function readFiles(folder: Folder, relatives: string[], budget: number): Promise<{ files: Record<string, string>; unreadable: { path: string; reason: SkipReason }[]; handled: number }> {
+  const files: Record<string, string> = {};
+  const unreadable: { path: string; reason: SkipReason }[] = [];
+  let bytes = 0;
+  let handled = 0;
+  // A handful at a time: many small reads at once are quicker than one by one, and don't open thousands of files together
+  const GROUP = 32;
+  for (let i = 0; i < relatives.length && bytes < budget; i += GROUP) {
+    const group = relatives.slice(i, i + GROUP);
+    const results = await Promise.all(group.map(async (relative) => ({ relative, read: await readText(path.join(folder.root, ...relative.split('/'))) })));
+    for (const { relative, read } of results) {
+      handled++;
+      if ('text' in read) {
+        files[relative] = read.text;
+        folder.known.set(relative, digest(read.text));
+        bytes += read.text.length;
+      } else if (read.reason === 'binary' || read.reason === 'large') {
+        unreadable.push({ path: relative, reason: read.reason });
       }
-      files[relative] = read.text;
-      folder.known.set(relative, digest(read.text));
-      total += read.text.length;
-      loaded++;
-    } else if (read.reason === 'binary' || read.reason === 'large') {
-      skipped.push({ path: relative, reason: read.reason });
     }
   }
-  return { files, skipped, git };
+  return { files, unreadable, handled };
+}
+
+/** Bring more of a folder's files into the studio (opening one, or loading in the background) */
+export async function readMany(id: unknown, input: unknown): Promise<{ files: Record<string, string>; unreadable: { path: string; reason: SkipReason }[]; handled: number }> {
+  const folder = folderOf(id);
+  if (!Array.isArray(input) || input.length > LIMITS.readFiles || !input.every((p) => typeof p === 'string')) throw err(`Ask for at most ${LIMITS.readFiles} paths`, 400);
+  const checked: string[] = [];
+  for (const relative of input as string[]) checked.push(relative && (await target(folder, relative)) ? relative : '');
+  if (checked.some((p) => !p)) throw err('Invalid path', 400);
+  return readFiles(folder, checked, LIMITS.readBytes);
 }
 
 /** The files of a folder that is already open (a reload, or a window `aha` opened) */

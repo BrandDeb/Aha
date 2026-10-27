@@ -79,7 +79,13 @@ export function isFolder(project: Pick<Project, 'files' | 'folders'>, folderPath
 }
 
 /** Folders first, then files, alphabetically */
-export function buildTree(project: Pick<Project, 'files' | 'folders'>): TreeNode[] {
+export function buildTree(project: Pick<Project, 'files' | 'folders'>, extraFiles: readonly string[] = []): TreeNode[] {
+  // `extraFiles` are files that exist but whose text isn't loaded (an opened folder's, see folder-client.ts)
+  return treeFromPaths(Object.keys(project.files).concat(extraFiles as string[]), project.folders);
+}
+
+/** The tree for a list of file paths and folders that exist without files */
+export function treeFromPaths(files: readonly string[], folders: readonly string[]): TreeNode[] {
   const root: TreeNode = { name: '', path: '', type: 'folder', children: [] };
   const folderNodes = new Map<string, TreeNode>([['', root]]);
   const ensureFolder = (folder: string): TreeNode => {
@@ -90,12 +96,12 @@ export function buildTree(project: Pick<Project, 'files' | 'folders'>): TreeNode
     ensureFolder(dirname(folder)).children.push(node);
     return node;
   };
-  for (const folder of allFolders(project)) ensureFolder(folder);
-  for (const file of Object.keys(project.files)) {
+  for (const folder of folders) ensureFolder(folder);
+  for (const file of files) {
     ensureFolder(dirname(file)).children.push({ name: basename(file), path: file, type: 'file', children: [] });
   }
   const sort = (nodes: TreeNode[]) => {
-    nodes.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'folder' ? -1 : 1));
+    nodes.sort((a, b) => (a.type === b.type ? (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) : a.type === 'folder' ? -1 : 1));
     nodes.forEach((n) => sort(n.children));
   };
   sort(root.children);

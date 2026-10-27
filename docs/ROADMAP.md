@@ -89,8 +89,10 @@ plan matters until it does.
 **Done when** a 50k-file repository opens in under 2 s to first edit, a change made outside Aha shows up within a
 second, and the performance budget measures both.
 
-**Status.** Shipped: the launch key (`scripts/launch-key.js`, SECURITY.md) on every route that runs programs or touches
-the machine, and `npm run open` / `aha` to open the running studio. Next: opening a folder in place, then large repos.
+**Status.** Shipped: the launch key (`scripts/launch-key.js`, SECURITY.md) and `npm run open` / `aha`; opening a folder
+in place with outside changes; large repositories (every name at once, text on demand and in the background, a tree
+that starts closed). Next: Run and the dev server inside the opened folder, the File System Access API for browsers, and
+the 50k-file open time in the performance budget.
 
 ### A2. Git as the backbone
 

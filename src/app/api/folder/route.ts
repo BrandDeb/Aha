@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { getBaseUrl, isSameOrigin } from '@/lib/github-session';
 import { isTrustedHost, listensOnLoopbackOnly } from '@/lib/host';
-import { browse, closeFolder, makeDir, movePath, openFolder, reloadFolder, removePath, watchFolder, writeFile, type FolderChange } from '@/lib/folder';
+import { browse, closeFolder, makeDir, movePath, openFolder, readMany, reloadFolder, removePath, watchFolder, writeFile, type FolderChange } from '@/lib/folder';
 import { readJsonOrNull } from '@/lib/request-guard';
 
 export const runtime = 'nodejs';
@@ -91,8 +91,10 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * { action: 'open', path }                → { id, root, name, files, skipped, git }
+ * { action: 'open', path }                → { id, root, name, paths, files, skipped, git }: every file name, and the text of
+ *                                           the first few
  * { action: 'reload', id }                → the same, for a folder already open
+ * { action: 'read', id, paths }           → { files, unreadable, handled }: the text of more files (up to 1,000 paths)
  * { action: 'write', id, path, content }  → saved in place
  * { action: 'delete', id, path }          → a file or a folder
  * { action: 'move', id, from, to }       → a file or a folder, with everything in it
@@ -111,6 +113,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(await openFolder(body.path));
       case 'reload':
         return NextResponse.json(await reloadFolder(body.id));
+      case 'read':
+        return NextResponse.json(await readMany(body.id, body.paths));
       case 'write':
         await writeFile(body.id, body.path, body.content);
         return NextResponse.json({ ok: true });

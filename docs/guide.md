@@ -842,6 +842,28 @@ that would run a program show the command before you add them; once added, every
 never carries secrets: environment values aren't part of a kit, `.env` files stay behind, and any file that looks like it
 holds a key (cloud, model, GitHub, Slack or Stripe keys, private keys, passwords in URLs) is left out and named.
 
+## Open a folder on this machine
+
+**Explorer → Open folder** (or the command *Open a folder on this machine…*, or `aha path/to/project` from a terminal)
+works on a project where it lives. Only on your own machine, and only in a window opened with the launch key.
+
+- **Saved in place.** Edits are written to the file a moment after you stop typing, through a temporary file and a
+  rename, so a crash never leaves half a file, and the file keeps its permissions. Moving or deleting in the explorer
+  moves or deletes on disk, with everything in the folder, including files the studio doesn't show.
+- **Outside changes come in.** A `git pull`, another editor or a formatter changes a file: the studio shows it within
+  a moment, and a file created outside appears in the tree.
+- **Git repositories** list what Git lists, so `.gitignore` is respected; other folders skip dependency and build
+  folders (`node_modules`, `dist`, `target`, `.venv`…). `.git` is never written to.
+- **Large repositories.** Opening sends every file name at once and the text of the first 150 (the entry file, README
+  and manifests first), so a 50,000-file repository is usable in about a second. The rest of the text comes when you
+  open, move or delete a file, and a background loader brings in up to 5,000 files, shallowest first, so search and the
+  agent work with most of a normal project. The explorer starts with its folders closed past 1,500 files.
+- **The terminal** runs in the folder itself, with your own home folder and caches, as in your terminal. Run and the
+  dev server still work on a copy of the project for now.
+- Binary files, files over 1 MB and names the studio can't use yet stay on disk, untouched.
+
+---
+
 ## Python and uv
 
 The Python tab appears for projects with `.py` files or a `pyproject.toml`. Everything goes through uv:
@@ -1378,6 +1400,14 @@ trusted-host and run-enabled checks apply.
 `GET` → `{ enabled, languages: [{ id, name, available, version?, install }] }`. `POST { projectId, entry, files, args?, stdin?, env?, language? }`
 streams newline-delimited JSON like `/api/python`: `{ t: "out", s, d }` lines, then `{ t: "done", code, ms, changed, removed, skipped, timedOut?, truncated?, error? }`.
 Paths and environment variable names are validated; `PATH`, `HOME`, loader and toolchain variables (`GOPATH`, `CARGO_*`, `JAVA_*`…) can't be set.
+
+### `/api/folder` (local only)
+
+`GET` says whether folders can be opened here; `GET ?watch=<id>` is a Server-Sent Events stream of changes other programs
+make. `POST` takes `{ "action": … }`: `open` (`path` → `id`, `root`, `paths`, the text of the first files), `reload`
+(`id`), `read` (`id`, up to 1,000 `paths` → `files`, `unreadable`, `handled`), `write` (`id`, `path`, `content`), `delete`,
+`move` (`from`, `to`), `mkdir`, `close` and `browse` (`path` → the folders inside it). Paths are relative to the opened folder;
+anything that leaves it, follows a link out of it or goes into `.git` is refused. Needs the launch key.
 
 ### `/api/live` (local only)
 

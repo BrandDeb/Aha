@@ -4,21 +4,24 @@
  */
 
 import type { Project } from './project.ts';
+import { ENTRY_GUESSES } from '../lib/folder-order.ts';
 
 export interface OpenedFolder {
   id: string;
   root: string;
   name: string;
+  /** Every file in the folder, sorted; the tree shows all of them at once */
+  paths: string[];
+  /** The text of the first few; the rest is read when needed (folder-client.ts) */
   files: Record<string, string>;
   skipped: { path: string; reason: 'binary' | 'large' | 'limit' | 'name' }[];
   git: boolean;
 }
 
-const ENTRY_GUESSES = ['src/main.ts', 'src/index.ts', 'src/main.tsx', 'src/index.tsx', 'main.ts', 'index.ts', 'main.py', 'app.py', 'src/main.py', 'main.go', 'cmd/main.go', 'src/main.rs', 'index.js', 'src/index.js', 'server.js', 'app.js'];
-
 /** The opened folder as a project: its files, a guess at what Run runs, and where it lives */
 export function folderProject(opened: OpenedFolder): Project {
-  const entry = ENTRY_GUESSES.find((f) => f in opened.files) ?? '';
+  const known = new Set(opened.paths);
+  const entry = ENTRY_GUESSES.find((f) => known.has(f)) ?? '';
   return { name: opened.name, files: opened.files, folders: [], entry, disk: { id: opened.id, root: opened.root } };
 }
 
@@ -38,4 +41,23 @@ export function moveInBaseline(onDisk: Map<string, string>, from: string, to: st
       onDisk.set(to + path.slice(from.length), content);
     }
   }
+}
+
+/** The paths in a set that are `root` itself or sit under it */
+export function pathsUnder(paths: Iterable<string>, root: string): string[] {
+  const out: string[] = [];
+  for (const p of paths) if (p === root || p.startsWith(`${root}/`)) out.push(p);
+  return out;
+}
+
+/** What to load next: unloaded paths in front-door order, past the ones already tried, at most `count` */
+export function nextBatch(order: string[], unloaded: Set<string>, count: number): string[] {
+  const out: string[] = [];
+  for (const p of order) {
+    if (unloaded.has(p)) {
+      out.push(p);
+      if (out.length >= count) break;
+    }
+  }
+  return out;
 }
