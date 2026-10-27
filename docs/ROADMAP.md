@@ -414,6 +414,7 @@ lead with them:
 | Step | Ships | Why here |
 |---|---|---|
 | 1 | A1 (real projects on disk) | Nothing else works on a real repo without it |
+| 1b | A5 (sign-in on first launch, Linux desktop app) and the Team and Business plans | Accounts are what the plans, sync and seat admin hang on; companies can't adopt without them |
 | 2 | C1 (any agent, checked) and A2 (Git) | The broadest reason to try Aha, and the PR path for receipts |
 | 3 | C2 (receipts) and C3 (behaviour diff) | The launch: "AI changes that come with proof" |
 | 4 | C4 (taste) and C5 (ship-ready check) | The second launch, for people building apps from prompts |
