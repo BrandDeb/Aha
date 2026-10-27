@@ -109,10 +109,13 @@ Browser (Next.js client, React 19)            Server (Next.js routes + server.js
 - **Web3.** Solidity compile and analysis, an in-page chain, wallet deploys and a dapp starter.
 - **Platform.** Desktop apps, Docker, self-healing and self-updating, the docs site, the pricing page.
 
-**Next** (specs in ROADMAP.md):
-1. Publish: web apps to a static host and CLIs to a GitHub release.
-2. Extensions, round two: keybindings, language configuration, icon themes.
-3. Watchers, round two: webhooks and running with the window closed.
+**Next** (specs in ROADMAP.md, "Strategy: the editor people switch to"):
+1. Real projects on disk: open any folder, `aha .`, large repos, and a per-launch secret for local routes.
+2. Git as the backbone: every proposal a branch, night-shift PRs with evidence.
+3. Bring my setup: import from Cursor, VS Code, Zed, Windsurf and JetBrains, including AI rules and MCP servers.
+4. Companion mode: Aha works on a repo you keep editing elsewhere and delivers PRs.
+5. Then: a native core for the hot paths, one shared code index, a VS Code extension host, and a public agent
+   benchmark against the heavyweights.
 
 ### Waiting on the owner
 

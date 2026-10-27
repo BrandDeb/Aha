@@ -20,6 +20,174 @@ Every item is held to these. If a feature can't meet them, it changes until it c
 
 ---
 
+## Strategy: the editor people switch to
+
+### The thesis
+
+Agents now write a growing share of code. The work left to the developer shifts from typing to **steering, checking
+and accepting**. The editors in use today were built for typing and add AI on top:
+
+- **VS Code:** carries its extension API.
+- **Cursor:** carries the VS Code fork it is built on.
+- **Zed:** carries its native, editor-first design.
+- **JetBrains:** carries its JVM.
+
+None of them can rebuild around verification without breaking what their users already rely on. Aha has no such
+weight to carry.
+
+**The best editor of the next few years is the one where you can trust what you didn't type.** Aha wins by being:
+
+1. **Fast where it is felt:** under the thresholds people perceive, so nobody leaves over feel.
+2. **Compatible where it counts:** your repo, settings, keys, rules and extensions come with you, so nobody leaves
+   over what they would lose.
+3. **Clearly ahead on agent work:** changes arrive built, run, tested, reviewed and risk-scored, with the evidence.
+   This is the reason to come.
+
+### Where each heavyweight is strong, and how we answer
+
+| | Their edge | Their limit | Our answer |
+|---|---|---|---|
+| **VS Code** | Extensions, reach | AI is bolted on; changes aren't verified | Run their extensions; verify every agent change |
+| **Cursor** | Polished AI editing, Tab | Agent edits are trusted, not proven; tied to their credits | Proposals with evidence; any model, including local; unattended night runs |
+| **Zed** | Native speed, collaboration | Small ecosystem; editing comes first, the agent second | Native core for the hot paths; an agent loop built in from the start |
+| **JetBrains** | Deep semantic understanding | Heavy, slow to start, costly | One index shared by you and the agent, plus runtime values no static IDE has |
+| **Copilot / Windsurf** | Distribution, price | Same verification gap | Measured acceptance rate, published |
+
+### The scoreboard (published, run in CI, against the others on the same machine)
+
+| Measure | Target | Today |
+|---|---|---|
+| Keystroke latency, p95, 20 files open | ≤ 16 ms (one frame) | 24–32 ms |
+| Editor ready from launch | ≤ 800 ms | about 0.9–1.1 s |
+| Open a 50k-file repository | ≤ 2 s to first edit | not possible yet (projects live in browser storage) |
+| Search 1M lines | ≤ 300 ms | not measured |
+| Install to first accepted proposal on your own repo | ≤ 5 min | not possible yet |
+| Agent changes accepted without edits (fixed task set) | ≥ 70%, ahead of each rival | not measured |
+| Regressions caught before review | reported per run | evidence and reviewer exist; not measured |
+
+A target either has a test that measures it or is not a target.
+
+### Tracks, in order
+
+Track A makes switching cost nothing. Track B makes staying obvious. A comes first: without it nobody arrives to see B.
+
+---
+
+### A1. Real projects on disk
+
+**Why.** Today a project lives in browser storage (about 5 MB), so nobody's real repository fits. Nothing else in this
+plan matters until it does.
+
+**What.**
+- **Desktop app:** opens any folder, reads and writes it in place, and watches it for changes made by other tools.
+- **Browser:** uses the File System Access API where the browser supports it, or clones from Git.
+- **`aha .`** from a terminal, like `code .`.
+- **Large repos:** files are indexed in the background, and the editor never waits on the whole tree.
+- **Security:** the per-launch secret for every local route that runs programs ships with this item. A studio that
+  reads your disk must not answer other local processes.
+
+**Done when** a 50k-file repository opens in under 2 s to first edit, a change made outside Aha shows up within a
+second, and the performance budget measures both.
+
+### A2. Git as the backbone
+
+**What.**
+- Real Git on the opened folder: status, stage, commit, branches and merge (the conflict editor already exists).
+- Every proposal is a branch and every accepted proposal a commit, so agent work fits the review flow teams already
+  use. The night shift can open a PR per task with its evidence in the description.
+
+**Done when** a proposal pushed as a branch shows up as a PR with its evidence, in a browser test against a local Git
+server.
+
+### A3. Bring my setup
+
+**What.** On first launch, Aha finds Cursor, VS Code, Zed, Windsurf and JetBrains on the machine and offers to import,
+each step previewed and optional:
+
+| Kind | What is imported |
+|---|---|
+| Editor | Theme, font, editor settings, keybindings (your shortcuts by default) and recent folders |
+| Extensions | Matched to Open VSX, with a list of anything that has no match |
+| AI setup | `.cursorrules`, `.cursor/rules`, `.github/copilot-instructions.md` and `CLAUDE.md`, merged into `AGENTS.md` and project memory |
+| MCP servers | From Cursor, VS Code and Claude Desktop configs, into connectors (commands shown in full before they are added) |
+| Model keys | Found in the environment, never stored on the server |
+
+**Done when** a real Cursor profile imports in a browser test with its theme, keybindings, rules and MCP servers, and
+an existing user goes from install to first accepted proposal on their own repo in under 5 minutes.
+
+### A4. Companion mode
+
+**Why.** The easiest switch is not having to switch.
+
+**What.** Aha attaches to a repository you keep editing in another IDE. The night shift, watchers, production errors
+to fixes and the design pass work on their own branches and deliver PRs (or branches) with evidence. You review them
+wherever you already work, and move in when Aha has earned it.
+
+**Done when** a repo edited elsewhere gets a night-shift PR with evidence and no Aha window open during review.
+
+---
+
+### B1. Feel: under the perception thresholds
+
+**What.**
+- **Native core in the desktop app:** the Tauri app already has a Rust side. Move the hot paths into it:
+  - file walking and watching;
+  - full-text search (ripgrep's engine);
+  - the symbol index;
+  - Git status.
+- **Editor tuning:** Monaco stays the editor surface; tune it until keystrokes stay under one frame.
+
+**Done when** the scoreboard's keystroke, launch and search targets pass in CI on both the browser and the desktop
+build.
+
+### B2. One understanding of the code, shared by you and the agent
+
+**What.**
+- **One index** over tree-sitter, the language servers, the import graph, the why-history and runtime values (live
+  values, rewind).
+- **Inputs to the agent:** it gets the same view you do, plus what the code *did* when it ran. Static IDEs don't have
+  the second.
+- **TypeScript:** full language intelligence through tsserver, and more languages through LSP.
+
+**Done when** go-to-definition, references and rename work across TypeScript, Python, Go and Rust on a large repo, and
+the agent's brief includes the runtime values of the lines it changes.
+
+### B3. Extensions people actually use
+
+**What.**
+- **Desktop app:** a VS Code-compatible extension host, so the top 100 Open VSX extensions run for real (language
+  extensions, linters, formatters, Vim).
+- **Browser:** keeps the declarative subset (themes, snippets, grammars).
+
+**Done when** the top 20 extensions by installs work in a browser test of the desktop build, each one listed.
+
+### B4. The best agent results, measured
+
+**What.**
+- **A public benchmark:** a fixed set of 50 real tasks (fix the failing test, add the endpoint, upgrade the
+  dependency, migrate the API) run through Aha, Cursor's agent and Copilot's agent on the same model.
+- **What it measures:** acceptance without edits, regressions caught before review, and minutes of human review per
+  task.
+- **What we do with it:** results are published with every release. Anything we lose becomes the next item.
+
+**Done when** the benchmark runs on demand and its numbers go into the release notes.
+
+### B5. Private by default, local when you want
+
+**What.**
+- One switch for local models only, with an audit log of everything the agent read, ran and sent.
+- Presets for local servers (Ollama, LM Studio and colibri for large mixture-of-experts models), each added only after
+  a measured run shows it can finish an agent task within a time the preset states.
+
+**Done when** a full proposal (plan, edits, build, review) completes with no network access beyond the machine.
+
+### B6. Table stakes, no gaps
+
+Vim mode, multi-root workspaces, remote development over SSH and dev containers (desktop app first), settings sync and
+inline next-edit tuned against Cursor's Tab. Each ships with a browser test, and each one closes a reason to go back.
+
+---
+
 ## Now
 
 ### 1. Proactive agents: watchers
