@@ -12,6 +12,7 @@ import { DiffView } from '@/components/CodeEditor';
 import { chipsFor, type Tone } from '@/lib/agent/evidence';
 import { riskOf, type RiskScore } from '@/lib/agent/risk';
 import { supplyChainOf, useSupplyChainVersion } from '../supply-chain-client';
+import { citedMemory, MEMORY_FILE, parseMemory } from '@/lib/memory';
 import { ChangeProof } from './ChangeProof';
 import { ForkCompare } from './ForkCompare';
 import { REVIEW_LABEL, reviewFollowUp, type Review } from '@/lib/agent/review';
@@ -212,6 +213,9 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
   const supply = working || !files.length ? null : supplyChainOf(files);
   const risk = working || !files.length ? null : riskOf({ files, evidence, review: lane?.review?.status === 'done' ? lane.review : null, supplyChain: supply?.findings });
   const project = files.filter((f) => !f.path.startsWith('agent/') && f.path !== 'AGENTS.md');
+  // Memory the summary cites: what the project remembered (and what this proposal adds to it)
+  const memoryText = files.find((f) => f.path === MEMORY_FILE)?.after ?? workspace.project.files[MEMORY_FILE];
+  const cited = working ? [] : citedMemory(proposal.outcome?.summary, parseMemory(memoryText));
   const problem = working ? null : problemOf(proposal.outcome?.reason === 'finished' ? undefined : proposal.outcome?.summary);
 
   return (
@@ -321,6 +325,19 @@ export function ProposalView({ proposal }: { proposal: Proposal }) {
           </div>
         ) : (
           proposal.outcome && !working && <p className="max-w-4xl whitespace-pre-wrap text-sm leading-relaxed text-gray-300">{proposal.outcome.summary}</p>
+        )}
+        {cited.length > 0 && (
+          <div role="note" aria-label="Memory used" className="max-w-4xl rounded-lg border border-border px-3 py-2 text-xs text-gray-400">
+            <span className="text-gray-300">From the project&apos;s memory:</span>
+            <ul className="mt-1 space-y-0.5">
+              {cited.map((m) => (
+                <li key={m.id}>
+                  <span className="mr-1.5 font-mono text-[11px] text-accent">[{m.id}]</span>
+                  {m.text}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </header>
 

@@ -1,6 +1,7 @@
 import { projectSkills, skillsPrompt, type SkillMeta } from '../skills/format.ts';
 import { harnessPrompt, NOTES_FILE } from './harness.ts';
 import { contractsOf, contractsPrompt } from '../contracts.ts';
+import { MEMORY_FILE, memoryPrompt, parseMemory } from '../memory.ts';
 
 export { NOTES_FILE };
 
@@ -36,6 +37,8 @@ export function systemPromptFor(files: Record<string, string>, skills: SkillMeta
   const notes = files[NOTES_FILE]?.trim();
   const sections = [AGENT_SYSTEM_PROMPT];
   if (notes) sections.push(`Project notes (${NOTES_FILE}):\n${notes.length > MAX_NOTES ? `${notes.slice(0, MAX_NOTES)}\n… (truncated)` : notes}`);
+  const memory = memoryPrompt(parseMemory(files[MEMORY_FILE]));
+  if (memory) sections.push(memory);
   const harness = harnessPrompt(files);
   if (harness) sections.push(harness);
   const contracts = contractsPrompt(contractsOf(files).contracts);

@@ -5,6 +5,7 @@
  * touching the user's files until they accept the result.
  */
 
+import { addMemory, MEMORY_FILE, type MemoryKind } from '../memory.ts';
 import { lineDelta } from '../../workspace/project.ts';
 import type { Stage } from './stage.ts';
 import { checkContracts, contractsOf, describeContracts, type CommandRunner } from '../contracts.ts';
@@ -83,6 +84,23 @@ export function workspaceTools(host: AgentHost): Tool[] {
       run: async (args) => {
         host.onPlan?.(str(args.steps));
         return ok('Plan recorded.');
+      },
+    },
+    {
+      name: 'remember',
+      description: `Write down something the next task should know about this project: a decision (what was chosen and why), a convention (how things are done here) or a gotcha (what bites). It goes into ${MEMORY_FILE} as part of this proposal. Only durable facts, one per call, and sparingly; not progress notes.`,
+      risk: 'stage',
+      parameters: {
+        type: 'object',
+        properties: { kind: { type: 'string', enum: ['decision', 'convention', 'gotcha'] }, text: { type: 'string', description: 'One sentence, under 300 characters' } },
+        required: ['kind', 'text'],
+      },
+      run: async (args) => {
+        const result = addMemory(stage.read(MEMORY_FILE), str(args.kind) as MemoryKind, str(args.text), new Date().toISOString().slice(0, 10));
+        if ('error' in result) return fail(result.error);
+        if (!result.added) return ok(`Already in memory as [${result.id}].`);
+        const problem = stage.write(MEMORY_FILE, result.text);
+        return problem ? fail(problem) : ok(`Remembered as [${result.id}] in ${MEMORY_FILE}.`);
       },
     },
     {

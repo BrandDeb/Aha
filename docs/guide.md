@@ -84,6 +84,7 @@ A one-line tour; each links to the section with the details. The workspace is at
 | **Optimize** | SEO, answer engines, social cards, accessibility and speed, with fixes ([Optimize](#optimize-seo-aeo-geo-and-the-rest)) |
 | **Field kits** | A project, its playbook, checks and house rules in one file ([Field kits](#field-kits)) |
 | **History and why** | Versions on save and before every accept; every line remembers why it was written ([Why-history](#why-history)) |
+| **Memory and tour** | Decisions, conventions and gotchas the agent keeps and cites; a five-stop tour for newcomers ([Project memory](#project-memory), [Tour](#tour)) |
 | **Desktop apps** | Native Windows and macOS builds that update themselves ([Desktop app](#desktop-app-windows-and-macos)) |
 | **Accessibility and looks** | Light, dark and high-contrast themes, any accent colour, full keyboard use and screen-reader labels |
 
@@ -379,6 +380,40 @@ hover the line number for the reason: the goal it served, who asked (you, the de
 was accepted, its evidence ("Verified") and the reviewer's verdict. The history lives in `.aha/why.json`, so it
 is committed with the code and travels with the repository; lines are matched by their text, so the reason
 stays attached while the code around them moves or is re-indented.
+
+### Project memory
+
+The agent keeps notes on the project in `.aha/memory.md`, in three kinds:
+- **decisions:** what was chosen and why;
+- **conventions:** how things are done here;
+- **gotchas:** what bites.
+
+**How entries are written.** The agent records an entry with its `remember` tool while it works, one sentence each. The
+entry is part of that proposal, so you read it before it is kept. A proposal that changes the memory never auto-accepts:
+what future tasks are told is your call.
+
+**How entries are used.** Every task starts with the memory in the agent's instructions. When an entry shapes a change,
+the agent cites it as `[m2]`, and the proposal lists the entries it relied on under **From the project's memory**.
+
+**Editing it yourself.** The memory is an ordinary file, committed with the code and shared through Git. Write in it,
+fix it, or delete entries that no longer hold. The **Tour** tab (Project group) lists it.
+
+### Tour
+
+Opening a project for the first time in this browser offers a **tour**: five stops through the codebase for someone
+new to it. It is built at once from how the files import each other (TypeScript, JavaScript and Python imports are
+followed) and from the why-history, with no model call:
+
+| Stop | Which file |
+|---|---|
+| Where it starts | The entry file, what it pulls in and what it defines |
+| What everything leans on | The file the most others import: a change there reaches all of them |
+| Where the work happens | The largest module the entry reaches |
+| Why it looks like this | The file the why-history says the most about, with its latest reasons; before any history, the manifest |
+| How to check a change | The tests; without any, the README |
+
+Each stop opens its file at the first definition. Take it again any time from the **Tour** tab or ⌘K "Tour this
+project".
 
 ### The morning report
 
