@@ -188,6 +188,219 @@ inline next-edit tuned against Cursor's Tab. Each ships with a browser test, and
 
 ---
 
+## Strategy, part two: what nobody else ships
+
+Tracks A and B make Aha as good as the heavyweights and easy to move to. This part is about the reasons someone tells
+a friend to switch. It starts from what the field shipped in 2026 and what developers say is still broken.
+
+### What the field shipped in 2026
+
+| Who | What they shipped | What it tells us |
+|---|---|---|
+| **Cursor** | Cursor 3 (April): an Agents Window running agents locally, in worktrees, in the cloud and over SSH, plus Design Mode and a built-in browser. Composer 2, their own model. Since September: Security Review on every PR, Rollouts (deploy health per PR), remote control of local agents from iOS, canvases from cloud agents, an Agent SDK with evals. | The IDE is turning into mission control for many agents. Their trust features (Security Review, Rollouts) are for Teams and Enterprise plans only. |
+| **Lovable** | Design systems on paid plans, Figma import, design questions when a prompt leaves the look open (October). `/goal` runs of up to 10 hours. Drafts (try changes on a copy). Tests written for business rules. Migrations that refuse breaking changes. WebMCP tools in generated apps. Domains bought from chat. | Prompt to app is now prompt to *product*: design taste, long autonomous runs, safety rails on data. |
+| **GitHub Copilot** | Local sandboxing generally available (files, network, credentials). CLI generally available. Computer use in preview. | Agent containment is becoming expected. |
+| **Google Antigravity 2.0** | A standalone agent app: parallel subagents, async and scheduled tasks, workspaces that span several folders. | The same move to mission control. |
+| **Zed** | 1.0. The Agent Client Protocol (ACP, with JetBrains), so Claude Code, Codex and Gemini CLI run inside the editor. Delta: diffs next to agent chats, commented on live by a team. | Agents are becoming plug-ins; the editor that hosts them best wins. |
+| **Kiro** | Specs (requirements, design, tasks), steering files, hooks on file events. | Planning before code is now a product. |
+| **Claude Code** | Background subagents by default, `/fork`, routines (scheduled cloud runs), a desktop app with sessions, diffs and preview. | Unattended work is normal. |
+| **Platform** | WebMCP (W3C draft from Google and Microsoft, in a Chrome origin trial): sites declare tools that browser agents call. YC's Fall 2026 request for startups lists multiplayer AI. | The web is becoming agent-readable; teams want to share agent sessions. |
+
+Sources: the [Cursor changelog](https://cursor.com/changelog), [InfoQ on Cursor 3](https://www.infoq.com/news/2026/04/cursor-3-agent-first-interface/),
+the [Lovable changelog](https://docs.lovable.dev/changelog), the [GitHub changelog](https://github.blog/changelog/label/copilot/),
+[XDA on Antigravity 2.0](https://www.xda-developers.com/google-antigravity-2-beats-claude-code-codex-at-their-own-game/),
+the [Claude Code changelog](https://code.claude.com/docs/en/changelog) and the
+[WebMCP tutorial](https://www.datacamp.com/tutorial/webmcp-tutorial). Dates and details come partly from secondary
+coverage and are checked again before anything is said publicly.
+
+### What is still broken
+
+- **Trust.** In Sonar's 2026 State of Code survey, 96% of developers don't fully trust AI-generated code and only 48%
+  always check it before committing. 38% say AI code takes more effort to review than human code.
+  ([Sonar](https://www.sonarsource.com/blog/state-of-code-developer-survey-report-the-current-reality-of-ai-coding/))
+- **Almost right.** The most common frustration (66% in Stack Overflow's 2025 survey) is a fix that is almost right,
+  but not quite. ([The Register](https://www.theregister.com/2025/07/29/coders_are_using_ai_tools/))
+- **Usage.** 90% of professional developers use AI agents at work every week, 68% daily (JetBrains Developer Ecosystem
+  Survey 2026). The review load grows with every agent added.
+- **Cost surprises.** Cursor's credit changes drew a public apology and cancellations, and the same agent task can cost
+  very different amounts from run to run.
+  ([TechCrunch](https://techcrunch.com/?p=3025199), [cost per task](https://www.kunalganglani.com/blog/ai-agent-cost-per-task-2026))
+- **Everything looks the same.** Generated sites share a fingerprint: purple gradients, Inter, three rounded cards, the
+  same hero. Banning one tell moves the model to the next most likely look.
+  ([why AI sites look the same](https://prg.sh/ramblings/Why-Your-AI-Keeps-Building-the-Same-Purple-Gradient-Website))
+- **Nobody proves the work.** No one ships verifiable proof that an agent's change does what it claims. The field
+  measures cost per attempt, not cost per change that was accepted.
+
+Everyone is racing to run *more* agents. Our bet is the other half of the problem: **making agent output provable,
+so a person can say yes in seconds.** More agents only help if someone can check their work.
+
+### The bets
+
+Each bet starts from something Aha already has that the others don't (evidence, a reviewer, risk scores, rewind, live
+values, fork the future, the design pass), so these are extensions of working code, not new products.
+
+#### C1. Any agent, checked by Aha
+
+**Headline:** *Use Claude Code, Codex or Gemini. Aha checks their work.*
+
+**Why.** Developers have favourite agents and won't give them up. Zed made ACP the standard for hosting them. We host
+them and add what nobody else has: every change becomes a proposal with evidence, a second review and a risk score.
+This turns every agent's users into potential Aha users instead of a rival's customers.
+
+**What.**
+- An ACP client in Aha: pick Claude Code, Codex, Gemini CLI or Aha's own agent per task.
+- Whatever the agent writes lands in a proposal: built, run, tested, reviewed, risk-scored, with its why-history.
+- Agents run in a sandbox (files, network and credentials scoped per task). This matches Copilot's sandboxing and is
+  on every plan, not just Enterprise.
+
+**Done when** a Claude Code task and a Codex task each arrive as proposals with evidence, in a browser test with mock
+ACP agents, and a sandboxed agent can't read outside its project or reach a host that isn't allowed.
+
+#### C2. Receipts: proof that travels with the change
+
+**Headline:** *The first AI changes that come with proof.*
+
+**Why.** "Trust me" is the industry standard. A receipt is a link anyone can open to see what the change did, without
+installing anything or trusting the author.
+
+**What.**
+- **Contents:** the task, the plan, the diff, the commands that ran with their output, the tests (old and new) with
+  results, the reviewer's notes, the risk score, the cost and the model.
+- **Replay:** the rewind recording, played back in the browser.
+- **Tamper evidence:** hashes over everything, so an edited receipt shows as edited.
+- **In PRs:** attached to the night shift's and companion mode's PRs (A2, A4) as a link with a summary.
+- **Badge:** an "Aha-verified" check on GitHub that links to the receipt.
+
+**Done when** a receipt opens from a PR in a fresh browser with no account, replays the run, and fails its check when
+one byte of it is changed.
+
+#### C3. Behaviour diff: what changed when it ran, not just in the text
+
+**Headline:** *Don't read the diff. Watch what changed.*
+
+**Why.** "Almost right" is a behaviour problem, and a text diff hides it.
+
+**What.** Aha runs the code before and after the change against the same inputs and shows what *behaved*
+differently:
+- **Web apps:** screenshots side by side, with changed regions highlighted.
+- **APIs:** the same recorded requests, with responses diffed.
+- **Functions:** the live values of the changed lines, before and after.
+- **Tests:** which ones changed outcome.
+
+Anything that changed but wasn't in the task is flagged first. That is where "almost right" hides.
+
+**Done when** a planted off-by-one in a proposal shows up as a flagged behaviour change that the text diff and the
+tests both missed, in a browser test.
+
+#### C4. Taste: prompt to a site that doesn't look generated
+
+**Headline:** *Prompt to a website a designer would sign.*
+
+**Why.** Lovable's lead is the look, and every generated site still looks related. Taste can be measured and
+searched for: a different look can be designed in on purpose rather than hoped for.
+
+**What.**
+- **Art directions first:** before any code, three distinct directions as live previews from fork the future (type
+  pairing, palette, density, layout grammar). You pick one or mix them.
+- **Design DNA:** pull a design system from a URL, a screenshot or a Figma file (tokens, type scale, spacing, motifs)
+  and hold every later change to it.
+- **Slop score:** a measured check for the known tells (default gradients, default font, the card trio, centred-hero
+  sameness) next to the design pass's contrast, type and spacing scores. The agent iterates until both pass.
+- **On the proposal:** the before and after images and the score change, as the design pass already does.
+
+**Done when** ten fixed prompts produce sites that pass the slop check and the design pass. In a blind comparison
+against the same prompts in Lovable and v0, the results are published whatever they say.
+
+#### C5. Ship-ready check: tested by simulated users, ready for agents
+
+**Headline:** *Every app gets tested by ten AI users before it ships.*
+
+**Why.** Lovable tests business rules, and Cursor reviews security on Teams plans. Nobody runs the app as its users
+will.
+
+**What.**
+- **Personas:** browser agents with given goals use the preview:
+  - a first-time visitor;
+  - a keyboard and screen-reader user;
+  - a phone user on a slow network;
+  - someone entering hostile input.
+- **Findings:** each persona reports with a recording and a reproducing test, as proposals.
+- **Agent-ready:** every generated app ships `llms.txt` and WebMCP tools for its main actions, and the check runs an
+  agent against those tools too.
+
+**Done when** the personas find planted issues (an unlabelled button, a form that breaks on a phone, an unescaped
+field) in a template app, each with a test that fails before the fix and passes after.
+
+#### C6. Open a repo with a link, work on it together
+
+**Headline:** *`aha.new/<any GitHub repo>` and it's running.*
+
+**Why.** Aha runs in a browser, which no heavyweight does as its main product. A link is the shortest path from
+curiosity to use, and every README badge is distribution.
+
+**What.**
+- **The link:** `aha.new/github.com/owner/repo` clones, installs and runs the repo, and opens a preview.
+- **The badge:** "Open in Aha" for READMEs.
+- **Together:** share a session link and a teammate joins in the browser, with the same files, terminal, preview and
+  agents. People and agents comment on proposals live (YC's request for multiplayer AI, done in the browser).
+- **From the phone:** approve, reject or comment on proposals over the phone preview link (PWA, no app store),
+  matching Cursor's iOS remote control.
+
+**Done when** a public template repo opens from a link to a running preview in under 30 s on the hosted plan, and two
+browsers edit and review one proposal together in a browser test.
+
+#### C7. The price is known before the work starts
+
+**Headline:** *Pay for changes you accept.*
+
+**Why.** Cost surprises are the most common reason people say they left Cursor.
+
+**What.**
+- **Before:** an estimate before every agent task, from the plan and past runs.
+- **During:** a hard cap per task that is never exceeded.
+- **Scoreboard:** cost per accepted change, as a measure (B4).
+- **Hosted plan:** a pay-per-accepted-proposal option is costed out. If it can't be offered profitably, the cap and
+  the estimate ship alone.
+- **Keys:** your own keys and local models always work, at no charge from us.
+
+**Done when** across the benchmark's tasks no task exceeds its cap, and the estimate lands within 30% of the actual
+cost on four tasks in five.
+
+### Matched, not led
+
+These are worth having and others already have them. We match them where they fit, inside existing items, and don't
+lead with them:
+- mission control for parallel agents: the channel and night shift become the view;
+- scheduled agents (watchers already do this);
+- spec-first planning (specs to tests already exists; add Kiro-style requirements and design steps);
+- drafts (fork the future);
+- deploy health per change (production to fix, extended to watch a deploy);
+- Figma import (inside C4).
+
+### Considered and dropped
+
+- **Our own coding model.** Cursor spent a year on Composer. We use the best model for each job (the model advisor) and
+  win on checking, not generating.
+- **Cloud VMs for 300 repositories.** That needs infrastructure capital. Companion mode and the desktop app cover big
+  repos locally; hosted runs stay small.
+- **A plugin marketplace now.** Open VSX and MCP already give us a catalog. A marketplace comes after the user base.
+
+### Order, and how it fits Tracks A and B
+
+| Step | Ships | Why here |
+|---|---|---|
+| 1 | A1 (real projects on disk) | Nothing else works on a real repo without it |
+| 2 | C1 (any agent, checked) and A2 (Git) | The broadest reason to try Aha, and the PR path for receipts |
+| 3 | C2 (receipts) and C3 (behaviour diff) | The launch: "AI changes that come with proof" |
+| 4 | C4 (taste) and C5 (ship-ready check) | The second launch, for people building apps from prompts |
+| 5 | C6 (links and multiplayer) and A3 (bring my setup) | Growth: every repo and README becomes a way in |
+| 6 | C7 (price), B1 to B6 throughout | Each one removes a reason to go back |
+
+Each launch goes out with a public benchmark run (B4), a 60-second video of the real flow, and the receipts from the
+demo, so anyone can check the claims.
+
+---
+
 ## Now
 
 ### 1. Proactive agents: watchers
