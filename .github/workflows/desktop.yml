@@ -191,7 +191,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          deb="$(ls src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb | head -1)"
+          deb="$(realpath "$(ls src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb | head -1)")"
           sudo apt-get install -y "$deb"
           files="$(dpkg -L "$(dpkg-deb -f "$deb" Package)")"
           node="$(echo "$files" | grep -E '/node$' | while read -r f; do [ -f "$f" ] && echo "$f" && break; done)"
