@@ -170,6 +170,12 @@ the results as proposals. Built on watchers (item 1) with a time trigger. *Done 
 proposals and a report, and the budget stops a runaway task.
 
 ### 9. Production to fix
+
+> **Shipped:** Fix a production error (Debug tab, command palette) reads Node and Python traces, logs and Sentry links,
+> maps server paths to project files, and asks for a reproducing test first (node:test or unittest beside the module),
+> then the fix and the same test passing. A pasted Node trace and a pasted Python traceback each ended in a proposal with
+> a test that failed before the fix and passed after it, in a browser test.
+
 Paste a stack trace, a Sentry issue link (through the Sentry connector) or a log excerpt: the agent maps frames to
 source, writes a failing test that reproduces it, fixes it, and shows the test passing. *Done when* a pasted Node and
 Python trace each end in a proposal with a reproducing test.

@@ -25,7 +25,7 @@ const isDebuggable = (path: string) => DEBUGGABLE.test(path) && !/\.d\.ts$/.test
 const STATUS: Record<string, string> = { starting: 'Starting…', running: 'Running', paused: 'Paused', exited: 'Finished', failed: 'Could not start' };
 
 /** Breakpoints, stepping, the call stack, variables and watches, for TypeScript, JavaScript and Python */
-export function DebugPanel({ onOpen }: { onOpen: (file: string, line: number) => void }) {
+export function DebugPanel({ onOpen, onTrace }: { onOpen: (file: string, line: number) => void; onTrace: () => void }) {
   const { project, active } = useWorkspace();
   const { session, output, starting, error } = useDebugSession();
   const breakpoints = useBreakpoints();
@@ -99,7 +99,10 @@ export function DebugPanel({ onOpen }: { onOpen: (file: string, line: number) =>
   if (enabled === false) {
     return (
       <div className="space-y-2 p-4">
-        <h3 className="eyebrow">Debug</h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="eyebrow">Debug</h3>
+          <button onClick={onTrace} className="text-[11px] text-accent hover:underline">Fix a production error…</button>
+        </div>
         <p className="text-sm text-gray-300">The debugger is off on this server.</p>
         <p className="text-xs leading-relaxed text-gray-500">It runs your program on the machine the studio runs on, so it works in the local studio and the desktop app (or with AHA_RUN=1). In the browser, Rewind shows what a run did, line by line.</p>
       </div>
@@ -109,7 +112,10 @@ export function DebugPanel({ onOpen }: { onOpen: (file: string, line: number) =>
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="space-y-2 border-b border-border p-4">
-        <h3 className="eyebrow">Debug</h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="eyebrow">Debug</h3>
+          <button onClick={onTrace} className="text-[11px] text-accent hover:underline">Fix a production error…</button>
+        </div>
         <div className="flex items-center gap-1.5">
           <select value={chosen} onChange={(e) => setEntry(e.target.value)} aria-label="File to debug" className="input h-8 min-w-0 flex-1 font-mono text-xs" disabled={!!live}>
             {candidates.length === 0 && <option value="">No TypeScript, JavaScript or Python file</option>}
