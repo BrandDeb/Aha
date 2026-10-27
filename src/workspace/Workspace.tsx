@@ -37,6 +37,9 @@ import { useWatchers } from './watchers';
 import { useChannelUpdates } from './channel-client';
 import { YOU } from '@/lib/agent/channel';
 import { useWorkspace } from './store';
+import { continueDebugging, loadProjectBreakpoints, startDebugging, stepDebugging, stopDebugging, useDebugSession } from './debug-client';
+
+const isDebugFile = (path: string) => /\.(py|[cm]?[jt]s)$/i.test(path) && !/\.d\.ts$/.test(path);
 import { useToast } from './toasts';
 import { useLiveValues } from './live-client';
 import { firstError } from '@/lib/live/rewind';
@@ -73,6 +76,7 @@ const KitPanel = dynamic(() => import('./panels/KitPanel').then((m) => m.KitPane
 const PipelinesPanel = dynamic(() => import('./panels/PipelinesPanel').then((m) => m.PipelinesPanel), { ssr: false, loading: PanelLoading });
 const ChannelPanel = dynamic(() => import('./panels/ChannelPanel').then((m) => m.ChannelPanel), { ssr: false, loading: PanelLoading });
 const ExtensionsPanel = dynamic(() => import('./panels/ExtensionsPanel').then((m) => m.ExtensionsPanel), { ssr: false, loading: PanelLoading });
+const DebugPanel = dynamic(() => import('./panels/DebugPanel').then((m) => m.DebugPanel), { ssr: false, loading: PanelLoading });
 const WatchersPanel = dynamic(() => import('./panels/WatchersPanel').then((m) => m.WatchersPanel), { ssr: false, loading: PanelLoading });
 const WorkerPanel = dynamic(() => import('./panels/WorkerPanel').then((m) => m.WorkerPanel), { ssr: false, loading: PanelLoading });
 const SettingsDialog = dynamic(() => import('./components/SettingsDialog').then((m) => m.SettingsDialog), { ssr: false });
@@ -109,6 +113,7 @@ const GROUPS: { id: string; label: string; panels: { id: PanelId; label: string;
     label: 'Run',
     panels: [
       { id: 'build', label: 'Build', hint: 'Build output, timings, coverage and the last run' },
+      { id: 'debug', label: 'Debug', hint: 'Breakpoints, stepping, the call stack and variables (TypeScript, JavaScript, Python)' },
       { id: 'languages', label: 'Language', hint: 'The toolchain that runs this project, and its options' },
       { id: 'python', label: 'Python', hint: 'uv: run, packages, environment variables' },
       { id: 'package', label: 'Packages', hint: 'Dependencies and scripts' },
@@ -164,6 +169,11 @@ const DEFAULT_KEYS: Record<string, string> = {
   'view.zen': 'Mod+Alt+Z',
   'view.preview': 'Mod+Alt+P',
   'view.theme': 'Mod+Alt+T',
+  'debug.start': 'F5',
+  'debug.stop': 'Shift+F5',
+  'debug.over': 'F10',
+  'debug.into': 'F11',
+  'debug.out': 'Shift+F11',
   'panel.git': 'Mod+Alt+G',
   'panel.ai': 'Mod+I',
   'panel.history': 'Mod+Alt+H',
@@ -216,6 +226,10 @@ export function Workspace() {
   const ciHooks = useMemo(() => ({ onFailure: (report: string) => reportFailure('pipeline', report), onPassed: () => markGood('pipeline') }), [reportFailure, markGood]);
   const ci = useCiOnSave(project.name, project.files, ciHooks);
   useAutocomplete(project.files, settings.extensions.aiComplete !== false);
+  const debugStatus = useDebugSession().session?.status;
+  useEffect(() => {
+    loadProjectBreakpoints(project.name);
+  }, [project.name]);
   const { onSave: ciOnSave, available: ciAvailable, on: ciOn, setOn: setCiOn } = ci;
   // A program that answered with its usage wants arguments: say so, and offer the field next to Run
   const hintArguments = useCallback(
@@ -883,6 +897,17 @@ export function Workspace() {
     { id: 'view.terminal', category: 'View', title: 'Toggle terminal', keys: DEFAULT_KEYS['view.terminal'], run: () => setShowTerminal((v) => !v) },
     { id: 'view.split', category: 'View', title: 'Toggle split editor', keys: DEFAULT_KEYS['view.split'], run: () => dispatch({ type: 'split', path: split ? null : tabs.find((t) => t !== active) ?? active }) },
     { id: 'view.zen', category: 'View', title: 'Zen mode', keys: DEFAULT_KEYS['view.zen'], run: () => setZen((v) => !v) },
+    { id: 'debug.start', category: 'Debug', title: debugStatus === 'paused' ? 'Continue' : 'Start debugging', keys: DEFAULT_KEYS['debug.start'], run: () => {
+      if (debugStatus === 'paused') return void continueDebugging();
+      const entry = isDebugFile(active) ? active : isDebugFile(project.entry) ? project.entry : Object.keys(project.files).find(isDebugFile);
+      if (!entry) return notify({ kind: 'info', title: 'Nothing to debug', detail: 'The debugger works with TypeScript, JavaScript and Python files.' });
+      openPanel('debug');
+      void startDebugging({ projectId: pythonProjectId(project.name), entry, files: project.files, env: getPythonEnv() });
+    } },
+    { id: 'debug.stop', category: 'Debug', title: 'Stop debugging', keys: DEFAULT_KEYS['debug.stop'], enabled: debugStatus === 'running' || debugStatus === 'paused', run: () => void stopDebugging() },
+    { id: 'debug.over', category: 'Debug', title: 'Step over', keys: DEFAULT_KEYS['debug.over'], enabled: debugStatus === 'paused', run: () => void stepDebugging('over') },
+    { id: 'debug.into', category: 'Debug', title: 'Step into', keys: DEFAULT_KEYS['debug.into'], enabled: debugStatus === 'paused', run: () => void stepDebugging('into') },
+    { id: 'debug.out', category: 'Debug', title: 'Step out', keys: DEFAULT_KEYS['debug.out'], enabled: debugStatus === 'paused', run: () => void stepDebugging('out') },
     { id: 'view.theme', category: 'View', title: 'Toggle light / dark', keys: DEFAULT_KEYS['view.theme'], run: () => updateSettings({ theme: settings.theme === 'dark' ? 'light' : 'dark' }) },
     { id: 'view.contrast', category: 'View', title: 'Toggle high contrast', run: () => updateSettings({ highContrast: !settings.highContrast }) },
     { id: 'panel.git', category: 'Git', title: 'Open Git panel', keys: DEFAULT_KEYS['panel.git'], run: () => openPanel('git') },
@@ -900,7 +925,7 @@ export function Workspace() {
     { id: 'collab.toggle', category: 'Collaboration', title: collab ? 'Leave live session' : 'Start live session', run: () => setCollab((v) => !v) },
     { id: 'prefs.settings', category: 'Preferences', title: 'Settings', keys: DEFAULT_KEYS['prefs.settings'], run: () => { setSettingsTab('general'); setDialog('settings'); } },
     { id: 'prefs.maintenance', category: 'Preferences', title: 'Updates and health checks', run: () => { setSettingsTab('maintenance'); setDialog('settings'); } },
-  ], [compileOrRun, runApp, web, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, openMorning, setShowExplorer, setShowPanel, collab, liveAvailable, liveOn, setLiveOn, ciAvailable, ciOn, setCiOn]);
+  ], [compileOrRun, runApp, web, analyze, downloadArtifact, lastBuild, save, format, dispatch, split, tabs, active, updateSettings, setTarget, settings.theme, settings.highContrast, openPanel, openMorning, setShowExplorer, setShowPanel, collab, liveAvailable, liveOn, setLiveOn, ciAvailable, ciOn, setCiOn, debugStatus, project.entry, project.files, project.name, notify]);
 
   const bindings = useMemo(() => {
     const map: Record<string, string> = { ...DEFAULT_KEYS, ...settings.keybindings };
@@ -1362,6 +1387,7 @@ export function Workspace() {
                 </div>
               )}
               <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto">
+                {shownPanel === 'debug' && <DebugPanel onOpen={(file, line) => openLocation({ file, line })} />}
                 {shownPanel === 'build' && (
                   <BuildPanel result={lastBuild} building={building} coverage={coverage} analyzing={analyzing} onCoverage={() => void analyze()} lastRun={lastRun} />
                 )}

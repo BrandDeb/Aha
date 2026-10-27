@@ -12,8 +12,8 @@ editor: every AI change arrives as a reviewable proposal that's already been bui
 ## Features
 
 - **Editor.** Monaco with project-wide TypeScript, a terminal, Git, and live values: what each line evaluated to on
-  the last run, written next to the code. VS Code colour themes and snippets install from Open VSX (read, never
-  run).
+  the last run, written next to the code. A debugger with breakpoints, stepping and watches for TypeScript and
+  Python. VS Code colour themes and snippets install from Open VSX (read, never run).
 - **Agent.** Each task runs on a copy of the project and ends as a proposal with its diff, build and test results,
   a risk score and a review by a second model. You accept all of it, part of it, or none.
 - **Background work.** The worker takes on follow-up tasks while you pause. Watchers run a task on a schedule, when

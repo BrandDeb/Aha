@@ -51,6 +51,7 @@ A one-line tour; each links to the section with the details. The workspace is at
 | **Build** | scriptc's nine outputs: native, WASM, LLVM IR, assembly, WAT, object, library… with timings and coverage |
 | **Live values** | Every line shows what it did as you type: values, returns, prints, errors; dead code fades ([Live values](#live-values)) |
 | **Rewind** | Scrub through a run and see every variable at each moment ([Rewind](#rewind)) |
+| **Debugger** | Breakpoints, stepping, the call stack, variables, watches and hover values for TypeScript, JavaScript and Python ([The debugger](#the-debugger)) |
 | **40+ languages** | Go, Rust, Python, Java, C#, Ruby, Zig, Swift… run here, toolchains installed on demand ([Other languages](#other-languages)) |
 | **Python (uv)** | Run, add and lock packages with uv, from a panel or the terminal ([Python and uv](#python-and-uv)) |
 | **Web apps** | Vite, Next.js, Nuxt, SvelteKit, Astro… with live preview, in the browser or on a dev server ([Web apps](#web-apps-and-live-preview)) |
@@ -203,6 +204,24 @@ changed are lit).
 
 The first 20,000 steps of a run are kept. Works for TypeScript, JavaScript and Python, across every file of
 the project.
+
+### The debugger
+
+When you need to stop the program rather than replay it, use the **Debug** panel (Run group) for TypeScript,
+JavaScript and Python.
+
+- **Breakpoints:** click left of a line number (a red dot); click again to remove. They are kept per project in
+  this browser and can be changed while the program runs.
+- **Run:** pick the file and press **Debug** (or **F5**). When it stops, the editor opens on that line,
+  highlighted, and the panel shows the call stack and each scope's variables (objects and lists expand).
+- **Step:** **F10** over, **F11** into, **Shift+F11** out, **F5** to continue, **Shift+F5** to stop.
+- **Read values:** hover a name in the editor, add **watch** expressions (read again at every stop), or evaluate
+  anything in the selected frame from the debug console. Click a frame in the stack to see its variables.
+
+TypeScript runs through Node's type stripping, so lines match what you see and imports without an extension
+find their `.ts` file. Python runs under debugpy, which uv adds for the run without changing your project. The
+debugger runs your program on the machine the studio runs on, so like Run it works in the local studio and the
+desktop app (or with `AHA_RUN=1`); the debugger itself only listens on 127.0.0.1.
 
 ## Contracts
 
@@ -1134,6 +1153,14 @@ names must be plain requirements (no URLs or paths); environment variables can't
 `GET ?q=` searches Open VSX → `{ results: [{ id, version, displayName, description, downloads }] }`; `GET ?id=publisher.name`
 → `{ extension }`. `POST { id, version? }` downloads the package from Open VSX and returns `{ pack }`: its themes,
 snippets and the contributions it skipped. Same origin, a trusted host and a rate limit (40 installs per 10 minutes).
+
+### `/api/debug` (local only)
+
+`POST { action: 'start', projectId, entry, files, args?, env?, breakpoints? }` starts a session and returns its
+state; then `POST { id, action }` with `continue`, `pause`, `stop`, `step` (`kind`: over, into, out), `breakpoints`
+(`file`, `lines`), `frame` (`frameId`), `children` (`ref`) or `evaluate` (`expression`). `GET ?id=…&since=N`
+returns the status, the stack, the selected frame's scopes and the output after `N`. Same checks as `/api/run`.
+At most three sessions; an idle one ends after 15 minutes.
 
 ### `/api/connectors`
 

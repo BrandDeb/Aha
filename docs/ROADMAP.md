@@ -130,6 +130,11 @@ reverts cleanly; nothing from the `.vsix` is executed.
 ## Next
 
 ### 5. Debugger (Debug Adapter Protocol)
+
+> **Shipped:** breakpoints in the gutter, step over/into/out, call stack, variables, watches, hover values and a
+> debug console, for TypeScript and JavaScript (Node inspector) and Python (debugpy over DAP). Both pass a browser
+> test. Next: conditional breakpoints and logpoints, break on exceptions, Go and Rust (Delve, CodeLLDB).
+
 Breakpoints, step, call stack, watch and hover values for Node (inspector protocol) and Python (debugpy), in the
 editor gutter, local studio only. Rewind already covers "what happened"; this adds "stop here". *Done when* a
 breakpoint in a TS and a Python program stops, steps and shows locals in a browser test.

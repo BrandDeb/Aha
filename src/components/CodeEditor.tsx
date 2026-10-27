@@ -10,6 +10,7 @@ import { NODE_TYPES } from '@/lib/monaco-node-types';
 import { DEFAULT_APPEARANCE, accentTokens, syntaxColors } from '@/workspace/appearance';
 import { liveView } from '@/lib/live/display';
 import { attachExtensions, currentEditorTheme, useEditorTheme } from '@/workspace/extensions-client';
+import { currentDebugSession, evaluateExpression, pausedLineIn, toggleBreakpoint, useBreakpoints, useDebugSession } from '@/workspace/debug-client';
 import type { LiveResult } from '@/lib/live/shared';
 
 // Serve the editor from this server instead of a public CDN: it works offline, loads from the same
@@ -282,6 +283,23 @@ export const configureMonaco: BeforeMount = (monaco) => {
       },
       disposeInlineCompletions() {},
     });
+    // While the debugger is paused, hovering a name (or a.b.c) shows its value in the selected frame
+    monaco.languages.registerHoverProvider(['typescript', 'javascript', 'python'], {
+      async provideHover(model: MonacoEditorNs.ITextModel, position: MonacoPosition) {
+        if (currentDebugSession()?.status !== 'paused') return null;
+        const word = model.getWordAtPosition(position);
+        if (!word) return null;
+        const before = model.getLineContent(position.lineNumber).slice(0, word.endColumn - 1);
+        const expression = /[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*$/.exec(before)?.[0];
+        if (!expression || /^(const|let|var|function|return|if|else|for|while|def|class|import|from|export|async|await|new|this|self)$/.test(expression)) return null;
+        const result = await evaluateExpression(expression);
+        if (!result || result.type === 'error') return null;
+        return {
+          range: new monaco.Range(position.lineNumber, before.length - expression.length + 1, position.lineNumber, word.endColumn),
+          contents: [{ value: `\`${expression}\` = \`${result.value.replace(/`/g, "'")}\`${result.type ? ` · ${result.type}` : ''}` }],
+        };
+      },
+    });
   }
 
   monacoInstance = monaco;
@@ -311,6 +329,8 @@ function editorOptions(fontSize: number, extensions: EditorExtensions) {
     scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
     accessibilitySupport: 'auto' as const,
     ariaLabel: 'Code editor',
+    // Breakpoints: click left of the line numbers
+    glyphMargin: true,
     inlineSuggest: { enabled: true, mode: 'subwordSmart' as const, showToolbar: 'onHover' as const },
   };
 }
@@ -455,6 +475,36 @@ export function CodeEditor({
         }))
     );
   };
+  // Breakpoints in the gutter, and the line the debugger is stopped on
+  const allBreakpoints = useBreakpoints();
+  const { session: debugSession } = useDebugSession();
+  const pausedLine = pausedLineIn(debugSession, path);
+  const fileBreakpoints = allBreakpoints[path];
+  const debugRef = useRef<{ clear: () => void } | null>(null);
+  const applyDebug = () => {
+    debugRef.current?.clear();
+    debugRef.current = null;
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (!editor || !model) return;
+    const count = model.getLineCount();
+    const at = (line: number) => ({ startLineNumber: line, startColumn: 1, endLineNumber: line, endColumn: 1 });
+    debugRef.current = editor.createDecorationsCollection([
+      ...(fileBreakpoints ?? []).filter((l) => l <= count).map((line) => ({ range: at(line), options: { glyphMarginClassName: 'debug-breakpoint', glyphMarginHoverMessage: { value: 'Breakpoint: click to remove' }, stickiness: 1 } })),
+      ...(pausedLine && pausedLine <= count ? [{ range: at(pausedLine), options: { isWholeLine: true, className: 'debug-paused-line', glyphMarginClassName: 'debug-paused-glyph', glyphMarginHoverMessage: { value: 'Paused here' } } }] : []),
+    ]);
+    if (pausedLine && pausedLine <= count) editor.revealLineInCenterIfOutsideViewport(pausedLine);
+  };
+  const breakpointKey = fileBreakpoints?.join(',') ?? '';
+  useEffect(() => {
+    applyDebug();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyDebug reads the current values
+  }, [breakpointKey, pausedLine, path]);
+  const pathRef = useRef(path);
+  useEffect(() => {
+    pathRef.current = path;
+  }, [path]);
+
   const rewindRef = useRef<{ clear: () => void } | null>(null);
   const rewindLine = rewind?.line ?? 0;
   const rewindText = rewind?.text ?? '';
@@ -540,6 +590,11 @@ export function CodeEditor({
     monacoRef.current = monaco;
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => onRunRef.current?.());
     editor.onDidFocusEditorText(() => onFocus?.());
+    editor.onMouseDown((e) => {
+      if (e.target.type !== monaco.editor.MouseTargetType.GUTTER_GLYPH_MARGIN || !e.target.position) return;
+      toggleBreakpoint(pathRef.current, e.target.position.lineNumber);
+    });
+    applyDebug();
     onEditor?.(editor);
     applyLive();
     applyWhy();

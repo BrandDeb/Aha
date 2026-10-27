@@ -511,4 +511,10 @@ html.zen [data-zen-hide] {
 /* Rewind: the moment being looked at */
 .monaco-editor .rewind-line { background: color-mix(in srgb, var(--color-accent) 14%, transparent); }
 .monaco-editor .rewind-gutter { background: var(--color-accent); width: 3px !important; margin-left: 3px; }
+/* The debugger: a breakpoint dot in the glyph margin, and the line it is stopped on */
+.monaco-editor .debug-breakpoint { cursor: pointer; }
+.monaco-editor .debug-breakpoint::before { content: ""; position: absolute; left: 50%; top: 50%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--color-danger, #e5484d); }
+.monaco-editor .margin-view-overlays .cgmr:hover { cursor: pointer; }
+.monaco-editor .debug-paused-line { background: color-mix(in srgb, var(--color-warn) 18%, transparent); }
+.monaco-editor .debug-paused-glyph::after { content: ""; position: absolute; left: 50%; top: 50%; margin: -5px 0 0 -3px; border-left: 7px solid var(--color-warn); border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
 .monaco-editor .rewind-value { color: var(--color-accent); font-style: italic; opacity: 0.95; }
