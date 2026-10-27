@@ -45,7 +45,7 @@ export async function Downloads({ headingId = 'download-title', heading = 'Get t
                     Download for {p.name}
                   </a>
                 ) : (
-                  <Link href="/" className="btn btn-secondary h-11 w-full text-[15px]">Use it in the browser</Link>
+                  <Link href="/" prefetch={false} className="btn btn-secondary h-11 w-full text-[15px]">Use it in the browser</Link>
                 )}
                 <p className="mt-2 text-center font-mono text-[11px] text-gray-500">
                   {pending ? 'Available here in a few minutes' : p.kind}

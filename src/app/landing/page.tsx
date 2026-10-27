@@ -70,7 +70,7 @@ export default function LandingPage() {
       <JsonLd data={[organizationLd(siteUrl()), websiteLd(siteUrl()), softwareLd(siteUrl(), PLANS)]} />
       <SiteHeader active="/landing">
         <Link href="/pricing" className="btn btn-ghost btn-sm hidden sm:inline-flex">Pricing</Link>
-        <Link href="/" className="btn btn-primary btn-sm">Open the studio</Link>
+        <Link href="/" prefetch={false} className="btn btn-primary btn-sm">Open the studio</Link>
       </SiteHeader>
 
       <main id="main">
@@ -93,7 +93,7 @@ export default function LandingPage() {
               Ask for a change, or let the worker pick up what’s next. Every result arrives as a proposal with the diff and the evidence that it builds and runs. Nothing touches your code until you say so.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/" className="btn btn-primary h-11 px-6 text-[15px]">Open the studio, free</Link>
+              <Link href="/" prefetch={false} className="btn btn-primary h-11 px-6 text-[15px]">Open the studio, free</Link>
               <Link href="#download" className="btn btn-secondary h-11 px-6 text-[15px]">Download the app</Link>
             </div>
             <p className="mt-3 text-sm text-gray-500">No sign-up. Your model, your machine.</p>
@@ -173,7 +173,7 @@ export default function LandingPage() {
               <div key={a.who} className="flex flex-col bg-[var(--raised)] p-6">
                 <h3 className="text-lg font-medium text-gray-100">{a.who}</h3>
                 <p className="mt-2 flex-1 text-sm leading-relaxed text-gray-400">{a.line}</p>
-                <Link href={a.href} className="mt-4 text-sm text-accent hover:text-gray-100">{a.cta} →</Link>
+                <Link href={a.href} prefetch={a.href === '/' || a.href.startsWith('/?') ? false : undefined} className="mt-4 text-sm text-accent hover:text-gray-100">{a.cta} →</Link>
               </div>
             ))}
           </div>
@@ -192,7 +192,7 @@ export default function LandingPage() {
             <ul className="space-y-2.5">
               {KIT_LIBRARY.map(({ kit }) => (
                 <li key={kit.id}>
-                  <Link href={`/?kit=${kit.id}`} className="surface flex items-start gap-4 p-4 transition-colors hover:border-border-strong">
+                  <Link href={`/?kit=${kit.id}`} prefetch={false} className="surface flex items-start gap-4 p-4 transition-colors hover:border-border-strong">
                     <span className="badge mt-0.5 shrink-0 px-1.5 py-0 text-[10px]">{AUDIENCE_LABEL[kit.audience]}</span>
                     <span className="min-w-0">
                       <span className="block font-medium text-gray-100">{kit.name}</span>
@@ -277,7 +277,7 @@ export default function LandingPage() {
             <h2 className="display relative text-4xl text-gray-100 md:text-5xl">Your next change, verified.</h2>
             <p className="relative mt-4 text-gray-400">Open the studio, pick a starter or a kit, and ask.</p>
             <div className="relative mt-8 flex flex-wrap justify-center gap-3">
-              <Link href="/" className="btn btn-primary h-11 px-6 text-[15px]">Open the studio</Link>
+              <Link href="/" prefetch={false} className="btn btn-primary h-11 px-6 text-[15px]">Open the studio</Link>
               <Link href="/onboarding" className="btn btn-secondary h-11 px-6 text-[15px]">Take the tour</Link>
             </div>
           </div>

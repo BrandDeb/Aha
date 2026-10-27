@@ -23,7 +23,7 @@ export default function OnboardingPage() {
   return (
     <div className="app-bg min-h-screen">
       <SiteHeader>
-        <Link href="/" className="btn btn-ghost btn-sm">Skip</Link>
+        <Link href="/" prefetch={false} className="btn btn-ghost btn-sm">Skip</Link>
       </SiteHeader>
 
       <main id="main" className="mx-auto max-w-2xl px-4 pt-16 pb-24">
@@ -127,7 +127,7 @@ export default function OnboardingPage() {
             </dl>
             <div className="mt-10 flex justify-between">
               <button onClick={() => setStep(1)} className="btn btn-ghost">Back</button>
-              <Link href={`/?template=${template.id}`} className="btn btn-primary h-10 px-5">Open the editor</Link>
+              <Link href={`/?template=${template.id}`} prefetch={false} className="btn btn-primary h-10 px-5">Open the editor</Link>
             </div>
           </section>
         )}

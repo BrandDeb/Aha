@@ -39,6 +39,7 @@ export function SiteHeader({ active, children, center, fluid = false }: SiteHead
             <Link
               key={item.href}
               href={item.href}
+              prefetch={item.href === '/' ? false : undefined}
               aria-current={active === item.href ? 'page' : undefined}
               className={`rounded-md px-2.5 py-1.5 transition-colors ${
                 active === item.href
@@ -58,7 +59,7 @@ export function SiteHeader({ active, children, center, fluid = false }: SiteHead
       {!fluid && (
         <nav className="flex gap-1 overflow-x-auto px-3 pb-2 text-sm md:hidden" aria-label="Main (mobile)">
           {NAV.map((item) => (
-            <Link key={item.href} href={item.href} aria-current={active === item.href ? 'page' : undefined} className={`shrink-0 rounded-md px-2.5 py-1 ${active === item.href ? 'bg-white/[0.07] text-gray-100' : 'text-gray-400'}`}>
+            <Link key={item.href} href={item.href} prefetch={item.href === '/' ? false : undefined} aria-current={active === item.href ? 'page' : undefined} className={`shrink-0 rounded-md px-2.5 py-1 ${active === item.href ? 'bg-white/[0.07] text-gray-100' : 'text-gray-400'}`}>
               {item.label}
             </Link>
           ))}

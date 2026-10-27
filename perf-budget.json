@@ -12,13 +12,13 @@
       },
       {
         "path": "/landing",
-        "jsBytes": 296673,
-        "jsRequests": 20
+        "jsBytes": 149811,
+        "jsRequests": 12
       },
       {
         "path": "/docs",
-        "jsBytes": 292582,
-        "jsRequests": 20
+        "jsBytes": 145715,
+        "jsRequests": 12
       }
     ],
     "editorReadyMs": 889,
