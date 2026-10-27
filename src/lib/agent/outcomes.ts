@@ -13,7 +13,7 @@
  * change is a proposal you review. Pure: no storage or model calls here.
  */
 
-export type OutcomeOrigin = 'you' | 'debug' | 'worker' | 'watcher';
+export type OutcomeOrigin = 'you' | 'debug' | 'worker' | 'watcher' | 'night';
 
 export interface Outcome {
   id: string;

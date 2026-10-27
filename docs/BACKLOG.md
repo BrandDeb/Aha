@@ -39,7 +39,7 @@ as a proposal with evidence, and vibe coding and hand-writing as equals.
 | Publish (one click to a public URL; CLI binaries to a release page) | Next | static export for web apps; GitHub release for CLIs |
 | Mobile preview by QR code | Next | LAN URL of the dev server as a QR; needs the desktop app or a local server |
 | Community gallery (share a project as a remixable link) | Later | needs hosting and moderation |
-| Night shift (queue tasks, the worker runs them overnight inside a budget) | Next | builds on the worker and morning report |
+| Night shift (queue tasks, run overnight inside a budget) | Done | running with the window closed (desktop app) next |
 | Production to fix (paste a stack trace or a Sentry link, get a reproduction and a fix) | Next | |
 | Project memory and guided tour (what this codebase is, for a newcomer, in 5 stops) | Next | |
 | Supply-chain guard (new dependencies checked for typosquats, install scripts, advisories, licence) | Next | extends the risk score |

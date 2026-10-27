@@ -34,6 +34,8 @@ import { useDevServer } from './devserver-client';
 import { laneOf, useProposals, verdict } from './proposals';
 import { useWorker } from './worker';
 import { useWatchers } from './watchers';
+import { useNightShift } from './nightshift';
+import { nightSummary } from '@/lib/nightshift';
 import { useChannelUpdates } from './channel-client';
 import { YOU } from '@/lib/agent/channel';
 import { useWorkspace } from './store';
@@ -79,6 +81,7 @@ const KitPanel = dynamic(() => import('./panels/KitPanel').then((m) => m.KitPane
 const PipelinesPanel = dynamic(() => import('./panels/PipelinesPanel').then((m) => m.PipelinesPanel), { ssr: false, loading: PanelLoading });
 const ChannelPanel = dynamic(() => import('./panels/ChannelPanel').then((m) => m.ChannelPanel), { ssr: false, loading: PanelLoading });
 const ExtensionsPanel = dynamic(() => import('./panels/ExtensionsPanel').then((m) => m.ExtensionsPanel), { ssr: false, loading: PanelLoading });
+const NightShiftPanel = dynamic(() => import('./panels/NightShiftPanel').then((m) => m.NightShiftPanel), { ssr: false, loading: PanelLoading });
 const DebugPanel = dynamic(() => import('./panels/DebugPanel').then((m) => m.DebugPanel), { ssr: false, loading: PanelLoading });
 const WatchersPanel = dynamic(() => import('./panels/WatchersPanel').then((m) => m.WatchersPanel), { ssr: false, loading: PanelLoading });
 const WorkerPanel = dynamic(() => import('./panels/WorkerPanel').then((m) => m.WorkerPanel), { ssr: false, loading: PanelLoading });
@@ -132,6 +135,7 @@ const GROUPS: { id: string; label: string; panels: { id: PanelId; label: string;
       { id: 'worker', label: 'Keep going', hint: 'It picks up the next useful task by itself while you work' },
       { id: 'channel', label: 'Channel', hint: 'Running agents tell each other what they changed and ask each other, or you' },
       { id: 'watchers', label: 'Watchers', hint: 'Agents that wake on a schedule, on changes or on failures, and say when they hold back' },
+      { id: 'night', label: 'Night shift', hint: 'Queue tasks before you leave: they run one by one inside a budget, and the morning report has the results' },
     ],
   },
   {
@@ -800,6 +804,7 @@ export function Workspace() {
   // Watchers: agents that wake on a schedule, on changes or on failures
   const watcherFailure = useMemo(() => (failure ? { signature: failure.signature, title: failure.title } : null), [failure]);
   const watchers = useWatchers(watcherFailure);
+  const nightShift = useNightShift();
 
   // Agents' questions for you on the channel: a notice when one arrives, and a count in the status bar
   useChannelUpdates(proposals.channel);
@@ -841,6 +846,8 @@ export function Workspace() {
       ci: ci.on && (ci.state.status === 'passed' || ci.state.status === 'failed') && !ci.stale ? { status: ci.state.status, step: ci.state.step } : null,
       nextTask: worker.queue[0] ? { title: worker.queue[0].title, reason: worker.queue[0].reason } : null,
       workerMode: worker.settings.mode,
+      // The last night shift, when it ran since you were here
+      night: nightShift.night.startedAt && nightShift.night.startedAt >= (awaySince ?? Date.now() - 24 * 60 * 60_000) - 12 * 60 * 60_000 ? nightSummary(nightShift.night) : null,
     });
   const buildRef = useRef(buildMorning);
   useEffect(() => {
@@ -1416,6 +1423,7 @@ export function Workspace() {
                 {shownPanel === 'agent' && <AgentPanel />}
                 {shownPanel === 'worker' && <WorkerPanel worker={worker} />}
                 {shownPanel === 'watchers' && <WatchersPanel watchers={watchers} />}
+                {shownPanel === 'night' && <NightShiftPanel handle={nightShift} />}
                 {shownPanel === 'channel' && <ChannelPanel />}
                 {shownPanel === 'extensions' && <ExtensionsPanel />}
                 {shownPanel === 'optimize' && <OptimizePanel onOpen={(file) => openLocation({ file, line: 1 })} />}

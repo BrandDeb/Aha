@@ -9,7 +9,7 @@ export interface ReportProposal {
   id: string;
   goal: string;
   status: 'working' | 'review' | 'accepted' | 'discarded';
-  origin?: 'you' | 'debug' | 'worker' | 'watcher';
+  origin?: 'you' | 'debug' | 'worker' | 'watcher' | 'night';
   createdAt: number;
   /** "Verified", "Breaks a contract"… */
   headline?: string;
@@ -28,6 +28,8 @@ export interface ReportInput {
   ci?: { status: 'passed' | 'failed'; step?: string } | null;
   nextTask?: { title: string; reason: string } | null;
   workerMode?: 'off' | 'suggest' | 'auto';
+  /** The last night shift, when it ran since you were here */
+  night?: { headline: string; items: { text: string; status: string; detail: string; proposalId?: string }[] } | null;
 }
 
 export type ReportAction = { kind: 'proposal'; id: string } | { kind: 'panel'; panel: 'contracts' | 'ci' | 'worker' | 'agent' } | { kind: 'debug' };
@@ -57,10 +59,18 @@ export function awayFor(ms: number): string {
   return `${d} day${d === 1 ? '' : 's'}`;
 }
 
-const WHO: Record<NonNullable<ReportProposal['origin']>, string> = { you: 'For you', debug: 'Debugger', worker: 'Worker', watcher: 'Watcher' };
+const WHO: Record<NonNullable<ReportProposal['origin']>, string> = { you: 'For you', debug: 'Debugger', worker: 'Worker', watcher: 'Watcher', night: 'Night shift' };
 
 export function morningReport(input: ReportInput): MorningReport {
   const sections: MorningReport['sections'] = [];
+  // 0. The night shift, first: you queued it for this moment
+  if (input.night?.items.length) {
+    const tone = (s: string): ReportItem['tone'] => (s === 'done' ? 'good' : s === 'failed' ? 'bad' : s === 'stopped' || s === 'skipped' ? 'warn' : 'neutral');
+    sections.push({
+      title: input.night.headline,
+      items: input.night.items.map((t) => ({ label: t.text, detail: t.detail, tone: tone(t.status), ...(t.proposalId ? { action: { kind: 'proposal' as const, id: t.proposalId } } : {}) })),
+    });
+  }
   const recent = input.proposals.filter((p) => p.createdAt >= input.since);
 
   // 1. Waiting on you: a question, or finished work to review (newest first)
@@ -108,8 +118,9 @@ export function morningReport(input: ReportInput): MorningReport {
     waiting.length ? `${waiting.length} wait${waiting.length === 1 ? 's' : ''} on you` : null,
     broken.length ? `${broken.length} thing${broken.length === 1 ? '' : 's'} broken` : null,
   ].filter(Boolean);
-  const quiet = !parts.length;
+  const quiet = !parts.length && !input.night?.items.length;
   const away = awayFor(input.now - input.since);
+  if (!parts.length && input.night?.items.length) return { headline: `${input.night.headline}.`, sections, quiet };
   const headline = quiet
     ? `All quiet for the ${away} you were away${input.workerMode === 'off' ? ': the worker is off' : ''}.`
     : `While you were away (${away}): ${parts.join(' · ')}.`;

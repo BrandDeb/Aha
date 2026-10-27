@@ -76,6 +76,8 @@ export interface Budget {
   maxMillis: number;
   /** Consecutive failed builds/tests before the agent must stop and report */
   maxFixAttempts: number;
+  /** Tokens the model may use in all (input and output), when set: unattended runs spend no more than this */
+  maxTokens?: number;
 }
 
 export const DEFAULT_BUDGET: Budget = { maxSteps: 25, maxToolCalls: 80, maxMillis: 10 * 60_000, maxFixAttempts: 4 };
