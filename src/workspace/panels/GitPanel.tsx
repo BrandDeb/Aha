@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { mergeProjects } from '@/lib/merge3';
 import { pipelineFiles } from '@/lib/pipelines/parse';
 import type { GitHubRepoInfo, GitHubUserInfo } from '@/types';
 import { useActions } from '../actions';
+import { openConflicts } from '../conflicts';
 import { fetchJobLog, fetchRunJobs, fetchRuns, latestPerWorkflow, remoteFailureBrief, rerunFailed, type WorkflowRun } from '../pipelines-client';
 import { useProposals } from '../proposals';
 import { diffStatus, lineDelta } from '../project';
@@ -86,13 +88,39 @@ export function GitPanel({ user, onOpenPipelines }: { user: GitHubUserInfo | nul
 
   const pull = async () => {
     if (!repo || !branch) return;
-    if (git && changedFiles.length && !window.confirm(`Pulling replaces your workspace. ${changedFiles.length} uncommitted change(s) will be saved to History first. Continue?`)) return;
+    const sameBranch = git && git.owner === owner && git.repo === name && git.branch === branch;
+    // Pulling another repository or branch replaces the workspace; the same branch merges into your changes
+    if (!sameBranch && git && changedFiles.length && !window.confirm(`Pulling another branch replaces your workspace. ${changedFiles.length} uncommitted change(s) will be saved to History first. Continue?`)) return;
     setBusy('pull');
     try {
       const data = await api<{ sha: string; files: Record<string, string>; skipped: string[] }>(
         `/api/github/repos/${repo}/tree?branch=${encodeURIComponent(branch)}`
       );
       saveSnapshot('Before pull');
+      if (sameBranch && git) {
+        const merge = mergeProjects(git.base, project.files, data.files);
+        const nextGit = { ...git, headSha: data.sha, base: data.files };
+        const finish = (resolved: Record<string, string> = {}) => {
+          dispatch({ type: 'put', files: { ...merge.files, ...resolved }, removed: merge.removed });
+          dispatch({ type: 'git', git: nextGit });
+          const { theirs, merged } = merge.summary;
+          notify({
+            kind: 'success',
+            title: `Pulled ${repo}@${branch}`,
+            detail: [`${theirs.length} file${theirs.length === 1 ? '' : 's'} updated`, merged.length && `${merged.length} merged with your changes`, merge.conflicts.length && `${merge.conflicts.length} conflict${merge.conflicts.length > 1 ? 's' : ''} resolved`].filter(Boolean).join(' · '),
+          });
+        };
+        if (!merge.conflicts.length) finish();
+        else
+          openConflicts({
+            title: `Merge ${repo}@${branch} into your changes`,
+            theirs: branch,
+            conflicts: merge.conflicts,
+            onApply: finish,
+            onCancel: () => notify({ kind: 'info', title: 'Pull cancelled', detail: 'Your workspace is as it was.' }),
+          });
+        return;
+      }
       const entry = ['src/main.ts', 'src/index.ts', 'main.ts', 'index.ts'].find((f) => f in data.files)
         ?? Object.keys(data.files).find((f) => /\.(?:ts|js)$/.test(f) && !f.endsWith('.d.ts'))
         ?? '';
@@ -158,7 +186,7 @@ export function GitPanel({ user, onOpenPipelines }: { user: GitHubUserInfo | nul
         title: status === 409 ? 'The branch has new commits' : 'Commit failed',
         detail:
           status === 409
-            ? 'Someone pushed since your last pull. Pull to update, then commit again.'
+            ? 'Someone pushed since your last pull. Pull: their changes merge into yours (conflicts open side by side), then commit again.'
             : workflows && (status === 403 || status === 404 || status === 422)
               ? 'GitHub needs the “workflow” permission to change files in .github/workflows/. Sign out (your avatar, top right) and sign in again to grant it, then commit again.'
               : (error as Error).message,

@@ -38,6 +38,7 @@ import { useChannelUpdates } from './channel-client';
 import { YOU } from '@/lib/agent/channel';
 import { useWorkspace } from './store';
 import { setLspProject, useLspStatus } from './lsp-client';
+import { ConflictHost } from './conflicts';
 import { continueDebugging, loadProjectBreakpoints, startDebugging, stepDebugging, stopDebugging, useDebugSession } from './debug-client';
 
 const LSP_NAMES: Record<string, string> = { python: 'Pyright', go: 'gopls', rust: 'rust-analyzer' };
@@ -1601,6 +1602,7 @@ export function Workspace() {
         />
       )}
       {viewer && <ArtifactDialog result={viewer} theme={settings.theme} onClose={() => setViewer(null)} />}
+      <ConflictHost />
       {dialog === 'project' && <ProjectDialog user={user} onClose={() => setDialog(null)} />}
       {dialog === 'signin' && (
         <SignInDialog

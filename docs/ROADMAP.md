@@ -151,6 +151,11 @@ bridged to Monaco over a WebSocket: completion, hover, go to definition, rename,
 go-to-definition work in Python and Go projects.
 
 ### 7. Merge-conflict editor
+
+> **Shipped:** Pull merges into your changes (three-way, line by line); conflicts open side by side with keep
+> yours / theirs / both and an editable result. Proposals that touch files you edited since merge the same way.
+> A conflicted pull resolves in a browser test.
+
 Three-way view (yours, theirs, result) with accept-per-hunk, used by Git pull and by proposals that conflict with
 newer edits. *Done when* a conflicted pull resolves without leaving the studio.
 
