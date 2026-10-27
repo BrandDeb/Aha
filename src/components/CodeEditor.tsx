@@ -553,7 +553,7 @@ export function CodeEditor({
     // listener leak at 200. Other files get their model when they are opened.
     // The budget counts the models that already exist: this runs after every render, and a fresh allowance each time
     // would add another batch of models on each one, until every file in a big project had one
-    let budget = MAX_BACKGROUND_MODELS - monaco.editor.getModels().filter((m) => m.uri.toString().startsWith('file:///') && !m.uri.toString().includes('node_modules')).length;
+    let budget = MAX_BACKGROUND_MODELS - monaco.editor.getModels().filter((m: { uri: { toString(): string } }) => m.uri.toString().startsWith('file:///') && !m.uri.toString().includes('node_modules')).length;
     for (const [filePath, content] of Object.entries(files)) {
       if (filePath === path) continue;
       const existing = monaco.editor.getModel(monaco.Uri.parse(uriFor(filePath)));
