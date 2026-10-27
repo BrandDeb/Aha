@@ -173,7 +173,7 @@ jobs:
           if (-not $ok) { throw "The installed app's server did not start" }
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aha-${{ matrix.target }}
           path: ${{ matrix.artifact }}
