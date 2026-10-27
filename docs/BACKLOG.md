@@ -26,7 +26,7 @@ Specs in [ROADMAP.md](ROADMAP.md): Tracks A and B, "Strategy, part two" and "Pla
 | A2. Git as the backbone: proposals as branches, PRs with evidence | Next | |
 | A3. Bring my setup: Cursor, VS Code, Zed, Windsurf, JetBrains (settings, keys, rules, MCP) | Next | |
 | A4. Companion mode | Next | |
-| A5. Sign in on first launch with GitHub or Google; Linux desktop app; continue without an account | Next | Google client *needs you* |
+| A5. Sign in on first launch with GitHub or Google; Linux desktop app; continue without an account | Done, apart from what needs you | Google client and the embed decision *need you*; the Linux installers are built by CI and still to be tried on a real Linux desktop |
 | B1 to B6. Native core, shared index, extension host, public benchmark, private mode, table stakes | Later | |
 | C1. Any agent (Claude Code, Codex, Gemini) over ACP, sandboxed, checked by Aha | Next | |
 | C2. Receipts: replayable, tamper-evident proof attached to PRs | Next | |
@@ -153,7 +153,7 @@ and would undo the "lightweight" goal. The plan instead:
 
 | Item | Why |
 |---|---|
-| Google sign-in | a Google OAuth client (desktop needs no domain; the web needs one) |
+| Google sign-in | a Google OAuth client ("TVs and limited-input devices"; no domain needed). And a decision: whether the released desktop installers embed its client ID and secret (Google documents the secret as not confidential for this client type) |
 | Payment provider and final prices for Team and Business | SMB plans |
 | GitHub OAuth app (`AHA_GITHUB_CLIENT_ID`) | GitHub sign-in in production |
 | `NEXT_PUBLIC_SITE_URL` | canonical URLs, sitemap, OG images |

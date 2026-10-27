@@ -24,6 +24,7 @@ export async function DELETE(request: NextRequest) {
   response.cookies.delete('github_user');
   response.cookies.delete('github_oauth_state');
   response.cookies.delete('github_device');
+  response.cookies.delete('aha_account');
   
   return response;
 }

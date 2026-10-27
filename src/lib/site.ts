@@ -38,7 +38,7 @@ export const SITE = {
     'An autonomous worker that fixes, tests and improves while you pause',
     'Toolchains for 40+ languages installed and kept current, with templates, tests and CI for each',
     'TypeScript compiled to a small native binary with scriptc',
-    'Native apps for macOS and Windows',
+    'Native apps for macOS, Windows and Linux',
     'Bring your own model: Anthropic, OpenAI, Gemini, Groq, OpenRouter, Ollama and more',
   ],
 } as const;
@@ -121,7 +121,7 @@ export function publicPages(docs: DocPage[]): { path: string; title: string; sum
   return [
     { path: '/landing', title: SITE.name, summary: SITE.tagline, priority: 1, changeFrequency: 'weekly' },
     { path: '/pricing', title: 'Pricing', summary: 'Free with your own model; Pro and Premium plans.', priority: 0.9, changeFrequency: 'monthly' },
-    { path: '/download', title: 'Download', summary: 'Native apps for macOS and Windows; run from source on Linux.', priority: 0.8, changeFrequency: 'monthly' },
+    { path: '/download', title: 'Download', summary: 'Native apps for macOS, Windows and Linux.', priority: 0.8, changeFrequency: 'monthly' },
     { path: '/docs', title: 'Documentation', summary: 'Every feature, configuration and the API.', priority: 0.8, changeFrequency: 'weekly' },
     { path: '/faq', title: 'FAQ', summary: 'Answers about the agent, plans, languages, privacy and self-hosting.', priority: 0.7, changeFrequency: 'monthly' },
     ...docs.map((d) => ({ path: `/docs/${d.slug}`, title: d.title, summary: d.summary, priority: 0.6, changeFrequency: 'monthly' as const })),

@@ -3,6 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { ACCOUNT_COOKIE, cleanAccount, signAccount } from './account';
 import { GitHubApiError, type GitHubUser } from './github';
 import { secureCookies, webFlowFor } from './github-device';
 import { isTrustedHost } from './host';
@@ -22,6 +23,9 @@ export function setSession(response: NextResponse, request: NextRequest, token: 
   const options = { ...cookieOptions(request), maxAge: 60 * 60 * 24 * SESSION_DAYS };
   response.cookies.set('github_token', token, options);
   response.cookies.set('github_user', JSON.stringify({ id: user.id, login: user.login, avatar_url: user.avatar_url, name: user.name }), options);
+  // The same sign-in as a studio account, so the page treats GitHub and Google the same (see lib/account.ts)
+  const account = cleanAccount({ provider: 'github', id: String(user.id), handle: user.login, name: user.name ?? user.login, avatar: user.avatar_url });
+  if (account) response.cookies.set(ACCOUNT_COOKIE, signAccount(account), options);
   return response;
 }
 

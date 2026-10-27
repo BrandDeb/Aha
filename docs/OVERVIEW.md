@@ -72,7 +72,7 @@ Browser (Next.js client, React 19)            Server (Next.js routes + server.js
 | `src/lib/live/` | Live values, coverage, rewind (recorded runs) |
 | `src/lib/pipelines/` | CI pipelines inside the studio |
 | `src/lib/*-templates.ts`, `gallery.ts`, `stack/` | Project templates, app gallery, stack builder |
-| `src-tauri/` | Desktop app (Tauri, Rust): Windows and macOS |
+| `src-tauri/` | Desktop app (Tauri, Rust): macOS, Windows and Linux |
 | `tests/` | Unit tests, one file per area (`*.test.ts`) |
 | `scripts/` | Docs generator, supervisor, template and app verifiers |
 | `docs/` | This overview, roadmap and backlog |

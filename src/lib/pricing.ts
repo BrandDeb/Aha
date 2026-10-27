@@ -62,7 +62,7 @@ export const PLANS: Plan[] = [
       'A second reviewer on every proposal',
       'CI on every save, and the morning report',
       'Export your own field kits',
-      'The native app for Windows and macOS',
+      'The native app for macOS, Windows and Linux',
       'Email support',
     ],
   },
@@ -144,7 +144,7 @@ export const COMPARISON: { group: string; rows: { label: string; free: Cell; pro
     group: 'Apps and support',
     rows: [
       { label: 'Runs in the browser, self-hosted', free: true, pro: true, premium: true },
-      { label: 'Native app for Windows and macOS', free: false, pro: true, premium: true },
+      { label: 'Native app for macOS, Windows and Linux', free: false, pro: true, premium: true },
       { label: 'Support', free: 'Community', pro: 'Email', premium: 'Priority, named engineer' },
     ],
   },

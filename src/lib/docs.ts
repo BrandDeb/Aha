@@ -40,7 +40,7 @@ export const DOC_GROUPS: { name: string; pages: string[] }[] = [
   { name: 'Getting started', pages: ['Quick start', 'Create', 'Features', "What's measured"] },
   { name: 'Writing code', pages: ['Live values', 'Contracts', 'Web apps and live preview', 'Smart contracts: deploy & run', 'Other languages', 'Python and uv'] },
   { name: 'AI', pages: ['Assistant', 'Agent'] },
-  { name: 'Shipping', pages: ['DevOps: pipelines in the studio', 'Field kits', 'Desktop app (Windows and macOS)', 'Signing in with GitHub'] },
+  { name: 'Shipping', pages: ['DevOps: pipelines in the studio', 'Field kits', 'Desktop app (macOS, Windows and Linux)', 'Signing in (GitHub and Google)'] },
   { name: 'Reference', pages: ['Configuration', 'API', 'Scripts', 'Pages', 'Architecture', 'Project structure', 'Performance', 'Maintenance', 'Security', 'Contributing'] },
 ];
 const SKIP = new Set(['License']);

@@ -1,6 +1,6 @@
 name: Desktop apps
 
-# Builds Aha! for macOS (Apple silicon) and Windows with Tauri: on pull requests that touch
+# Builds Aha! for macOS (Apple silicon), Windows and Linux with Tauri: on pull requests that touch
 # the desktop app, on pushes to main, on version tags, and on demand. Installers are uploaded as workflow
 # artifacts and published with stable names (the download page links to them): a version tag gets its
 # own release, every other build replaces the files of the rolling `desktop-latest` pre-release.
@@ -50,6 +50,14 @@ jobs:
             target: x86_64-pc-windows-msvc
             bundles: nsis
             artifact: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          # Built on the oldest runner that has WebKitGTK 4.1, so the AppImage runs on every distribution newer than that
+          - name: Linux (x64)
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+            artifact: |
+              src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+              src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
     steps:
       - uses: actions/checkout@v4
 
@@ -69,6 +77,12 @@ jobs:
         with:
           workspaces: src-tauri -> target
           key: ${{ matrix.target }}
+
+      - name: Linux system packages (Tauri's web view and bundlers)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
       - name: Install dependencies
         run: npm ci
@@ -172,6 +186,32 @@ jobs:
           '--- server log'; Get-Content $log, "$log.err" -ErrorAction SilentlyContinue
           if (-not $ok) { throw "The installed app's server did not start" }
 
+      # Install the package the way a user would, then start the installed app's server the way the app does
+      - name: Smoke test (install the .deb, then the installed app's server starts and answers)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          deb="$(ls src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb | head -1)"
+          sudo apt-get install -y "$deb"
+          files="$(dpkg -L "$(dpkg-deb -f "$deb" Package)")"
+          node="$(echo "$files" | grep -E '/node$' | while read -r f; do [ -f "$f" ] && echo "$f" && break; done)"
+          server="$(echo "$files" | grep -E '/app/server\.js$' | head -1)"
+          [ -n "$node" ] && [ -n "$server" ] || { echo "::error::The package has no node or no server.js"; echo "$files" | head -40; exit 1; }
+          root="$(dirname "$server")"
+          temp="$(mktemp -d)"
+          (cd "$root" && NODE_ENV=production HOST=127.0.0.1 PORT=47123 NEXT_PUBLIC_BASE_URL=http://127.0.0.1:47123 \
+            AHA_TEMP_DIR="$temp" AHA_DESKTOP=1 NEXT_TELEMETRY_DISABLED=1 AHA_HOME="$temp/home" \
+            "$node" scripts/supervise.js > "$temp/server.log" 2>&1) &
+          ok=""
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:47123/api/health > /dev/null 2>&1; then ok=1; break; fi
+            sleep 1
+          done
+          curl -fsS -o /dev/null -w "studio page: %{http_code}\n" http://127.0.0.1:47123/ || true
+          pkill -f "supervise.js" || true
+          echo "--- server log"; cat "$temp/server.log"
+          [ -n "$ok" ] || { echo "::error::The installed app's server did not start"; exit 1; }
+
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
@@ -204,6 +244,8 @@ jobs:
           mkdir out
           cp built/aha-aarch64-apple-darwin/*.dmg out/Aha-macOS-arm64.dmg
           cp built/aha-x86_64-pc-windows-msvc/*.exe out/Aha-Windows-x64-setup.exe
+          cp built/aha-x86_64-unknown-linux-gnu/*.AppImage out/Aha-Linux-x64.AppImage
+          cp built/aha-x86_64-unknown-linux-gnu/*.deb out/Aha-Linux-x64.deb
           (cd out && sha256sum Aha-* > SHA256SUMS.txt && cat SHA256SUMS.txt)
 
       - name: Publish to the release
@@ -225,6 +267,7 @@ jobs:
 
           - macOS: Apple silicon, macOS 11 or newer (Aha-macOS-arm64.dmg)
           - Windows: 10 or 11, x64 (Aha-Windows-x64-setup.exe)
+          - Linux: x64 with GTK 3 and WebKitGTK 4.1, such as Ubuntu 22.04 or newer, Debian 12 or newer, Fedora 38 or newer (Aha-Linux-x64.AppImage, or Aha-Linux-x64.deb for Debian and Ubuntu)
 
           Unsigned builds: on macOS right-click the app and choose Open the first time; on Windows choose More info, then Run anyway. SHA-256 checksums are in SHA256SUMS.txt."
           if gh release view "$TAG" >/dev/null 2>&1; then

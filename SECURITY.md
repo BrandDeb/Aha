@@ -86,6 +86,16 @@ host runners are not.
   them. The GitHub token is an `HttpOnly`, `SameSite=Lax` cookie (`Secure` in production); OAuth uses a single-use,
   constant-time-compared `state`.
 
+**Accounts**
+- Signing in with GitHub or Google uses each provider's device flow, so there is no callback address to hijack and no
+  secret in the page. The device code stays in an `httpOnly` cookie; the sign-in endpoints refuse other sites' requests.
+- The account is an `httpOnly`, `SameSite=Lax` cookie signed with HMAC-SHA-256 (`AHA_SESSION_SECRET`, or a key kept in
+  `~/.aha/session-secret`, mode `0600`), compared in constant time, valid for 30 days. A cookie that was altered, expired
+  or signed by another key is not an account. Provider tokens never enter it (GitHub's stays in its own cookie).
+- A Google ID token is checked for issuer, audience (this studio's client), expiry and a verified email. Only identity is
+  requested from Google (`openid email profile`).
+- Profile fields are bounded and the picture must be an `https` address before they are stored or shown.
+
 **Live collaboration**
 - Rooms are 128-bit random IDs shared by invite link (they used to be the project's name). Rooms are capped in size and
   number, each connection is rate-limited, sender identity comes from the connection, and incoming edits are checked like

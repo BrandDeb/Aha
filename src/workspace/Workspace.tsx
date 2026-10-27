@@ -54,6 +54,8 @@ import { usePersistedFlag } from './layout';
 import { useLaunchState } from './launch-client';
 import { foldersAvailable, useFolderSync } from './folder-client';
 import { OpenFolderDialog } from './components/OpenFolderDialog';
+import { AccountDialog } from './components/AccountDialog';
+import type { SignInProvider, SignedIn } from './components/SignInDialog';
 import { Box, Branch, Code, Command as CommandIcon, Files, FilePlus, Gear, PanelLeftOpen, PanelRightClose, PanelRightOpen, Play, Plus, Search, Sparkle, Wrench } from './components/Icons';
 import type { CreateTab } from './components/CreateDialog';
 import { useCiOnSave } from './ci-on-save';
@@ -303,12 +305,17 @@ export function Workspace() {
   const [terminalHeight, setTerminalHeight] = useState(220);
   const [zen, setZen] = useState(false);
   const [awaySince, setAwaySince] = useState<number | null>(null);
-  const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project' | 'signin' | 'welcome' | 'morning' | 'trace' | 'folder'>(null);
+  const [dialog, setDialog] = useState<null | 'palette' | 'settings' | 'templates' | 'project' | 'signin' | 'welcome' | 'morning' | 'trace' | 'folder' | 'account-first' | 'account'>(null);
   const [createStart, setCreateStart] = useState<{ tab: CreateTab; filter?: 'all' | 'typescript' | 'web' | 'python' | 'other' }>({ tab: 'describe' });
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
   const { status: update, refresh: refreshUpdate } = useUpdateStatus();
   const [diff, setDiff] = useState<{ title: string; path: string; original: string; modified: string } | null>(null);
   const [user, setUser] = useState<GitHubUserInfo | null>(null);
+  /** Who is signed in, with GitHub or Google (the GitHub profile in `user` is separate: the GitHub features need it) */
+  const [account, setAccount] = useState<SignedIn['account'] | null>(null);
+  const [signInProvider, setSignInProvider] = useState<SignInProvider>('github');
+  /** After a first-launch sign-in, the welcome follows; after one from the top bar, nothing does */
+  const afterSignIn = useRef<'welcome' | null>(null);
   const [collab, setCollab] = useState(false);
   const [collaborators, setCollaborators] = useState<{ id: string; name: string }[]>([]);
   const [isMac, setIsMac] = useState(true);
@@ -330,6 +337,10 @@ export function Workspace() {
       .then((res) => res.json())
       .then((data) => data.authenticated && setUser(data.user))
       .catch(() => {});
+    fetch('/api/account', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((data) => setAccount(data.account ?? null))
+      .catch(() => {});
   }, []);
 
   // A genuinely first visit (nothing stored, no link to open): the one-minute welcome
@@ -337,8 +348,9 @@ export function Workspace() {
     if (!hydrated) return;
     try {
       const firstVisit = !localStorage.getItem('aha:welcomed') && !localStorage.getItem('aha:ai') && !localStorage.getItem('aha:workspace') && !window.location.search;
+      // A first launch asks to sign in (GitHub or Google, or carry on without) before the welcome, when this server can sign people in
       // eslint-disable-next-line react-hooks/set-state-in-effect -- storage is only readable after hydration
-      if (firstVisit) setDialog('welcome');
+      if (firstVisit) setDialog('account-first');
       else {
         // Back after a long absence: the morning report (once the proposals and the worker have loaded)
         const seen = Number(localStorage.getItem(SEEN_KEY));
@@ -676,6 +688,7 @@ export function Workspace() {
 
   // Sign in: the redirect flow where this server is set up for it (a client secret and a callback on this host), else a one-time code
   const signIn = useCallback(() => {
+    setSignInProvider('github');
     fetch('/api/github/device')
       .then((r) => r.json())
       .then((config: { flow?: string }) => {
@@ -687,10 +700,30 @@ export function Workspace() {
       .catch(() => setDialog('signin'));
   }, []);
   const signOut = useCallback(async () => {
-    await fetch('/api/github/user', { method: 'DELETE' }).catch(() => {});
+    await fetch('/api/account', { method: 'DELETE' }).catch(() => {});
     setUser(null);
-    notify({ kind: 'info', title: 'Signed out of GitHub' });
+    setAccount(null);
+    notify({ kind: 'info', title: 'Signed out' });
   }, [notify]);
+  /** Chosen in the account dialog: GitHub goes through its own flow (the redirect where this server has one), Google through its code */
+  const pickProvider = useCallback((provider: SignInProvider) => {
+    if (provider === 'github') {
+      signIn();
+      return;
+    }
+    setSignInProvider(provider);
+    setDialog('signin');
+  }, [signIn]);
+  const welcomeAfterFirstSignIn = useCallback(() => {
+    try {
+      localStorage.setItem('aha:account-choice', 'asked');
+    } catch {
+      // storage blocked: asked again next time
+    }
+    setDialog('welcome');
+  }, []);
+
+  const who = account ?? (user ? { provider: 'github' as const, id: String(user.id), name: user.name ?? user.login, handle: user.login, avatar: user.avatar_url } : null);
 
   const actions = useMemo<WorkspaceActions>(() => ({
     compile,
@@ -1162,19 +1195,26 @@ export function Workspace() {
             {usesScriptc && <OutputMenu target={target} options={settings.build} onTarget={setTarget} onOptions={(patch) => updateSettings({ build: { ...settings.build, ...patch } })} />}
             <button onClick={() => setDialog('palette')} className="btn btn-ghost btn-icon" aria-label="Command palette" title={`Commands and files (${formatCombo(bindings['view.palette'] ?? '', isMac)})`}><CommandIcon /></button>
             <button onClick={() => { setSettingsTab('general'); setDialog('settings'); }} className="btn btn-ghost btn-icon hidden sm:inline-flex" aria-label="Settings" title="Settings"><Gear /></button>
-            {user ? (
+            {who ? (
               <details className="relative">
-                <summary className="flex cursor-pointer list-none rounded-full" aria-label={`Signed in as ${user.login}`} title={`Signed in as ${user.login}`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- remote avatar, no optimisation needed */}
-                  <img src={user.avatar_url} alt="" className="h-7 w-7 rounded-full border border-border-strong" />
+                <summary className="flex cursor-pointer list-none rounded-full" aria-label={`Signed in as ${who.handle}`} title={`Signed in as ${who.handle}`}>
+                  {who.avatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- remote avatar, no optimisation needed
+                    <img src={who.avatar} alt="" className="h-7 w-7 rounded-full border border-border-strong" referrerPolicy="no-referrer" />
+                  ) : (
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full border border-border-strong bg-white/[0.06] text-xs uppercase text-gray-200" aria-hidden="true">{who.handle.slice(0, 1)}</span>
+                  )}
                 </summary>
-                <div className="glass absolute right-0 top-full z-50 mt-2 w-56 rounded-xl p-2 animate-fade-in">
-                  <p className="px-2 py-1.5 text-xs text-gray-400">Signed in as <span className="font-medium text-gray-100">{user.login}</span></p>
+                <div className="glass absolute right-0 top-full z-50 mt-2 w-64 rounded-xl p-2 animate-fade-in">
+                  <p className="px-2 py-1.5 text-xs text-gray-400">Signed in as <span className="break-all font-medium text-gray-100">{who.handle}</span> <span className="text-gray-500">with {who.provider === 'google' ? 'Google' : 'GitHub'}</span></p>
+                  {who.provider !== 'github' && !user && (
+                    <button onClick={signIn} className="w-full rounded-lg px-2 py-1.5 text-left text-sm text-gray-300 hover:bg-white/[0.06] hover:text-gray-100">Connect GitHub for repositories and CI</button>
+                  )}
                   <button onClick={() => void signOut()} className="w-full rounded-lg px-2 py-1.5 text-left text-sm text-gray-300 hover:bg-white/[0.06] hover:text-gray-100">Sign out</button>
                 </div>
               </details>
             ) : (
-              <button onClick={signIn} className="btn btn-ghost btn-sm hidden lg:inline-flex">
+              <button onClick={() => setDialog('account')} className="btn btn-ghost btn-sm hidden lg:inline-flex">
                 Sign in
               </button>
             )}
@@ -1690,13 +1730,39 @@ export function Workspace() {
           onClose={() => setDialog(null)}
         />
       )}
+      {dialog === 'account-first' && (
+        <AccountDialog
+          first
+          onPick={(provider) => {
+            afterSignIn.current = 'welcome';
+            pickProvider(provider);
+          }}
+          onSkip={welcomeAfterFirstSignIn}
+          onClose={welcomeAfterFirstSignIn}
+        />
+      )}
+      {dialog === 'account' && (
+        <AccountDialog
+          first={false}
+          onPick={(provider) => {
+            afterSignIn.current = null;
+            pickProvider(provider);
+          }}
+          onSkip={() => setDialog(null)}
+          onClose={() => setDialog(null)}
+        />
+      )}
       {dialog === 'signin' && (
         <SignInDialog
-          onClose={() => setDialog(null)}
-          onSignedIn={(signedIn) => {
-            setUser(signedIn);
-            setDialog(null);
-            notify({ kind: 'success', title: `Signed in as ${signedIn.login}` });
+          provider={signInProvider}
+          onClose={() => (afterSignIn.current === 'welcome' ? welcomeAfterFirstSignIn() : setDialog(null))}
+          onSignedIn={(result) => {
+            if (result.user) setUser(result.user);
+            if (result.account) setAccount(result.account);
+            else void fetch('/api/account', { cache: 'no-store' }).then((r) => r.json()).then((d) => setAccount(d.account ?? null)).catch(() => {});
+            notify({ kind: 'success', title: `Signed in as ${result.account?.handle ?? result.user?.login ?? 'you'}` });
+            if (afterSignIn.current === 'welcome') welcomeAfterFirstSignIn();
+            else setDialog(null);
           }}
         />
       )}
