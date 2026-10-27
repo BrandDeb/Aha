@@ -51,11 +51,18 @@ interface BrowserPreviewProps {
   onConsole: (l: Omit<ConsoleLine, 'id'>) => void;
   onPicked: (element: PickedElement | null) => void;
   onSnapshot: (html: string) => void;
+  /** Bumped to ask the page for a design pass: its measurements and a screenshot */
+  designs?: number;
+  onDesign?: (report: unknown, image: string | null) => void;
 }
 
 /** The in-browser preview: sends the files to the sandboxed frame, which bundles and runs them */
-export function BrowserPreview({ files, reloads, width, picking, snapshots, onState, onConsole, onPicked, onSnapshot }: BrowserPreviewProps) {
+export function BrowserPreview({ files, reloads, width, picking, snapshots, onState, onConsole, onPicked, onSnapshot, designs = 0, onDesign }: BrowserPreviewProps) {
   const frame = useRef<HTMLIFrameElement>(null);
+  const designRef = useRef(onDesign);
+  useEffect(() => {
+    designRef.current = onDesign;
+  });
   const ready = useRef(false);
   const latest = useRef(files);
   useEffect(() => {
@@ -73,7 +80,7 @@ export function BrowserPreview({ files, reloads, width, picking, snapshots, onSt
     const onMessage = (event: MessageEvent) => {
       // Only our frame; it has an opaque origin, so the window is what identifies it
       if (event.source !== frame.current?.contentWindow) return;
-      const data = event.data as { source?: string; type?: string; ms?: number; message?: string; level?: string; text?: string; element?: PickedElement; html?: string } | null;
+      const data = event.data as { source?: string; type?: string; ms?: number; message?: string; level?: string; text?: string; element?: PickedElement; html?: string; report?: unknown; image?: unknown } | null;
       if (data?.source !== 'aha-preview') return;
       if (data.type === 'ready') {
         ready.current = true;
@@ -84,6 +91,7 @@ export function BrowserPreview({ files, reloads, width, picking, snapshots, onSt
       else if (data.type === 'picked' && data.element) onPicked(data.element);
       else if (data.type === 'pick-cancelled') onPicked(null);
       else if (data.type === 'snapshot' && typeof data.html === 'string') onSnapshot(data.html);
+      else if (data.type === 'design') designRef.current?.(data.report, typeof data.image === 'string' && data.image.startsWith('data:image/jpeg;base64,') ? data.image : null);
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -104,6 +112,9 @@ export function BrowserPreview({ files, reloads, width, picking, snapshots, onSt
   useEffect(() => {
     if (snapshots && ready.current) frame.current?.contentWindow?.postMessage({ type: 'snapshot' }, '*');
   }, [snapshots]);
+  useEffect(() => {
+    if (designs && ready.current) frame.current?.contentWindow?.postMessage({ type: 'design' }, '*');
+  }, [designs]);
 
   return (
     <div className={`flex min-h-0 flex-1 justify-center overflow-auto ${width ? 'bg-black/30 p-3' : ''}`}>
@@ -136,12 +147,14 @@ interface Props {
   onOpenLocation?: (location: ElementLocation) => void;
   onWrite?: (path: string, content: string) => void;
   onAsk?: (request: string, label: string) => void;
+  /** Design pass: what the page measured and a screenshot of it */
+  onDesignPass?: (report: unknown, image: string | null) => void;
   /** Used to name the saved page */
   projectName?: string;
   onClose: () => void;
 }
 
-export function PreviewPane({ detected, server, files, mode, browserSupport, onMode, onFailure, onWorking, onOpenLocation, onWrite, onAsk, projectName, onClose }: Props) {
+export function PreviewPane({ detected, server, files, mode, browserSupport, onMode, onFailure, onWorking, onOpenLocation, onWrite, onAsk, onDesignPass, projectName, onClose }: Props) {
   const { state, log, enabled, start, stop } = server;
   const [browser, setBrowser] = useState<BrowserState>({ status: 'loading' });
   const [consoleLines, setConsoleLines] = useState<ConsoleLine[]>([]);
@@ -184,6 +197,12 @@ export function PreviewPane({ detected, server, files, mode, browserSupport, onM
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<{ n: number; element: PickedElement; location: ElementLocation | null } | null>(null);
   const [snapshots, setSnapshots] = useState(0);
+  const [designs, setDesigns] = useState(0);
+  const [designing, setDesigning] = useState(false);
+  const onDesign = (report: unknown, image: string | null) => {
+    setDesigning(false);
+    onDesignPass?.(report, image);
+  };
   const canEdit = inBrowser && !!onWrite;
   const onPicked = (element: PickedElement | null) => {
     setPicking(false);
@@ -285,6 +304,19 @@ export function PreviewPane({ detected, server, files, mode, browserSupport, onM
             ⌖ Edit
           </button>
         )}
+        {inBrowser && onDesignPass && (
+          <button
+            onClick={() => {
+              setDesigning(true);
+              setDesigns((n) => n + 1);
+            }}
+            disabled={browser.status !== 'ready' || designing}
+            className="btn btn-ghost btn-sm px-2 text-[11px]"
+            title="Design pass: measure spacing, type scale, contrast and empty and loading states, and hand what to fix to the agent with a screenshot"
+          >
+            {designing ? 'Measuring…' : '✦ Design pass'}
+          </button>
+        )}
         {inBrowser && (
           <button onClick={() => setSnapshots((n) => n + 1)} disabled={browser.status !== 'ready'} className="btn btn-ghost btn-icon btn-sm" aria-label="Save as a page to share" title="Save as one HTML page you can send to anyone">
             ⇩
@@ -311,6 +343,8 @@ export function PreviewPane({ detected, server, files, mode, browserSupport, onM
             onConsole={(line) => setConsoleLines((prev) => [...prev.slice(-300), { id: ++consoleId.current, ...line }])}
             onPicked={onPicked}
             onSnapshot={onSnapshot}
+            designs={designs}
+            onDesign={onDesign}
           />
           {picked && onWrite && (
             <ElementEditor

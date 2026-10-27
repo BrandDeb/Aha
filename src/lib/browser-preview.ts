@@ -438,7 +438,7 @@ export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: s
   window.addEventListener('message', (event) => {
     // The app's console and picks, relayed to the studio
     if (event.source === app.contentWindow) {
-      const data = event.data as { source?: string; type?: string; level?: unknown; text?: unknown; element?: Record<string, unknown> } | null;
+      const data = event.data as { source?: string; type?: string; level?: unknown; text?: unknown; element?: Record<string, unknown>; report?: unknown; image?: unknown } | null;
       if (data?.source !== 'aha-app') return;
       if (data.type === 'console') post({ type: 'console', level: String(data.level), text: String(data.text).slice(0, 4000) });
       else if (data.type === 'picked' && data.element && typeof data.element === 'object') {
@@ -446,6 +446,10 @@ export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: s
         const e = data.element;
         const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');
         post({ type: 'picked', element: { src: str(e.src, 400) || null, tag: str(e.tag, 40), text: str(e.text, 300), classes: str(e.classes, 600), html: str(e.html, 800), chain: Array.isArray(e.chain) ? e.chain.slice(0, 6).map((c) => str(c, 400)) : [] } });
+      } else if (data.type === 'design') {
+        // The design probe's measurements and a JPEG of the page (checked again by the studio)
+        const image = typeof data.image === 'string' && data.image.startsWith('data:image/jpeg;base64,') && data.image.length < 3_000_000 ? data.image : null;
+        post({ type: 'design', report: data.report, image });
       } else if (data.type === 'pick-cancelled') {
         picking = false;
         post({ type: 'pick-cancelled' });
@@ -460,6 +464,7 @@ export async function previewBuilderMain(h: PreviewHelpers, cfg: { esbuildUrl: s
       picking = !!data.on;
       sendPick();
     } else if (data?.type === 'snapshot') post({ type: 'snapshot', html: app.srcdoc });
+    else if (data?.type === 'design') app.contentWindow?.postMessage({ source: 'aha-preview', type: 'design' }, '*');
   });
   post({ type: 'ready' });
 }

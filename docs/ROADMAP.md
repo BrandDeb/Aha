@@ -207,8 +207,12 @@ cites memory in a later proposal.
 
 > **Vibe dial shipped:** four stops in the Agent tab shape the agent's brief (how much it explains, when it asks) and the
 > reviewer's depth; the middle stop changes nothing. In a browser test, the agent and the reviewer each got the
-> setting's instructions, the summary followed them, and the setting was kept across a reload. Design pass, publish and
-> phone preview are next.
+> setting's instructions, the summary followed them, and the setting was kept across a reload.
+>
+> **Design pass shipped:** a button on the in-browser preview measures the rendered page (type scale, spacing grid,
+> WCAG contrast, empty lists) and reads the source for missing loading and empty states; the agent gets the findings
+> and a screenshot, and the proposal shows before and after with the numbers. In a browser test, a messy React page
+> went from 3 contrast failures and 7 off-grid spacing values to none. Publish and phone preview are next.
 
 - **Vibe dial:** one setting from "just make it work" to "explain every line", shaping the brief, review depth and
   how often the agent asks.

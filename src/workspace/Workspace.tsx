@@ -1316,6 +1316,18 @@ export function Workspace() {
                     onAsk={(question, label) => {
                       if (proposals.ask(question, { label }) === null) openPanel('agent');
                     }}
+                    onDesignPass={(raw, image) => {
+                      void import('@/lib/design-pass').then(({ analyzeDesign, designBrief, parseReport, scoreOf }) => {
+                        const report = parseReport(raw);
+                        if (!report) return notify({ kind: 'error', title: 'The design pass could not measure the page' });
+                        const findings = analyzeDesign(report, projectRef.current.files);
+                        const score = scoreOf(report);
+                        if (!findings.length) return notify({ kind: 'success', title: 'Nothing to fix', detail: `${score.fontSizes} font sizes, spacing on a 4px grid, every text readable, and empty and loading states in place.` });
+                        const images = image ? [{ mediaType: 'image/jpeg', data: image.slice(image.indexOf(',') + 1) }] : undefined;
+                        const id = proposals.ask(designBrief(findings, score), { label: `Design pass: ${findings.length} thing${findings.length === 1 ? '' : 's'} to fix`, images, design: { before: image, width: report.width, score, findings: findings.map((f) => f.title) } });
+                        if (id === null) openPanel('agent');
+                      });
+                    }}
                     projectName={project.name}
                     onClose={() => setShowPreview(false)}
                   />

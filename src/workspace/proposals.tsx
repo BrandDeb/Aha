@@ -18,6 +18,7 @@ import { isHarnessFile, runHarnessLoop, type HarnessEvent } from '@/lib/agent/ha
 import { runAgent } from '@/lib/agent/loop';
 import { callModelFor } from '@/lib/agent/model';
 import { parseReview, REVIEW_LABEL, REVIEWER_PROMPT, reviewInput, type Review } from '@/lib/agent/review';
+import type { DesignScore } from '@/lib/design-pass';
 import { DEFAULT_VIBE, isVibe, reviewerPromptFor, vibeBrief, type Vibe } from '@/lib/agent/vibe';
 import { autoAcceptable, riskOf } from '@/lib/agent/risk';
 import { supplyChainOf, useSupplyChainVersion } from './supply-chain-client';
@@ -104,6 +105,8 @@ export interface Proposal {
   fork?: boolean;
   /** What auto-accept decided once the proposal was ready: accepted, or why it waits for you */
   auto?: { accepted: boolean; why: string; score: number };
+  /** A design pass: the page before (screenshot and measurements) and, once ready, the proposal's version after */
+  design?: { before: string | null; width: number; score: DesignScore; findings: string[]; after?: string | null; afterScore?: DesignScore };
 }
 
 export interface AgentPrefs {
@@ -157,7 +160,7 @@ interface ProposalsValue {
   setPrefs: (patch: Partial<AgentPrefs>) => void;
   /** Start a new proposal; returns its id, or null when no model is set up */
   /** `label` is what the tab shows when the task itself is long (a debugging brief); `quiet` skips the "choose a model" toast */
-  ask: (goal: string, options?: { approaches?: number; label?: string; quiet?: boolean; background?: boolean; origin?: Proposal['origin']; task?: string; forks?: ForkDirection[]; images?: ImageInput[]; budget?: Partial<Budget> }) => string | null;
+  ask: (goal: string, options?: { approaches?: number; label?: string; quiet?: boolean; background?: boolean; origin?: Proposal['origin']; task?: string; forks?: ForkDirection[]; images?: ImageInput[]; budget?: Partial<Budget>; design?: Proposal['design'] }) => string | null;
   followUp: (id: string, text: string) => void;
   stop: (id: string) => void;
   answer: (id: string, allowed: boolean, always?: boolean) => void;
@@ -165,6 +168,8 @@ interface ProposalsValue {
   discard: (id: string, paths?: string[]) => void;
   remove: (id: string) => void;
   selectLane: (id: string, laneId: string) => void;
+  /** Record the design pass's after (the proposal's version, measured and captured) */
+  setDesignAfter: (id: string, image: string | null, score: DesignScore) => void;
   open: (id: string | null) => void;
   close: (id: string) => void;
   /** The project's agent channel (talk to running agents, answer their questions) */
@@ -571,6 +576,7 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
         lessons: [],
         origin: options.origin ?? 'you',
         ...(options.task ? { task: options.task } : {}),
+        ...(options.design ? { design: options.design } : {}),
       };
       if (options.images?.length) pendingImages.current.set(id, options.images);
       setProposals((prev) => [proposal, ...prev]);
@@ -705,6 +711,9 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
     [stop]
   );
 
+  /** The design pass's after: the proposal's version measured and captured */
+  const setDesignAfter = useCallback((id: string, image: string | null, score: DesignScore) => update(id, (p) => (p.design ? { ...p, design: { ...p.design, after: image, afterScore: score } } : p)), [update]);
+
   const selectLane = useCallback((id: string, laneId: string) => update(id, (p) => ({ ...p, laneId })), [update]);
 
   // Auto-accept: when a proposal started in this session is ready (and reviewed, when the reviewer is on), decide once.
@@ -754,8 +763,8 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<ProposalsValue>(() => {
     const active = proposals.find((p) => p.id === activeId) ?? null;
-    return { proposals, activeId: active ? activeId : null, active, prefs, setPrefs, ask, followUp, stop, answer, accept, discard, remove, selectLane, open, close, channel };
-  }, [proposals, activeId, prefs, setPrefs, ask, followUp, stop, answer, accept, discard, remove, selectLane, open, close, channel]);
+    return { proposals, activeId: active ? activeId : null, active, prefs, setPrefs, ask, followUp, stop, answer, accept, discard, remove, selectLane, setDesignAfter, open, close, channel };
+  }, [proposals, activeId, prefs, setPrefs, ask, followUp, stop, answer, accept, discard, remove, selectLane, setDesignAfter, open, close, channel]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
