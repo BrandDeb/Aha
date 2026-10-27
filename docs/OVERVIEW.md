@@ -117,6 +117,10 @@ Browser (Next.js client, React 19)            Server (Next.js routes + server.js
 5. Then: a native core for the hot paths, one shared code index, a VS Code extension host, and a public agent
    benchmark against the heavyweights.
 
+The launches after that ("Strategy, part two" in ROADMAP.md): any agent (Claude Code, Codex, Gemini) checked by Aha;
+receipts, proof that travels with every change; a behaviour diff; prompt-to-site with measured taste; an app check
+by simulated users; `aha.new/<repo>` links and multiplayer; a price known before the work starts.
+
 ### Waiting on the owner
 
 These need an account, a key or a decision only the owner can provide:
