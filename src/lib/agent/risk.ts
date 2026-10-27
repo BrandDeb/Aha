@@ -7,6 +7,7 @@
 
 import type { Evidence } from './evidence.ts';
 import type { Review } from './review.ts';
+import type { SupplyFinding } from '../supply-chain.ts';
 
 export interface RiskFactor {
   label: string;
@@ -30,6 +31,8 @@ export interface RiskInput {
   files: { path: string; kind: 'added' | 'modified' | 'deleted'; before: string; after: string; added: number; removed: number }[];
   evidence?: Evidence;
   review?: Pick<Review, 'verdict'> | null;
+  /** What the supply-chain guard found about the dependencies the change adds */
+  supplyChain?: SupplyFinding[];
 }
 
 const DOCS = /\.(md|mdx|txt|rst|adoc)$|(^|\/)(LICENSE|CHANGELOG)[^/]*$/i;
@@ -47,6 +50,16 @@ const CONTRACTS = /(^|\/)\.aha\/contracts\.json$/;
  */
 const AUTORUN = /(^|\/)(\.npmrc|\.yarnrc(\.yml)?|\.pnpmfile\.c?js|\.husky\/|\.git\/hooks\/|\.githooks\/|\.pre-commit-config\.ya?ml|lefthook\.ya?ml|\.vscode\/(tasks|launch|settings)\.json|\.devcontainer\/|\.envrc|build\.rs|setup\.py|conftest\.py|Makefile|justfile|Taskfile\.ya?ml)$|(^|\/)(\.husky|\.git\/hooks|\.githooks|\.devcontainer)\/|(^|\/)\.aha\/(watchers|kit|skills)(\.json|\/)/i;
 const SECRET = /\b(api[_-]?key|secret|password|passwd|private[_-]?key|access[_-]?token|auth[_-]?token)\b\s*[:=]\s*['"`][^'"`\s]{8,}['"`]|\b(sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|xox[bp]-[A-Za-z0-9-]{10,})\b/i;
+
+const SUPPLY_LABEL: Record<SupplyFinding['kind'], string> = {
+  typosquat: 'looks like a typosquat',
+  missing: 'not on the registry',
+  'install-script': 'install script',
+  new: 'brand-new package',
+  unpopular: 'barely used',
+  advisory: 'known advisory',
+  licence: 'licence',
+};
 
 /** Things that are fine in their place but deserve a look when a change adds them */
 const DANGEROUS: { label: string; re: RegExp }[] = [
@@ -72,27 +85,29 @@ function addedLines(before: string, after: string): string[] {
   return out;
 }
 
+/** The dependencies a manifest declares, name → version spec */
+export function readDependencies(path: string, text: string): Record<string, string> {
+  if (path.endsWith('package.json') || path.endsWith('composer.json')) {
+    try {
+      const j = JSON.parse(text || '{}');
+      return { ...(j.dependencies ?? {}), ...(j.devDependencies ?? {}), ...(j.require ?? {}), ...(j['require-dev'] ?? {}) };
+    } catch {
+      return {};
+    }
+  }
+  // Line-based manifests: one dependency per line, name first
+  const deps: Record<string, string> = {};
+  for (const line of text.split('\n')) {
+    const m = line.trim().match(/^["']?([A-Za-z0-9@][\w@./-]*)["']?\s*(?:(?:[=<>~^!]=?|:|\[)\s*["']?([^"',\]]*))?/);
+    if (m && !line.trim().startsWith('#') && !/^\[/.test(line.trim()) && !/^(name|version|description|edition|authors|license|requires-python|readme|module|go|python|dependencies|requires|build-backend)$/.test(m[1])) deps[m[1]] = (m[2] ?? '').trim();
+  }
+  return deps;
+}
+
 /** Dependencies a manifest change adds, removes or re-versions */
 export function dependencyChanges(path: string, before: string, after: string): { added: string[]; removed: string[]; changed: string[] } {
-  const read = (text: string): Record<string, string> => {
-    if (path.endsWith('package.json') || path.endsWith('composer.json')) {
-      try {
-        const j = JSON.parse(text || '{}');
-        return { ...(j.dependencies ?? {}), ...(j.devDependencies ?? {}), ...(j.require ?? {}), ...(j['require-dev'] ?? {}) };
-      } catch {
-        return {};
-      }
-    }
-    // Line-based manifests: one dependency per line, name first
-    const deps: Record<string, string> = {};
-    for (const line of text.split('\n')) {
-      const m = line.trim().match(/^["']?([A-Za-z0-9@][\w@./-]*)["']?\s*(?:(?:[=<>~^!]=?|:|\[)\s*["']?([^"',\]]*))?/);
-      if (m && !line.trim().startsWith('#') && !/^\[/.test(line.trim()) && !/^(name|version|description|edition|authors|license|requires-python|readme|module|go|python|dependencies|requires|build-backend)$/.test(m[1])) deps[m[1]] = (m[2] ?? '').trim();
-    }
-    return deps;
-  };
-  const a = read(before);
-  const b = read(after);
+  const a = readDependencies(path, before);
+  const b = readDependencies(path, after);
   return {
     added: Object.keys(b).filter((k) => !(k in a)),
     removed: Object.keys(a).filter((k) => !(k in b)),
@@ -117,7 +132,7 @@ function scriptChanges(before: string, after: string): string[] {
 
 const testCount = (text: string) => (text.match(/\b(it|test)\s*\(|^\s*def test_|^\s*func Test|#\[test\]|@Test\b/gm) ?? []).length;
 
-export function riskOf({ files, evidence, review }: RiskInput): RiskScore {
+export function riskOf({ files, evidence, review, supplyChain }: RiskInput): RiskScore {
   const factors: RiskFactor[] = [];
   const add = (f: RiskFactor) => factors.push(f);
   // The why-history is the studio's own notes about the change, not part of it
@@ -144,6 +159,10 @@ export function riskOf({ files, evidence, review }: RiskInput): RiskScore {
     }
   }
   if (deps.added.length) add({ label: `adds ${deps.added.length} dependenc${deps.added.length > 1 ? 'ies' : 'y'}`, points: Math.min(20, deps.added.length * 7), detail: `New code you didn't write runs in your app: ${deps.added.join(', ')}` });
+  if (supplyChain?.length) {
+    const kinds = [...new Set(supplyChain.map((f) => SUPPLY_LABEL[f.kind]))];
+    add({ label: `supply chain: ${kinds.join(', ')}`, points: Math.min(40, 20 + 5 * supplyChain.length), detail: supplyChain.map((f) => f.detail).join('; '), hold: true });
+  }
   if (deps.changed.length) add({ label: `changes ${deps.changed.length} version${deps.changed.length > 1 ? 's' : ''}`, points: Math.min(10, deps.changed.length * 3), detail: deps.changed.join(', ') });
   if (deps.removed.length) add({ label: `removes ${deps.removed.length} dependenc${deps.removed.length > 1 ? 'ies' : 'y'}`, points: 3, detail: deps.removed.join(', ') });
   if (project.some((f) => LOCKFILE.test(f.path))) add({ label: 'lockfile', points: 3, detail: 'The exact installed versions change' });

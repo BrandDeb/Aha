@@ -19,6 +19,7 @@ import { runAgent } from '@/lib/agent/loop';
 import { callModelFor } from '@/lib/agent/model';
 import { parseReview, REVIEW_LABEL, REVIEWER_PROMPT, reviewInput, type Review } from '@/lib/agent/review';
 import { autoAcceptable, riskOf } from '@/lib/agent/risk';
+import { supplyChainOf, useSupplyChainVersion } from './supply-chain-client';
 import { mergeProjects } from '@/lib/merge3';
 import { forkGoal, forkLaneId, type ForkDirection } from '@/lib/forks';
 import { linesWritten, recordWhy, WHY_FILE } from '@/lib/why';
@@ -700,6 +701,7 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
   // Auto-accept: when a proposal started in this session is ready (and reviewed, when the reviewer is on), decide once.
   // Proposals restored from an earlier session are never accepted behind your back.
   const startedHere = useRef(new Set<string>());
+  const supplyVersion = useSupplyChainVersion();
   useEffect(() => {
     for (const p of proposals) if (p.status === 'working') startedHere.current.add(p.id);
     if (!prefs.autoAccept) return;
@@ -710,7 +712,10 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
       if (prefs.review && (!lane.review || lane.review.status === 'running')) continue;
       const files = lane.files.filter((f) => !isHarnessFile(f.path));
       if (!files.length) continue;
-      const risk = riskOf({ files, evidence: lane.evidence, review: lane.review?.status === 'done' ? lane.review : null });
+      // New dependencies are checked before the score: wait for the registry's answer
+      const supply = supplyChainOf(files);
+      if (supply.pending) continue;
+      const risk = riskOf({ files, evidence: lane.evidence, review: lane.review?.status === 'done' ? lane.review : null, supplyChain: supply.findings });
       const decision = autoAcceptable(risk, prefs.autoAccept, verdict(lane.evidence).verified);
       // Decided once per proposal (auto is set), when it becomes ready: not a cascade
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -720,7 +725,7 @@ export function ProposalsProvider({ children }: { children: ReactNode }) {
         notify({ kind: 'success', title: `Auto-accepted: ${p.goal.slice(0, 60)}`, detail: `Risk ${risk.score}, verified. The version before it is in History.` });
       }
     }
-  }, [proposals, prefs.autoAccept, prefs.review, update, accept, notify]);
+  }, [proposals, prefs.autoAccept, prefs.review, update, accept, notify, supplyVersion]);
 
   const open = useCallback(
     (id: string | null) => {

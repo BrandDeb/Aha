@@ -181,6 +181,12 @@ source, writes a failing test that reproduces it, fixes it, and shows the test p
 Python trace each end in a proposal with a reproducing test.
 
 ### 10. Supply-chain guard
+
+> **Shipped:** new dependencies in a proposal are checked for look-alike names (npm, PyPI, crates.io), names not on
+> the registry, install scripts, age and downloads, OSV advisories and licence, before the risk score; each finding
+> holds auto-accept and is listed on the proposal. With auto-accept on, `expresss` and a made-up package were held
+> with their reasons and `zod` went through, in a browser test against the live registries.
+
 Every new dependency in a proposal is checked before the risk score is computed: typosquats (edit distance to popular
 names), install scripts, age and downloads, known advisories (OSV), licence. Findings hold auto-accept. *Done when* a
 proposal adding a typosquatted package is held with the reason shown.
