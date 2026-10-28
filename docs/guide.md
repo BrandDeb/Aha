@@ -91,7 +91,7 @@ A one-line tour; each links to the section with the details. The workspace is at
 | **Field kits** | A project, its playbook, checks and house rules in one file ([Field kits](#field-kits)) |
 | **History and why** | Versions on save and before every accept; every line remembers why it was written ([Why-history](#why-history)) |
 | **Memory and tour** | Decisions, conventions and gotchas the agent keeps and cites; a five-stop tour for newcomers ([Project memory](#project-memory), [Tour](#tour)) |
-| **Desktop apps** | Native Windows and macOS builds that update themselves ([Desktop app](#desktop-app-windows-and-macos)) |
+| **Desktop apps** | Native macOS, Windows and Linux builds that update themselves ([Desktop app](#desktop-app-macos-windows-and-linux)) |
 | **Accessibility and looks** | Light, dark and high-contrast themes, any accent colour, full keyboard use and screen-reader labels |
 
 Native executables are linked for the machine the server runs on. Use the WASM target (or `run`) for a
@@ -1170,9 +1170,36 @@ different repository or branch still replaces the workspace (saved to History fi
 Proposals use the same merge. A file you edited after the agent started is merged with the agent's version when it is
 accepted: changes in different places combine, and the conflict editor opens where you both changed the same lines.
 
-## Signing in with GitHub
+## Signing in (GitHub and Google)
 
-Sign-in (and sign-up: GitHub's page offers a free account) needs one GitHub OAuth app and **no domain**:
+The first time the studio opens (the desktop app on macOS, Windows or Linux, or a fresh browser profile) it asks you to
+sign in with **GitHub** or **Google**, or to **continue without an account**. The studio works fully without one, on your
+own machine with your own model or a local one; an account is what carries your settings and plan from one machine to the
+next, and what the Team and Business plans are billed and managed by. A server with no provider set up skips the question.
+**Sign in** in the top bar asks again later, and your avatar's menu signs out of everything.
+
+Your account is a signed cookie (`aha_account`, httpOnly) holding your name, email or login and picture. It is signed with
+`AHA_SESSION_SECRET` when set (servers behind one address need to share it); otherwise with a key made once and kept in
+`~/.aha/session-secret`, readable by you only, so the studio keeps you signed in across restarts with no setup. A cookie that
+was altered, or came from another server, is not an account. Sessions last 30 days.
+
+### Google
+
+Google sign-in needs one Google OAuth client and **no domain**: Google Cloud Console → APIs & Services → Credentials →
+Create credentials → OAuth client ID, application type **TVs and Limited Input devices**. Give the studio its values:
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the server's environment (for this client type Google documents the
+secret as not confidential). The released desktop installers do not carry a Google client yet: embedding one in a public
+download is the owner's decision, so for now the desktop app signs in with Google only when those two variables are set
+for it, and with GitHub through the client ID built into it. **Continue with
+Google** shows a one-time code: open google.com/device, enter it, and the studio signs you in by itself. Only your identity is
+asked for (name, email address, picture): the studio gets no access to your mail, files or anything else in the account. Any
+Google account works, including a work Google Workspace account.
+
+### GitHub
+
+Sign-in (and sign-up: GitHub's page offers a free account) needs one GitHub OAuth app and **no domain**. Signing in with
+GitHub also lets the studio work with your repositories, pull requests and CI; a Google account can add GitHub later from
+the avatar's menu:
 
 1. GitHub → Settings → Developer settings → OAuth Apps → **New OAuth App**. Any homepage URL (the repository's is fine);
    callback URL `http://127.0.0.1/api/github/callback`.
@@ -1187,17 +1214,19 @@ domain later, add `GITHUB_CLIENT_SECRET` and `GITHUB_REDIRECT_URI` on that host 
 for visitors of that host. The token lives in an httpOnly cookie on the studio's server (Secure when served over HTTPS)
 and never reaches the page; your avatar's menu signs out.
 
-## Desktop app (Windows and macOS)
+## Desktop app (macOS, Windows and Linux)
 
 Aha! also ships as a native app built with [Tauri](https://tauri.app). The shell is deliberately thin (a 4.5 MB
 Rust binary): it starts the studio's server with a bundled Node.js on a free loopback port, shows a loading screen, then
-points a native window at it, using the system's own web view (WebView2 on Windows, WebKit on macOS) rather than shipping a
-browser. The page gets no native APIs and runs exactly as it does in a browser, with the same security model.
+points a native window at it, using the system's own web view (WebView2 on Windows, WebKit on macOS, WebKitGTK on Linux)
+rather than shipping a browser. The page gets no native APIs and runs exactly as it does in a browser, with the same security model.
 
 - Links that leave the studio open in your browser; downloads go to your Downloads folder.
 - A second launch focuses the running app. Quitting stops the server, and the server also stops on its own if the app
   disappears without saying so.
-- On macOS the server gets your login shell's `PATH`, so compilers you installed with Homebrew, rustup and the like are used.
+- On macOS and Linux the server gets your login shell's `PATH`, so compilers you installed with Homebrew, rustup and the like are used.
+- **Linux** needs GTK 3 and WebKitGTK 4.1 (Ubuntu 22.04 or newer, Debian 12 or newer, Fedora 38 or newer) and nothing else: the
+  app brings its own Node.js. Run the `.AppImage` after `chmod +x`, or on Debian and Ubuntu `sudo apt install ./Aha-Linux-x64.deb`.
 - Builds write to the app's cache folder (the install folder is read-only).
 - zig (needed for WebAssembly builds, ~400 MB) isn't shipped: the first WASM build fetches the exact version scriptc expects
   from the npm registry, checked against its sha512, into `~/.aha/zig` (about 90 MB to download, once).
@@ -1211,12 +1240,13 @@ npx tauri build                      # installers in src-tauri/target/release/bu
 ```
 
 **Download:** the [/download](/download) page (also the Download section on the landing page) links to the latest
-installers, highlights the one for the visitor's system and shows how to install it: `Aha-macOS-arm64.dmg` and
-`Aha-Windows-x64-setup.exe` in the `desktop-latest` release, with `SHA256SUMS.txt`. Point it at another repository
+installers, highlights the one for the visitor's system and shows how to install it: `Aha-macOS-arm64.dmg`,
+`Aha-Windows-x64-setup.exe` and `Aha-Linux-x64.AppImage` (or `Aha-Linux-x64.deb`) in the `desktop-latest` release, with
+`SHA256SUMS.txt`. Point it at another repository
 with `NEXT_PUBLIC_DOWNLOADS_REPO=owner/repo`.
 
-CI (`.github/workflows/desktop.yml`) builds the macOS (Apple silicon) `.dmg` and the Windows installer on pull requests that
-touch the app, on pushes to main, on version tags, and on demand. Builds from main, tags and manual runs are published
+CI (`.github/workflows/desktop.yml`) builds the macOS (Apple silicon) `.dmg`, the Windows installer and the Linux `.AppImage`
+and `.deb` on pull requests that touch the app, on pushes to main, on version tags, and on demand. Builds from main, tags and manual runs are published
 under those stable names: a `v*` tag gets its own release, and the others replace the files of the rolling
 `desktop-latest` pre-release. Pull request builds stay workflow artifacts, so unmerged code never reaches the download page. Builds are unsigned unless the `APPLE_*` signing secrets are set; macOS then asks you to
 confirm the first launch (right-click → Open).
@@ -1263,7 +1293,7 @@ Maintenance only works when the studio listens on your own machine (the default)
 |---|---|
 | `/` | Workspace |
 | `/landing` | Product page |
-| `/pricing` | Plans (Free, Pro, Premium) and a comparison; edit them in `src/lib/pricing.ts` |
+| `/pricing` | Plans (Free, Pro, Team, Business, Enterprise), a comparison and a seat calculator; edit them in `src/lib/pricing.ts` |
 | `/docs` | Developer docs, made from this guide (`docs/guide.md`): one page per section, with search |
 | `/llms.txt`, `/llms-full.txt` | The site and its docs as plain text for language models |
 | `/sitemap.xml`, `/robots.txt`, `/manifest.webmanifest` | For search engines, crawlers and installing the app |
@@ -1490,6 +1520,12 @@ NEXT_PUBLIC_SALES_URL=
 GITHUB_CLIENT_ID=             # enough on its own: sign-in with a one-time code (see Signing in)
 GITHUB_CLIENT_SECRET=         # optional: the redirect flow, for a host with a fixed address
 GITHUB_REDIRECT_URI=http://localhost:3000/api/github/callback
+
+# Google sign-in (an OAuth client of type "TVs and Limited Input devices"; no domain needed)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+# Signs the account cookie. Unset: a key is made once and kept in ~/.aha/session-secret (set it when several servers share an address)
+AHA_SESSION_SECRET=
 
 # Collaboration: origins allowed to open sockets (defaults to NEXT_PUBLIC_BASE_URL;
 # same-origin connections are always allowed)

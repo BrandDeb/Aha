@@ -6,7 +6,7 @@ import { pageMeta } from '@/lib/site';
 
 export const metadata: Metadata = pageMeta({
   title: 'Download',
-  description: 'Aha! for macOS (Apple silicon) and Windows, or run it from source on Linux. The same studio as the browser version, as a native app.',
+  description: 'Aha! for macOS (Apple silicon), Windows and Linux. The same studio as the browser version, as a native app.',
   path: '/download',
 });
 

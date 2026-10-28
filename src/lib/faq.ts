@@ -51,7 +51,7 @@ export const FAQS: FAQItem[] = [
     id: 'plans',
     category: 'Plans',
     question: 'What is free and what is paid?',
-    answer: 'The whole studio is free with your own model. Pro adds the worker in Autonomous mode, automatic debugging, best-of-three and the native app; Premium adds team features for forward-deployed, ISV and platform teams. See the pricing page for the full comparison.',
+    answer: 'The whole studio is free with your own model. Pro adds the worker in Autonomous mode, automatic debugging, best-of-three and the native app; Team and Business add one bill, company sign-in and admin controls for teams of 2 to 250; Enterprise adds self-hosting and custom terms. See the pricing page for the full comparison.',
   },
   {
     id: 'what-is-scriptc',

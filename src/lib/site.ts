@@ -38,7 +38,7 @@ export const SITE = {
     'An autonomous worker that fixes, tests and improves while you pause',
     'Toolchains for 40+ languages installed and kept current, with templates, tests and CI for each',
     'TypeScript compiled to a small native binary with scriptc',
-    'Native apps for macOS and Windows',
+    'Native apps for macOS, Windows and Linux',
     'Bring your own model: Anthropic, OpenAI, Gemini, Groq, OpenRouter, Ollama and more',
   ],
 } as const;
@@ -76,7 +76,8 @@ export function softwareLd(base: string, plans: Plan[]): Json {
     publisher: { '@id': `${base}/#organization` },
     featureList: SITE.features,
     keywords: SITE.keywords.join(', '),
-    offers: plans.map((p) => ({
+    // A plan with no list price (Enterprise) isn't an offer with a price of zero
+    offers: plans.filter((p) => !p.contact).map((p) => ({
       '@type': 'Offer',
       name: p.name,
       price: String(p.monthly ?? 0),
@@ -120,8 +121,8 @@ export function ldJson(data: Json | Json[]): string {
 export function publicPages(docs: DocPage[]): { path: string; title: string; summary: string; priority: number; changeFrequency: 'weekly' | 'monthly' }[] {
   return [
     { path: '/landing', title: SITE.name, summary: SITE.tagline, priority: 1, changeFrequency: 'weekly' },
-    { path: '/pricing', title: 'Pricing', summary: 'Free with your own model; Pro and Premium plans.', priority: 0.9, changeFrequency: 'monthly' },
-    { path: '/download', title: 'Download', summary: 'Native apps for macOS and Windows; run from source on Linux.', priority: 0.8, changeFrequency: 'monthly' },
+    { path: '/pricing', title: 'Pricing', summary: 'Free with your own model; Pro, Team, Business and Enterprise plans.', priority: 0.9, changeFrequency: 'monthly' },
+    { path: '/download', title: 'Download', summary: 'Native apps for macOS, Windows and Linux.', priority: 0.8, changeFrequency: 'monthly' },
     { path: '/docs', title: 'Documentation', summary: 'Every feature, configuration and the API.', priority: 0.8, changeFrequency: 'weekly' },
     { path: '/faq', title: 'FAQ', summary: 'Answers about the agent, plans, languages, privacy and self-hosting.', priority: 0.7, changeFrequency: 'monthly' },
     ...docs.map((d) => ({ path: `/docs/${d.slug}`, title: d.title, summary: d.summary, priority: 0.6, changeFrequency: 'monthly' as const })),
@@ -134,7 +135,7 @@ export function publicPages(docs: DocPage[]): { path: string; title: string; sum
  */
 export function llmsTxt(base: string, docs: DocPage[], faq: FAQItem[], plans: Plan[], full = false): string {
   const lines: string[] = [`# ${SITE.name}`, '', `> ${SITE.description}`, '', 'Key facts:', ...SITE.features.map((f) => `- ${f}`), ''];
-  lines.push('Plans:', ...plans.map((p) => `- ${p.name}: ${p.monthly ? `$${p.monthly}/month` : 'free'} — ${p.tagline}`), '');
+  lines.push('Plans:', ...plans.map((p) => `- ${p.name}: ${p.contact ? 'contact us' : p.monthly ? `$${p.monthly}/month${p.perSeat ? ' per seat' : ''}` : 'free'} — ${p.tagline}`), '');
   lines.push('## Pages', '', ...publicPages([]).map((p) => `- [${p.title}](${base}${p.path}): ${p.summary}`), '');
   const groups = [...new Set(docs.map((d) => d.group))];
   for (const g of groups) {

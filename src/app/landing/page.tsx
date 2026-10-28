@@ -235,12 +235,12 @@ export default function LandingPage() {
             </div>
             <Link href="/pricing" className="btn btn-ghost">Compare plans →</Link>
           </div>
-          <div className="mt-8 grid gap-3 md:grid-cols-3">
+          <div className="mt-8 grid gap-3 md:grid-cols-2 lg:grid-cols-5">
             {PLANS.map((plan) => (
               <Link key={plan.id} href="/pricing" className={`surface p-6 transition-colors hover:border-border-strong ${plan.highlight ? 'border-accent/50' : ''}`}>
                 <div className="flex items-baseline justify-between">
                   <span className="font-medium text-gray-100">{plan.name}</span>
-                  <span className="font-mono text-gray-100">{priceLabel(plan, 'yearly')}<span className="text-xs text-gray-500">{plan.monthly === null ? '' : `/mo${plan.perSeat ? '/seat' : ''}`}</span></span>
+                  <span className="font-mono text-gray-100">{priceLabel(plan, 'yearly')}<span className="text-xs text-gray-500">{plan.monthly === null || plan.contact ? '' : `/mo${plan.perSeat ? '/seat' : ''}`}</span></span>
                 </div>
                 <p className="mt-2 text-sm text-gray-400">{plan.tagline}</p>
               </Link>

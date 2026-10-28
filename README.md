@@ -26,7 +26,7 @@ editor: every AI change arrives as a reviewable proposal that's already been bui
   skills.
 - **Smart contracts.** Solidity compile and static analysis, an in-page EVM, and deploys through a browser wallet.
 - **Your models.** Bring your own key for any major provider, or run local models (Ollama, LM Studio).
-- **Desktop and server.** Native apps for Windows and macOS, a Docker image, and a server that binds to localhost
+- **Desktop and server.** Native apps for macOS, Windows and Linux, a Docker image, and a server that binds to localhost
   by default.
 
 ## Quick start
@@ -51,7 +51,7 @@ With Docker:
 docker compose up -d
 ```
 
-Desktop builds for Windows and macOS are published on the
+Desktop builds for macOS, Windows and Linux are published on the
 [releases page](https://github.com/BrandDeb/Aha/releases/tag/desktop-latest).
 
 ## Documentation

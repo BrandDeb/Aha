@@ -47,6 +47,12 @@ export async function Downloads({ headingId = 'download-title', heading = 'Get t
                 ) : (
                   <Link href="/" prefetch={false} className="btn btn-secondary h-11 w-full text-[15px]">Use it in the browser</Link>
                 )}
+                {!pending && p.alternates?.map((alt) => (
+                  <a key={alt.file} href={release?.assets[alt.file]?.url ?? downloadUrl(alt.file)} className="mt-2 block text-center text-sm text-gray-400 underline-offset-4 hover:text-gray-100 hover:underline">
+                    {alt.label}
+                    {release?.assets[alt.file] && ` · ${formatSize(release.assets[alt.file].size)}`}
+                  </a>
+                ))}
                 <p className="mt-2 text-center font-mono text-[11px] text-gray-500">
                   {pending ? 'Available here in a few minutes' : p.kind}
                   {asset && ` · ${formatSize(asset.size)}`}

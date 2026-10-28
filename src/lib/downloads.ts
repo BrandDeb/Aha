@@ -19,6 +19,8 @@ export interface Platform {
   /** File name in the release; null when there is no installer for this platform yet */
   file: string | null;
   kind: string;
+  /** Other files for the same platform (another package format), linked under the main download */
+  alternates?: { file: string; label: string }[];
   /** What to do after downloading */
   steps: string[];
   /** The first-launch prompt an unsigned build gets, and how to get past it */
@@ -47,10 +49,11 @@ export const PLATFORMS: Platform[] = [
   {
     id: 'linux',
     name: 'Linux',
-    requirement: 'Any distribution with Node.js 24, or Docker',
-    file: null,
-    kind: 'Run from source',
-    steps: ['git clone https://github.com/' + (process.env.NEXT_PUBLIC_DOWNLOADS_REPO || 'BrandDeb/Aha') + '.git', 'cd Aha && npm ci && npm run build', 'npm start, then open http://localhost:3000'],
+    requirement: '64-bit (x64) with GTK 3 and WebKitGTK 4.1: Ubuntu 22.04 or newer, Debian 12 or newer, Fedora 38 or newer',
+    file: 'Aha-Linux-x64.AppImage',
+    kind: 'AppImage (.AppImage)',
+    alternates: [{ file: 'Aha-Linux-x64.deb', label: 'Debian and Ubuntu package (.deb)' }],
+    steps: ['Make the download runnable: chmod +x Aha-Linux-x64.AppImage, then run it. Or on Debian and Ubuntu: sudo apt install ./Aha-Linux-x64.deb.', 'Open Aha! from your applications menu, or run ./Aha-Linux-x64.AppImage.', 'No Node.js needed: the app brings its own. To run it from source instead, see the guide.'],
   },
 ];
 

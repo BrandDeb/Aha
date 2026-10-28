@@ -151,6 +151,11 @@ next, and it is what Team and Business plans (below) are billed and administered
 **Done when** a browser test signs in with each provider against mock OAuth servers, the desktop builds for all three
 platforms show the sign-in screen on first launch, and "continue without an account" leaves no network calls behind.
 
+**Status.** Shipped: the signed account session; GitHub and Google sign-in (device flow, tested against mock providers);
+the first-launch screen (skipped when a server has no provider or someone is signed in) and the top-bar menu; the Linux
+desktop build in CI (AppImage and `.deb`, with an install-and-start smoke test) and on the download page. Waiting on the
+owner: a Google OAuth client, and the decision whether the released installers embed it.
+
 ---
 
 ### B1. Feel: under the perception thresholds
@@ -458,6 +463,11 @@ checks behind sign-in (A5); checkout links per plan (`NEXT_PUBLIC_CHECKOUT_TEAM_
 admin page for seats and caps.
 
 **Needs you:** a payment provider account, the final prices, and whether Premium is retired into Business or kept.
+
+**Status.** The pricing page shows the five plans with a comparison and a seat calculator. A signed-in account can start
+the 14-day Team trial and add and remove seats at `/billing`, against a stand-in provider (`src/lib/billing.ts`, state in
+`~/.aha/billing.json`). Premium is retired on the page, as proposed. Still to do: a real payment provider, caps that
+stop a hosted-model task, and the Team features marked "Soon" on the page.
 
 **Done when** the pricing page shows the five plans with their comparison, a Team trial can be started and a seat
 added in a browser test against a mock billing provider, and caps stop a hosted-model task before it overspends.
