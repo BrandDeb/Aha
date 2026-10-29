@@ -68,7 +68,7 @@
     "@types/websocket": "^1.0.5",
     "eslint": "^9",
     "eslint-config-next": "^16.4.3",
-    "playwright": "1.56.1",
+    "playwright": "1.64.1",
     "tailwindcss": "^4"
   },
   "engines": {
